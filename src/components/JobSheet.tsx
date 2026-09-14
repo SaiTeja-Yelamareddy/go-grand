@@ -1023,20 +1023,17 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <button
                 type="button"
                 onClick={handleVehicleReceived}
-                disabled={!formData.phoneNumber.trim()}
-                className={`relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-md hover:shadow-lg transition-all active:scale-[0.97] group border-2 border-emerald-400/40 bg-gradient-to-br from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-left cursor-pointer ${
-                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed grayscale-[40%]' : ''
-                }`}
-                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number to send' : 'Send Vehicle Received WhatsApp Alert'}
+                className="relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-lg transition-all active:scale-[0.96] group border-2 border-[#34D399] bg-[#059669] hover:bg-[#047857] text-left cursor-pointer"
+                title="Send Vehicle Received WhatsApp Alert"
               >
-                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-white/30 transition-all shadow-2xs">
-                  <CheckCircle2 size={20} className="text-white drop-shadow-sm" />
+                <div className="w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-sm">
+                  <CheckCircle2 size={22} className="text-white drop-shadow-md" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="block text-xs font-black tracking-wide uppercase leading-tight truncate">
+                  <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-white">
                     Vehicle Received
                   </span>
-                  <span className="block text-[10px] font-bold text-emerald-100 uppercase tracking-tighter mt-0.5 opacity-90">
+                  <span className="block text-[10px] font-black text-emerald-100 uppercase tracking-tight mt-0.5">
                     WhatsApp Alert
                   </span>
                 </div>
@@ -1046,20 +1043,17 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <button
                 type="button"
                 onClick={handleVehicleReady}
-                disabled={!formData.phoneNumber.trim()}
-                className={`relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-slate-950 shadow-md hover:shadow-lg transition-all active:scale-[0.97] group border-2 border-amber-300 bg-gradient-to-br from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-left cursor-pointer ${
-                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed grayscale-[40%]' : ''
-                }`}
-                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number to send' : 'Send Vehicle Ready WhatsApp Alert'}
+                className="relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-black shadow-lg transition-all active:scale-[0.96] group border-2 border-[#FDE047] bg-[#F59E0B] hover:bg-[#D97706] text-left cursor-pointer"
+                title="Send Vehicle Ready WhatsApp Alert"
               >
-                <div className="w-9 h-9 rounded-xl bg-slate-950/15 flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-slate-950/25 transition-all shadow-2xs text-lg">
+                <div className="w-10 h-10 rounded-xl bg-black/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-sm text-xl">
                   🚗
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="block text-xs font-black tracking-wide uppercase leading-tight truncate text-slate-950">
+                  <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-black">
                     Vehicle Ready
                   </span>
-                  <span className="block text-[10px] font-extrabold text-slate-800 uppercase tracking-tighter mt-0.5">
+                  <span className="block text-[10px] font-black text-black/85 uppercase tracking-tight mt-0.5">
                     Customer Alert
                   </span>
                 </div>
@@ -1069,20 +1063,17 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <button
                 type="button"
                 onClick={handleTextMessage}
-                disabled={!formData.phoneNumber.trim()}
-                className={`relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-md hover:shadow-lg transition-all active:scale-[0.97] group border-2 border-sky-400/40 bg-gradient-to-br from-blue-600 via-sky-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-left cursor-pointer ${
-                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed grayscale-[40%]' : ''
-                }`}
-                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number to send' : 'Send SMS Text Message'}
+                className="relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-lg transition-all active:scale-[0.96] group border-2 border-[#60A5FA] bg-[#2563EB] hover:bg-[#1D4ED8] text-left cursor-pointer"
+                title="Send SMS Text Message"
               >
-                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-white/30 transition-all shadow-2xs">
-                  <SmsIcon className="w-5 h-5 text-white drop-shadow-sm" />
+                <div className="w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-sm">
+                  <SmsIcon className="w-6 h-6 text-white drop-shadow-md" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="block text-xs font-black tracking-wide uppercase leading-tight truncate">
+                  <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-white">
                     Text SMS
                   </span>
-                  <span className="block text-[10px] font-bold text-sky-100 uppercase tracking-tighter mt-0.5 opacity-90">
+                  <span className="block text-[10px] font-black text-blue-100 uppercase tracking-tight mt-0.5">
                     Direct Message
                   </span>
                 </div>
@@ -1092,20 +1083,17 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <button
                 type="button"
                 onClick={handleBillWhatsApp}
-                disabled={!formData.phoneNumber.trim()}
-                className={`relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-md hover:shadow-lg transition-all active:scale-[0.97] group border-2 border-emerald-300/50 bg-gradient-to-br from-[#25D366] to-[#128C7E] hover:from-[#20bd5a] hover:to-[#0f776a] text-left cursor-pointer ${
-                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed grayscale-[40%]' : ''
-                }`}
-                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number to send' : 'Send PDF Invoice on WhatsApp'}
+                className="relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-lg transition-all active:scale-[0.96] group border-2 border-[#86EFAC] bg-[#25D366] hover:bg-[#1EBE5D] text-left cursor-pointer"
+                title="Send PDF Invoice on WhatsApp"
               >
-                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-white/30 transition-all shadow-2xs">
-                  <WhatsAppIcon className="w-5 h-5 text-white drop-shadow-sm" />
+                <div className="w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-sm">
+                  <WhatsAppIcon className="w-6 h-6 text-white drop-shadow-md" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="block text-xs font-black tracking-wide uppercase leading-tight truncate">
+                  <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-white">
                     WhatsApp Bill
                   </span>
-                  <span className="block text-[10px] font-bold text-emerald-100 uppercase tracking-tighter mt-0.5 opacity-90">
+                  <span className="block text-[10px] font-black text-emerald-100 uppercase tracking-tight mt-0.5">
                     PDF Tax Invoice
                   </span>
                 </div>

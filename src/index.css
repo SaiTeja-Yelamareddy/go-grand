@@ -5,7 +5,7 @@
     --bg-main: #0B0D11;
     --text-primary: #F8FAFC;
     --text-secondary: #94A3B8;
-    --border-color: #262B34;
+    --border-color: #232832;
     --card-bg: #14171D;
     --card-elevated: #1C2028;
     --brand-accent: #22C55E;
@@ -51,13 +51,18 @@
   body {
     background-color: var(--bg-main);
     color: var(--text-primary);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Helvetica, Arial, sans-serif;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     -webkit-tap-highlight-color: transparent;
     margin: 0;
     padding: 0;
     min-height: 0;
     height: auto;
     letter-spacing: -0.01em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.02em;
   }
 
   button, input, select, textarea {
@@ -72,7 +77,7 @@
 }
 
 /* ==========================================================================
-   PREMIUM AUTOMOTIVE DARK THEME OVERRIDES (DEFAULT & HTML.DARK)
+   PREMIUM AUTOMOTIVE DARK THEME (FIRST-CLASS DEFAULT)
    ========================================================================== */
 html:not(.light) body,
 html.dark body {
@@ -86,12 +91,13 @@ html.dark header {
   border-color: #232832 !important;
 }
 
-/* CARDS & PANELS */
+/* CARDS & CONTAINERS */
 html:not(.light) .bg-white,
 html.dark .bg-white {
   background-color: #14171D !important;
   color: #F8FAFC !important;
   border-color: #232832 !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.05) !important;
 }
 
 html:not(.light) .bg-\[\#F7F7F7\],
@@ -196,7 +202,7 @@ html:not(.light) .shadow-xl,
 html.dark .shadow-xl,
 html:not(.light) .shadow-2xl,
 html.dark .shadow-2xl {
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
 }
 
 html:not(.light) .bg-black\/50,
@@ -204,7 +210,7 @@ html.dark .bg-black\/50,
 html:not(.light) .bg-black\/40,
 html.dark .bg-black\/40 {
   background-color: rgba(5, 7, 10, 0.85) !important;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
 }
 
 /* PRIMARY AUTOMOTIVE BUTTONS */
@@ -214,12 +220,27 @@ html.dark button.bg-\[\#111111\] {
   color: #052E16 !important;
   font-weight: 800 !important;
   border: none !important;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25) !important;
 }
 
 html:not(.light) button.bg-\[\#111111\]:hover,
 html.dark button.bg-\[\#111111\]:hover {
   background-color: #16A34A !important;
   color: #052E16 !important;
+}
+
+/* SECONDARY OUTLINE BUTTONS */
+html:not(.light) button.border-2.border-\[\#111111\],
+html.dark button.border-2.border-\[\#111111\] {
+  border-color: #282E3A !important;
+  background-color: #14171D !important;
+  color: #F8FAFC !important;
+}
+
+html:not(.light) button.border-2.border-\[\#111111\]:hover,
+html.dark button.border-2.border-\[\#111111\]:hover {
+  border-color: #22C55E !important;
+  color: #22C55E !important;
 }
 
 /* BADGES & CHIPS */

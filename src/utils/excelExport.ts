@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { getAllJobRecords, formatNumericDateIST, type JobRecord } from './draftStorage';
+import { getAllJobRecords, formatNumericDateIST, getISTDateKey, type JobRecord } from './draftStorage';
 
 /**
  * Normalizes vehicle registration number and customer phone to generate a unique customer+vehicle key.
@@ -44,9 +44,13 @@ export function exportJobsToExcel(records: JobRecord[], filename: string) {
     }
   >();
 
+  const validDates: string[] = [];
+
   for (const record of records) {
     const key = getCustomerVehicleGroupKey(record);
     const timestamp = record.createdAt ? new Date(record.createdAt).getTime() : 0;
+    const dateKey = getISTDateKey(record.createdAt);
+    if (dateKey) validDates.push(dateKey);
 
     if (!groupedRecordsMap.has(key)) {
       groupedRecordsMap.set(key, {
@@ -64,43 +68,68 @@ export function exportJobsToExcel(records: JobRecord[], filename: string) {
     }
   }
 
+  // Calculate export date range: YYYY-MM-DD - YYYY-MM-DD
+  validDates.sort();
+  const todayIST = getISTDateKey(new Date());
+  const startDate = validDates.length > 0 ? validDates[0] : todayIST;
+  const endDate = validDates.length > 0 ? validDates[validDates.length - 1] : todayIST;
+  const dateRangeStr = `${startDate} - ${endDate}`;
+
   // 3. Sort unique rows by most recent visit date descending
   const sortedGroups = Array.from(groupedRecordsMap.values()).sort(
     (a, b) => b.latestTimestamp - a.latestTimestamp
   );
 
-  // 4. Map to exact standard reference columns
-  const dataRows = sortedGroups.map((group, index) => {
+  // 4. Build 2D Sheet Data (AOA) with Header, Subtitle Date Range, and Table Columns
+  const sheetAoa: any[][] = [
+    ['GO GRAND DETAILING SERVICES: MURAKAMBATTU, ANDHRA PRADESH'],
+    [dateRangeStr],
+    [], // Clean empty line separating title from table
+    [
+      'Customer Name',
+      'Mobile',
+      'Registration Number',
+      'Vehicle Model',
+      'Last Visit',
+      'Place',
+      'No. of Visits',
+    ],
+  ];
+
+  // 5. Append data rows
+  sortedGroups.forEach((group) => {
     const r = group.latestRecord;
     const key = getCustomerVehicleGroupKey(r);
     const totalVisits = allTimeVisitCountMap.get(key) || group.allVisitsInSelection.length;
 
-    return {
-      'S.No': index + 1,
-      'Customer Name': r.customerName || '-',
-      'Mobile': r.phoneNumber || '-',
-      'Email': r.email && r.email.trim() ? r.email.trim() : '-',
-      'Registration Number': (r.vehicleNumber || '-').toUpperCase(),
-      'Vehicle Model': r.vehicleName && r.vehicleName.trim() ? r.vehicleName.trim() : '-',
-      'Last Visit': formatNumericDateIST(r.createdAt),
-      'Place': (r.location && r.location.trim()) || (r.address && r.address.trim()) || '-',
-      'No. of Visits': totalVisits,
-    };
+    sheetAoa.push([
+      r.customerName || '-',
+      r.phoneNumber || '-',
+      (r.vehicleNumber || '-').toUpperCase(),
+      r.vehicleName && r.vehicleName.trim() ? r.vehicleName.trim() : '-',
+      formatNumericDateIST(r.createdAt),
+      (r.location && r.location.trim()) || (r.address && r.address.trim()) || '-',
+      totalVisits,
+    ]);
   });
 
-  const worksheet = XLSX.utils.json_to_sheet(dataRows);
+  const worksheet = XLSX.utils.aoa_to_sheet(sheetAoa);
 
-  // Set professional column widths
+  // Merge Title and Subtitle across all 7 columns (A to G)
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, // Title row
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }, // Date range row
+  ];
+
+  // Professional column widths
   worksheet['!cols'] = [
-    { wch: 6 },  // S.No
-    { wch: 22 }, // Customer Name
-    { wch: 16 }, // Mobile
-    { wch: 24 }, // Email
+    { wch: 24 }, // Customer Name
+    { wch: 18 }, // Mobile
     { wch: 22 }, // Registration Number
     { wch: 20 }, // Vehicle Model
-    { wch: 14 }, // Last Visit (DD/MM/YYYY)
-    { wch: 18 }, // Place
-    { wch: 14 }, // No. of Visits
+    { wch: 16 }, // Last Visit (DD/MM/YYYY)
+    { wch: 22 }, // Place
+    { wch: 16 }, // No. of Visits
   ];
 
   const workbook = XLSX.utils.book_new();

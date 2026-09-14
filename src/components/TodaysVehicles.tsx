@@ -114,13 +114,13 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F7F7] text-[#111111] flex flex-col">
+    <div className="min-h-screen bg-slate-100 dark:bg-black text-slate-900 dark:text-white flex flex-col transition-colors">
       {/* HEADER */}
-      <header className="sticky top-0 z-40 bg-white border-b border-[#E5E5E5] px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between shadow-2xs">
+      <header className="sticky top-0 z-40 bg-white dark:bg-[#0A0A0A] border-b border-slate-200 dark:border-[#1F1F1F] px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between shadow-2xs transition-colors">
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => setDrawerOpen(true)}
-            className="p-1.5 sm:p-2 rounded-lg text-[#111111] hover:bg-[#F7F7F7] active:bg-[#E5E5E5] min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-lg text-slate-800 dark:text-neutral-200 hover:bg-slate-100 dark:hover:bg-[#1A1A1A] min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors cursor-pointer"
             aria-label="Open menu"
           >
             <Menu size={22} />
@@ -128,10 +128,10 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
           <div className="flex items-center gap-2.5">
             <img src="/logo.png" alt="GO GRAND" className="h-9 sm:h-10 object-contain rounded-lg shadow-2xs" />
             <div className="flex flex-col justify-center">
-              <h1 className="font-extrabold text-sm sm:text-base leading-none tracking-tight text-[#111111] uppercase">
+              <h1 className="font-extrabold text-sm sm:text-base leading-none tracking-tight text-slate-900 dark:text-white uppercase">
                 GO GRAND
               </h1>
-              <p className="text-[10px] sm:text-[11px] font-semibold text-[#333333] tracking-wider uppercase leading-none mt-0.5">
+              <p className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-neutral-400 tracking-wider uppercase leading-none mt-0.5">
                 CAR WASH & DETAILING
               </p>
             </div>
@@ -140,7 +140,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <div className="px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wide border uppercase bg-[#F7F7F7] text-[#111111] border-[#E5E5E5]">
+          <div className="px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wide border uppercase bg-slate-100 dark:bg-[#141414] text-slate-800 dark:text-neutral-200 border-slate-200 dark:border-[#222222]">
             {mode === 'owner'
               ? 'Owner Mode'
               : currentStaff?.staff_name
@@ -164,22 +164,22 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
         {/* PAGE TITLE HEADER */}
         <div className="mb-4 sm:mb-5 flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h2 className="text-lg sm:text-2xl font-black text-[#111111] tracking-tight">
+            <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
               Today&apos;s Vehicles
             </h2>
-            <p className="text-[11px] sm:text-xs font-medium text-[#666666] mt-0.5">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-neutral-400 mt-0.5">
               Single-row vehicle records registered today
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="text-xs font-bold text-[#111111] bg-white border border-[#E5E5E5] px-2.5 sm:px-3 py-1.5 rounded-lg">
+            <div className="text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#262626] px-2.5 sm:px-3 py-1.5 rounded-lg">
               Total: {records.length}
             </div>
             {mode === 'owner' && (
               <button
                 onClick={handleDownloadExcel}
                 disabled={records.length === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#111111] hover:bg-neutral-900 active:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[34px]"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-neutral-200 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-black rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[34px]"
                 title="Download today's vehicles in Excel format"
               >
                 <Download size={14} />
@@ -191,25 +191,25 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
 
         {/* EMPTY STATE */}
         {records.length === 0 ? (
-          <div className="w-full bg-white rounded-2xl border border-[#E5E5E5] p-6 sm:p-8 text-center flex flex-col items-center justify-center my-6 sm:my-8 shadow-2xs">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-[#F7F7F7] border border-[#E5E5E5] rounded-2xl flex items-center justify-center text-[#666666] mb-3 sm:mb-4">
+          <div className="w-full bg-white dark:bg-[#0A0A0A] rounded-2xl border border-slate-200 dark:border-[#1F1F1F] p-6 sm:p-8 text-center flex flex-col items-center justify-center my-6 sm:my-8 shadow-2xs transition-colors">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-100 dark:bg-[#141414] border border-slate-200 dark:border-[#222222] rounded-2xl flex items-center justify-center text-slate-500 dark:text-neutral-400 mb-3 sm:mb-4">
               <Car size={26} />
             </div>
-            <h3 className="text-sm sm:text-base font-bold text-[#111111]">
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
               No vehicles added today
             </h3>
-            <p className="text-xs text-[#666666] mt-1">
+            <p className="text-xs text-slate-500 dark:text-neutral-400 mt-1">
               Job records created today will appear here in a clean table format.
             </p>
           </div>
         ) : (
           /* COMPACT TABLE CONTAINER */
-          <div className="w-full bg-white rounded-2xl border border-[#E5E5E5] shadow-2xs relative overflow-visible">
+          <div className="w-full bg-white dark:bg-[#0A0A0A] rounded-2xl border border-slate-200 dark:border-[#1F1F1F] shadow-2xs relative overflow-visible transition-colors">
             <div className="w-full relative overflow-visible">
               <table className="w-full text-left border-collapse table-fixed">
                 {/* COLUMN HEADERS */}
                 <thead>
-                  <tr className="bg-[#F7F7F7] border-b border-[#E5E5E5] text-[9px] sm:text-[11px] font-black text-[#111111] uppercase tracking-wider">
+                  <tr className="bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#1F1F1F] text-[9px] sm:text-[11px] font-black text-slate-700 dark:text-neutral-300 uppercase tracking-wider">
                     <th className="py-2.5 px-1 sm:px-4 font-bold w-[12%] truncate">DATE</th>
                     <th className="py-2.5 px-1 sm:px-4 font-bold w-[15%] truncate">VEHICLE</th>
                     <th className="py-2.5 px-1 sm:px-4 font-bold w-[14%] truncate">NAME</th>
@@ -224,51 +224,51 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                 </thead>
 
                 {/* ROW ENTRIES */}
-                <tbody className="divide-y divide-[#E5E5E5] text-xs sm:text-sm font-medium text-[#111111]">
+                <tbody className="divide-y divide-slate-200 dark:divide-[#1F1F1F] text-xs sm:text-sm font-medium text-slate-900 dark:text-white">
                   {records.map((item, index) => {
                     const isLastRow = index === records.length - 1 && records.length > 1;
                     return (
                       <tr 
                         key={item.id}
-                        className="hover:bg-[#F7F7F7] transition-colors relative"
+                        className="hover:bg-slate-50/80 dark:hover:bg-[#141414] transition-colors relative"
                       >
                         {/* DATE */}
-                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[9px] sm:text-xs font-bold text-[#444444] truncate">
+                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[9px] sm:text-xs font-bold text-slate-500 dark:text-neutral-400 truncate">
                           {formatDate(item.createdAt)}
                         </td>
 
                         {/* VEHICLE NUMBER */}
-                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[10px] sm:text-sm font-bold text-[#111111] tracking-tight truncate">
+                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[10px] sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
                           {item.vehicleNumber}
                         </td>
 
                         {/* VEHICLE NAME */}
-                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[10px] sm:text-sm text-[#111111] truncate">
+                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[10px] sm:text-sm text-slate-700 dark:text-neutral-200 truncate">
                           {item.vehicleName || '-'}
                         </td>
 
                         {/* OWNER NAME */}
-                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[10px] sm:text-sm font-semibold text-[#111111] truncate">
+                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[10px] sm:text-sm font-semibold text-slate-900 dark:text-white truncate">
                           {item.customerName}
                         </td>
 
                         {/* SERVICE */}
-                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[9px] sm:text-sm text-[#111111] truncate">
-                          <span className="inline-block px-1 sm:px-2.5 py-0.5 sm:py-1 rounded-md bg-[#F7F7F7] border border-[#E5E5E5] font-medium truncate max-w-full">
+                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[9px] sm:text-sm text-slate-900 dark:text-white truncate">
+                          <span className="inline-block px-1 sm:px-2.5 py-0.5 sm:py-1 rounded-md bg-slate-100 dark:bg-[#1A1A1A] border border-slate-200 dark:border-[#2A2A2A] text-slate-800 dark:text-neutral-200 font-medium truncate max-w-full">
                             {formatServices(item.services || item.service)}
                           </span>
                         </td>
 
                         {/* PRICE */}
-                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[10px] sm:text-sm font-extrabold text-[#111111] truncate">
+                        <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[10px] sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
                           {formatPrice(item.price)}
                         </td>
 
                         {/* STAFF (IN OWNER MODE) */}
                         {mode === 'owner' && (
-                          <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-[#111111] truncate">
-                            <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded bg-neutral-100 border border-neutral-200 text-[10px] sm:text-[11px] font-bold text-neutral-800 truncate">
-                              <User size={10} className="shrink-0 text-neutral-500" />
+                          <td className="py-2.5 sm:py-4 px-1 sm:px-4 text-[10px] sm:text-xs font-semibold text-slate-900 dark:text-white truncate">
+                            <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded bg-slate-100 dark:bg-[#1A1A1A] border border-slate-200 dark:border-[#2A2A2A] text-[10px] sm:text-[11px] font-bold text-slate-800 dark:text-neutral-200 truncate">
+                              <User size={10} className="shrink-0 text-slate-500 dark:text-neutral-400" />
                               <span className="truncate">{item.createdBy || 'Staff'}</span>
                             </span>
                           </td>
@@ -279,7 +279,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                           <div className="relative inline-block text-left">
                             <button
                               onClick={() => setActiveMenuId(activeMenuId === item.id ? null : item.id)}
-                              className="w-7 h-7 sm:w-10 sm:h-10 mx-auto rounded-lg text-[#111111] hover:bg-[#E5E5E5] active:bg-[#D4D4D4] flex items-center justify-center transition-colors cursor-pointer"
+                              className="w-7 h-7 sm:w-10 sm:h-10 mx-auto rounded-lg text-slate-700 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-[#1C1C1C] flex items-center justify-center transition-colors cursor-pointer"
                               aria-label="Actions"
                             >
                               <MoreVertical size={16} className="sm:w-4 sm:h-4" />
@@ -291,7 +291,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                 ref={menuRef}
                                 className={`absolute right-0 ${
                                   isLastRow ? 'bottom-full mb-1' : 'top-full mt-1'
-                                } z-50 w-40 sm:w-44 bg-white border border-[#E5E5E5] rounded-xl shadow-2xl p-1 text-left animate-fade-in`}
+                                } z-50 w-40 sm:w-44 bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#262626] rounded-xl shadow-2xl p-1 text-left animate-fade-in transition-colors`}
                               >
                                 <button
                                   onClick={async () => {
@@ -304,7 +304,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                       setShowWhatsAppSettingsModal(true);
                                     }
                                   }}
-                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-[#25D366] hover:bg-green-50 active:bg-green-100 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
+                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-[#25D366] hover:bg-green-50 dark:hover:bg-green-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   WHATSAPP BILL
                                 </button>
@@ -314,7 +314,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                     setActiveMenuId(null);
                                     setSelectedInvoiceRecord(item);
                                   }}
-                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-[#111111] hover:bg-[#F7F7F7] active:bg-[#E5E5E5] flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
+                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-[#1C1C1C] flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   VIEW INVOICE
                                 </button>
@@ -330,7 +330,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                       setShowWhatsAppSettingsModal(true);
                                     }
                                   }}
-                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-blue-600 hover:bg-blue-50 active:bg-blue-100 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
+                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   VEHICLE READY 🚗
                                 </button>
@@ -340,7 +340,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                     setActiveMenuId(null);
                                     handleVehicleReady(item);
                                   }}
-                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-[#111111] hover:bg-[#F7F7F7] active:bg-[#E5E5E5] flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
+                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-[#1C1C1C] flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   VEHICLE DETAILS
                                 </button>
@@ -350,14 +350,14 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                     setActiveMenuId(null);
                                     handleEdit(item);
                                   }}
-                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-[#111111] hover:bg-[#F7F7F7] active:bg-[#E5E5E5] flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
+                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-[#1C1C1C] flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   EDIT
                                 </button>
 
                                 <button
                                   onClick={() => setActiveMenuId(null)}
-                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-[#666666] hover:bg-[#F7F7F7] active:bg-[#E5E5E5] flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
+                                  className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-[#1C1C1C] flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   CLOSE
                                 </button>
@@ -379,75 +379,75 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
       {selectedVehicleDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div 
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs"
             onClick={() => setSelectedVehicleDetails(null)}
           />
-          <div className="relative z-10 w-full max-w-md bg-white rounded-2xl border border-[#E5E5E5] shadow-2xl p-6 text-left">
-            <div className="flex items-center justify-between pb-4 border-b border-[#E5E5E5]">
-              <h3 className="font-extrabold text-base text-[#111111] uppercase tracking-wide">
+          <div className="relative z-10 w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-2xl border border-slate-200 dark:border-[#1F1F1F] shadow-2xl p-6 text-left transition-colors">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-[#1F1F1F]">
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-white uppercase tracking-wide">
                 Vehicle Record Details
               </h3>
               <button
                 onClick={() => setSelectedVehicleDetails(null)}
-                className="p-1 rounded-lg text-[#666666] hover:bg-[#F7F7F7] cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-neutral-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1A1A1A] cursor-pointer transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
 
             <div className="py-4 space-y-3 text-sm">
-              <div className="flex justify-between border-b border-[#E5E5E5] pb-2">
-                <span className="text-[#666666] font-medium">Date:</span>
-                <span className="font-bold text-[#111111]">{formatDate(selectedVehicleDetails.createdAt)}</span>
+              <div className="flex justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+                <span className="text-slate-500 dark:text-neutral-400 font-medium">Date:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{formatDate(selectedVehicleDetails.createdAt)}</span>
               </div>
 
-              <div className="flex justify-between border-b border-[#E5E5E5] pb-2">
-                <span className="text-[#666666] font-medium">Vehicle Number:</span>
-                <span className="font-extrabold text-[#111111]">{selectedVehicleDetails.vehicleNumber}</span>
+              <div className="flex justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+                <span className="text-slate-500 dark:text-neutral-400 font-medium">Vehicle Number:</span>
+                <span className="font-extrabold text-slate-900 dark:text-white">{selectedVehicleDetails.vehicleNumber}</span>
               </div>
 
-              <div className="flex justify-between border-b border-[#E5E5E5] pb-2">
-                <span className="text-[#666666] font-medium">Vehicle Name:</span>
-                <span className="font-semibold text-[#111111]">{selectedVehicleDetails.vehicleName || '-'}</span>
+              <div className="flex justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+                <span className="text-slate-500 dark:text-neutral-400 font-medium">Vehicle Name:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{selectedVehicleDetails.vehicleName || '-'}</span>
               </div>
 
-              <div className="flex justify-between border-b border-[#E5E5E5] pb-2">
-                <span className="text-[#666666] font-medium">Owner Name:</span>
-                <span className="font-semibold text-[#111111]">{selectedVehicleDetails.customerName}</span>
+              <div className="flex justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+                <span className="text-slate-500 dark:text-neutral-400 font-medium">Owner Name:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{selectedVehicleDetails.customerName}</span>
               </div>
 
-              <div className="flex justify-between border-b border-[#E5E5E5] pb-2">
-                <span className="text-[#666666] font-medium">Phone Number:</span>
-                <span className="font-semibold text-[#111111]">{selectedVehicleDetails.phoneNumber}</span>
+              <div className="flex justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+                <span className="text-slate-500 dark:text-neutral-400 font-medium">Phone Number:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{selectedVehicleDetails.phoneNumber}</span>
               </div>
 
-              <div className="flex justify-between border-b border-[#E5E5E5] pb-2">
-                <span className="text-[#666666] font-medium">Location:</span>
-                <span className="font-semibold text-[#111111]">{selectedVehicleDetails.location || '-'}</span>
+              <div className="flex justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+                <span className="text-slate-500 dark:text-neutral-400 font-medium">Location:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{selectedVehicleDetails.location || '-'}</span>
               </div>
 
-              <div className="flex justify-between border-b border-[#E5E5E5] pb-2">
-                <span className="text-[#666666] font-medium">Service:</span>
-                <span className="font-bold text-[#111111]">
+              <div className="flex justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+                <span className="text-slate-500 dark:text-neutral-400 font-medium">Service:</span>
+                <span className="font-bold text-slate-900 dark:text-white">
                   {formatServices(selectedVehicleDetails.services || selectedVehicleDetails.service)}
                 </span>
               </div>
 
-              <div className="flex justify-between border-b border-[#E5E5E5] pb-2">
-                <span className="text-[#666666] font-medium">Created By:</span>
-                <span className="font-bold text-[#111111]">{selectedVehicleDetails.createdBy || 'Staff'}</span>
+              <div className="flex justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+                <span className="text-slate-500 dark:text-neutral-400 font-medium">Created By:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{selectedVehicleDetails.createdBy || 'Staff'}</span>
               </div>
 
               <div className="flex justify-between pt-1">
-                <span className="text-[#666666] font-medium">Price:</span>
-                <span className="font-extrabold text-base text-[#111111]">{formatPrice(selectedVehicleDetails.price)}</span>
+                <span className="text-slate-500 dark:text-neutral-400 font-medium">Price:</span>
+                <span className="font-extrabold text-base text-slate-900 dark:text-white">{formatPrice(selectedVehicleDetails.price)}</span>
               </div>
             </div>
 
             <div className="pt-2">
               <button
                 onClick={() => setSelectedVehicleDetails(null)}
-                className="w-full min-h-[44px] bg-[#111111] text-white font-bold rounded-xl text-xs uppercase tracking-wider hover:bg-neutral-900 active:bg-neutral-800 transition-all cursor-pointer"
+                className="w-full min-h-[44px] bg-slate-900 dark:bg-white text-white dark:text-black font-bold rounded-xl text-xs uppercase tracking-wider hover:bg-slate-800 dark:hover:bg-neutral-200 active:scale-[0.99] transition-all cursor-pointer"
               >
                 CLOSE
               </button>

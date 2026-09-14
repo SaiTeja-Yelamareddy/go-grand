@@ -9,8 +9,20 @@
     <meta name="theme-color" content="#111111" />
     <meta name="description" content="GO GRAND Car Wash & Detailing Mobile Management PWA" />
     <title>GO GRAND - Car Wash & Detailing</title>
+    <script>
+      (function() {
+        try {
+          var stored = localStorage.getItem('go-ground-theme');
+          if (stored === 'dark' || (!stored && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body class="bg-[#F7F7F7] text-[#111111] antialiased selection:bg-neutral-200">
+  <body class="bg-[#F1F5F9] dark:bg-[#000000] text-slate-900 dark:text-white antialiased selection:bg-neutral-200">
     <div id="root">
       <!-- Centered Official GO GRAND Opening Splash Screen -->
       <div style="position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #F7F7F7; z-index: 99999;">

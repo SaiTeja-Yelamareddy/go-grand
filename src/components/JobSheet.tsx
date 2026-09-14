@@ -1129,18 +1129,18 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       {showSuccessPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs"
             onClick={() => setShowSuccessPopup(false)}
           />
-          <div className="relative z-10 w-full max-w-xs bg-white rounded-2xl border border-[#E5E5E5] shadow-2xl p-5 text-center animate-scale-up">
-            <div className="w-10 h-10 bg-[#F0FDF4] border border-[#BBF7D0] rounded-full flex items-center justify-center text-green-700 mx-auto mb-2">
+          <div className="relative z-10 w-full max-w-xs bg-white dark:bg-[#0A0A0A] rounded-2xl border border-slate-200 dark:border-[#1F1F1F] shadow-2xl p-5 text-center animate-scale-up transition-colors">
+            <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400 mx-auto mb-2">
               <CheckCircle2 size={24} />
             </div>
-            <h3 className="text-sm font-extrabold text-[#111111] tracking-tight">
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-tight">
               {isEditing ? 'Job Updated Successfully!' : 'Job Saved Successfully!'}
             </h3>
-            <p className="text-[11px] text-[#666666] mt-1">
-              Vehicle <span className="font-bold text-[#111111]">{savedVehNum}</span> has been saved to Today's Vehicles list.
+            <p className="text-[11px] text-slate-500 dark:text-neutral-400 mt-1">
+              Vehicle <span className="font-bold text-slate-900 dark:text-white">{savedVehNum}</span> has been saved to Today&apos;s Vehicles list.
             </p>
 
             <div className="mt-4 space-y-1.5">
@@ -1150,9 +1150,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                   setShowSuccessPopup(false);
                   navigate(targetTodayPath);
                 }}
-                className="w-full h-9 bg-[#111111] text-white font-bold rounded-xl text-[11px] uppercase tracking-wider hover:bg-neutral-900 active:bg-neutral-800 transition-all cursor-pointer"
+                className="w-full h-9 bg-slate-950 dark:bg-white text-white dark:text-black font-bold rounded-xl text-[11px] uppercase tracking-wider hover:bg-slate-800 dark:hover:bg-neutral-200 active:scale-[0.99] transition-all cursor-pointer"
               >
-                Go to Today's Vehicles List →
+                Go to Today&apos;s Vehicles List →
               </button>
 
               <button
@@ -1164,7 +1164,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                     navigate(mode === 'owner' ? '/owner' : '/staff');
                   }
                 }}
-                className="w-full h-9 bg-white border border-[#E5E5E5] text-[#111111] font-bold rounded-xl text-[11px] uppercase tracking-wider hover:bg-[#F7F7F7] active:bg-[#E5E5E5] transition-all cursor-pointer"
+                className="w-full h-9 bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#262626] text-slate-900 dark:text-white font-bold rounded-xl text-[11px] uppercase tracking-wider hover:bg-slate-100 dark:hover:bg-[#1A1A1A] transition-all cursor-pointer"
               >
                 + Add Another Vehicle
               </button>

@@ -80,22 +80,22 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
         <div className="fixed inset-0 z-50 flex">
           {/* Backdrop */}
           <div 
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
             onClick={onClose}
             aria-hidden="true"
           />
 
           {/* Drawer Panel */}
-          <div className="relative z-10 w-4/5 max-w-xs bg-white text-[#111111] h-full shadow-xl flex flex-col justify-between border-r border-[#E5E5E5]">
+          <div className="relative z-10 w-4/5 max-w-xs bg-white dark:bg-[#0A0A0A] text-slate-900 dark:text-white h-full shadow-2xl flex flex-col justify-between border-r border-slate-200 dark:border-[#1F1F1F] transition-colors">
             <div>
               {/* Header */}
-              <div className="p-4 border-b border-[#E5E5E5] flex items-center justify-between bg-white">
+              <div className="p-4 border-b border-slate-200 dark:border-[#1F1F1F] flex items-center justify-between bg-white dark:bg-[#0A0A0A]">
                 <div>
                   <img src="/logo.png" alt="GO GRAND" className="h-8 object-contain rounded-md mb-0.5" />
-                  <p className="text-[10px] font-black text-[#111111] uppercase tracking-wider">
+                  <p className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">
                     CAR WASH & DETAILING
                   </p>
-                  <p className="text-[10px] font-bold text-[#666666] tracking-wider uppercase mt-0.5">
+                  <p className="text-[10px] font-bold text-slate-500 dark:text-neutral-400 tracking-wider uppercase mt-0.5">
                     {mode === 'owner'
                       ? 'Owner Menu'
                       : currentStaff?.staff_name
@@ -107,7 +107,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                   <ThemeToggle />
                   <button
                     onClick={onClose}
-                    className="p-2 rounded-lg text-[#111111] hover:bg-[#F7F7F7] active:bg-[#E5E5E5] min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors cursor-pointer"
+                    className="p-2 rounded-xl text-slate-700 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-[#1A1A1A] min-w-[40px] min-h-[40px] flex items-center justify-center transition-colors cursor-pointer"
                     aria-label="Close menu"
                   >
                     <X size={20} />
@@ -131,20 +131,20 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                     <button
                       key={item.label}
                       onClick={() => handleClick(item)}
-                      className={`w-full min-h-[48px] px-4 rounded-lg text-sm font-bold tracking-wide uppercase transition-colors text-left flex items-center justify-between border cursor-pointer ${
+                      className={`w-full min-h-[48px] px-4 rounded-xl text-sm font-bold tracking-wide uppercase transition-all text-left flex items-center justify-between border cursor-pointer ${
                         isUpi
-                          ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 hover:bg-amber-100 dark:hover:bg-amber-950/70'
                           : isWhatsApp
-                          ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700/60 hover:bg-emerald-100 dark:hover:bg-emerald-950/70'
                           : isActive
-                          ? 'bg-[#111111] text-white border-[#111111]'
-                          : 'bg-white text-[#111111] border-[#E5E5E5] hover:bg-[#F7F7F7] active:bg-[#E5E5E5]'
+                          ? 'bg-slate-900 text-white dark:bg-white dark:text-black border-slate-900 dark:border-white shadow-xs'
+                          : 'bg-white dark:bg-[#121212] text-slate-900 dark:text-white border-slate-200 dark:border-[#222222] hover:bg-slate-50 dark:hover:bg-[#1A1A1A]'
                       }`}
                     >
-                      <span className="flex items-center space-x-2">
-                        {isUpi && <CreditCard className="w-4 h-4 text-amber-600 shrink-0" />}
-                        {isWhatsApp && <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />}
-                        {isManageStaff && <Users className="w-4 h-4 text-[#111111] shrink-0" />}
+                      <span className="flex items-center space-x-2.5">
+                        {isUpi && <CreditCard className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />}
+                        {isWhatsApp && <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                        {isManageStaff && <Users className="w-4 h-4 text-slate-800 dark:text-white shrink-0" />}
                         <span>{item.label}</span>
                       </span>
                     </button>
@@ -154,9 +154,9 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="p-3.5 border-t border-[#E5E5E5] bg-[#F7F7F7] text-center">
-              <p className="text-xs font-extrabold text-[#111111] uppercase tracking-wider">GO GRAND</p>
-              <p className="text-[10px] font-semibold text-[#666666] uppercase">Car Wash & Detailing</p>
+            <div className="p-3.5 border-t border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#050505] text-center">
+              <p className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">GO GRAND</p>
+              <p className="text-[10px] font-semibold text-slate-500 dark:text-neutral-400 uppercase">Car Wash & Detailing</p>
             </div>
           </div>
         </div>

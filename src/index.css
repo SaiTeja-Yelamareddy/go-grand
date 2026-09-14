@@ -1,20 +1,23 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
     --bg-main: #F1F5F9;
+    --card-bg: #FFFFFF;
     --text-primary: #0F172A;
     --text-secondary: #475569;
     --border-color: #CBD5E1;
-    --card-bg: #FFFFFF;
+    color-scheme: light;
   }
 
   html.dark {
     --bg-main: #000000;
+    --card-bg: #0A0A0A;
     --text-primary: #FFFFFF;
     --text-secondary: #A3A3A3;
     --border-color: #1F1F1F;
-    --card-bg: #0A0A0A;
     color-scheme: dark;
   }
 
@@ -48,8 +51,7 @@
     -webkit-tap-highlight-color: transparent;
     margin: 0;
     padding: 0;
-    min-height: 0;
-    height: auto;
+    min-height: 100vh;
   }
 
   button, input, select, textarea {
@@ -60,70 +62,12 @@
     color: #94A3B8;
     opacity: 1;
   }
-}
 
-/* DARK MODE CONTRAST REFINEMENTS: COMPLETE PURE BLACK */
-html.dark {
-  color-scheme: dark;
-}
-
-html.dark body {
-  background-color: #000000 !important;
-  color: #FFFFFF !important;
-}
-
-/* Scoped dark mode overrides that do NOT affect the printable invoice */
-html.dark :not(.printable-invoice-card) .bg-white {
-  background-color: #0A0A0A;
-  color: #FFFFFF;
-}
-
-html.dark :not(.printable-invoice-card) .bg-\[\#F7F7F7\] {
-  background-color: #000000;
-  color: #FFFFFF;
-}
-
-html.dark :not(.printable-invoice-card) .border-\[\#E5E5E5\],
-html.dark :not(.printable-invoice-card) .divide-\[\#E5E5E5\] > * {
-  border-color: #1F1F1F;
-}
-
-html.dark :not(.printable-invoice-card) .text-\[\#111111\] {
-  color: #FFFFFF;
-}
-
-html.dark :not(.printable-invoice-card) .text-\[\#333333\],
-html.dark :not(.printable-invoice-card) .text-\[\#444444\],
-html.dark :not(.printable-invoice-card) .text-\[\#666666\] {
-  color: #A3A3A3;
-}
-
-html.dark :not(.printable-invoice-card) .hover\:bg-\[\#F7F7F7\]:hover {
-  background-color: #141414;
-}
-
-html.dark table thead tr {
-  background-color: #0A0A0A !important;
-}
-
-html.dark table th {
-  background-color: #0A0A0A !important;
-  color: #FFFFFF !important;
-  border-color: #262626 !important;
-}
-
-html.dark table td {
-  border-color: #1A1A1A !important;
-  color: #FFFFFF !important;
-}
-
-html.dark table tr:hover {
-  background-color: #141414 !important;
-}
-
-html.dark .bg-black\/50,
-html.dark .bg-black\/40 {
-  background-color: rgba(0, 0, 0, 0.75) !important;
+  html.dark input::placeholder, 
+  html.dark select::placeholder, 
+  html.dark textarea::placeholder {
+    color: #666666;
+  }
 }
 
 /* ==========================================================================

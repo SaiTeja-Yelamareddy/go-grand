@@ -243,9 +243,9 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
       />
 
       {/* Modal Card */}
-      <div className="relative z-10 w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden text-left animate-fade-in max-h-[90vh] flex flex-col">
+      <div className="relative z-10 w-full max-w-lg bg-white dark:bg-[#0A0A0A] rounded-3xl border border-slate-200 dark:border-[#1F1F1F] shadow-2xl overflow-hidden text-left animate-fade-in max-h-[90vh] flex flex-col transition-colors">
         {/* Header */}
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div className="p-6 border-b border-slate-200 dark:border-[#1F1F1F] flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <Smartphone className="w-6 h-6" />

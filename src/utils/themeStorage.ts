@@ -22,8 +22,13 @@ export function applyTheme(theme: ThemeMode = 'light'): void {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
+      document.documentElement.style.colorScheme = 'dark';
     } else {
       document.documentElement.classList.remove('dark');
+      document.documentElement.style.colorScheme = 'light';
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('themechange', { detail: theme }));
     }
   } catch (e) {
     console.error('Failed to apply theme:', e);

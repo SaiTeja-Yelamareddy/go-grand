@@ -113,13 +113,13 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F7F7] text-[#111111] flex flex-col">
+    <div className="min-h-screen bg-slate-100 dark:bg-black text-slate-900 dark:text-white flex flex-col transition-colors">
       {/* HEADER */}
-      <header className="sticky top-0 z-40 bg-white border-b border-[#E5E5E5] px-4 py-3 flex items-center justify-between shadow-2xs">
+      <header className="sticky top-0 z-40 bg-white dark:bg-[#0A0A0A] border-b border-slate-200 dark:border-[#1F1F1F] px-4 py-3 flex items-center justify-between shadow-2xs transition-colors">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setDrawerOpen(true)}
-            className="p-2 rounded-lg text-[#111111] hover:bg-[#F7F7F7] active:bg-[#E5E5E5] min-w-[48px] min-h-[48px] flex items-center justify-center transition-colors cursor-pointer"
+            className="p-2 rounded-lg text-slate-800 dark:text-neutral-200 hover:bg-slate-100 dark:hover:bg-[#1A1A1A] min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors cursor-pointer"
             aria-label="Open menu"
           >
             <Menu size={24} />
@@ -127,10 +127,10 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
           <div className="flex items-center gap-2.5">
             <img src="/logo.png" alt="GO GRAND" className="h-9 sm:h-10 object-contain rounded-lg shadow-2xs" />
             <div className="flex flex-col justify-center">
-              <h1 className="font-extrabold text-sm sm:text-base leading-none tracking-tight text-[#111111] uppercase">
+              <h1 className="font-extrabold text-sm sm:text-base leading-none tracking-tight text-slate-900 dark:text-white uppercase">
                 GO GRAND
               </h1>
-              <p className="text-[10px] sm:text-[11px] font-semibold text-[#333333] tracking-wider uppercase leading-none mt-0.5">
+              <p className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-neutral-400 tracking-wider uppercase leading-none mt-0.5">
                 CAR WASH & DETAILING
               </p>
             </div>
@@ -139,7 +139,7 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <div className="px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide border uppercase bg-[#111111] text-white border-[#111111]">
+          <div className="px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide border uppercase bg-slate-100 dark:bg-[#141414] text-slate-800 dark:text-neutral-200 border-slate-200 dark:border-[#222222]">
             Owner Mode
           </div>
         </div>
@@ -159,14 +159,14 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
         {/* PAGE TITLE */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-xl md:text-2xl font-black text-[#111111] tracking-tight uppercase">
+            <h2 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
               Add / Update Services
             </h2>
-            <p className="text-xs font-semibold text-[#444444] mt-0.5">
+            <p className="text-xs font-semibold text-slate-500 dark:text-neutral-400 mt-0.5">
               Organize services into categories for the job sheet
             </p>
           </div>
-          <div className="w-10 h-10 bg-white border border-[#E5E5E5] rounded-xl flex items-center justify-center text-[#111111]">
+          <div className="w-10 h-10 bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-[#1F1F1F] rounded-xl flex items-center justify-center text-slate-800 dark:text-neutral-200">
             <Shield size={20} />
           </div>
         </div>
@@ -176,28 +176,28 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
           {sections.map((section) => (
             <div
               key={section.id}
-              className="bg-white rounded-2xl border border-[#E5E5E5] shadow-2xs overflow-hidden"
+              className="bg-white dark:bg-[#0A0A0A] rounded-2xl border border-slate-200 dark:border-[#1F1F1F] shadow-2xs overflow-hidden transition-colors"
             >
               {/* SECTION HEADER */}
-              <div className="p-4 bg-[#F7F7F7] border-b border-[#E5E5E5] flex items-center justify-between">
+              <div className="p-4 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#1F1F1F] flex items-center justify-between">
                 {editingSectionId === section.id ? (
                   <div className="flex items-center gap-2 w-full max-w-sm">
                     <input
                       type="text"
                       value={editingSectionName}
                       onChange={(e) => setEditingSectionName(e.target.value)}
-                      className="flex-1 min-h-[44px] px-3 bg-white border border-[#111111] rounded-lg text-sm font-bold text-[#111111] focus:outline-none"
+                      className="flex-1 min-h-[44px] px-3 bg-white dark:bg-[#1A1A1A] border border-slate-900 dark:border-white rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none"
                       autoFocus
                     />
                     <button
                       onClick={() => handleSaveSectionName(section.id)}
-                      className="p-2 rounded-lg bg-[#111111] text-white min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer"
+                      className="p-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-black min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer"
                     >
                       <Check size={18} />
                     </button>
                     <button
                       onClick={() => setEditingSectionId(null)}
-                      className="p-2 rounded-lg bg-white border border-[#E5E5E5] text-[#666666] min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer"
+                      className="p-2 rounded-xl bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#262626] text-slate-500 dark:text-neutral-400 min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer"
                     >
                       <X size={18} />
                     </button>
@@ -205,10 +205,10 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
                 ) : (
                   <>
                     <div>
-                      <h3 className="font-extrabold text-sm text-[#111111] uppercase tracking-wider">
+                      <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
                         {section.name}
                       </h3>
-                      <p className="text-[11px] font-semibold text-[#666666]">
+                      <p className="text-[11px] font-semibold text-slate-500 dark:text-neutral-400">
                         {section.services.length} {section.services.length === 1 ? 'service' : 'services'}
                       </p>
                     </div>
@@ -218,7 +218,7 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
                         onClick={() =>
                           setActiveMenuKey(activeMenuKey === `sec_${section.id}` ? null : `sec_${section.id}`)
                         }
-                        className="w-10 h-10 rounded-lg text-[#111111] hover:bg-[#E5E5E5] flex items-center justify-center transition-colors cursor-pointer"
+                        className="w-10 h-10 rounded-xl text-slate-700 dark:text-neutral-300 hover:bg-slate-200 dark:hover:bg-[#1C1C1C] flex items-center justify-center transition-colors cursor-pointer"
                         aria-label="Section options"
                       >
                         <MoreVertical size={18} />
@@ -226,21 +226,21 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
 
                       {/* SECTION MENU POPOVER */}
                       {activeMenuKey === `sec_${section.id}` && (
-                        <div className="absolute right-0 top-11 z-30 w-44 bg-white border border-[#E5E5E5] rounded-xl shadow-md p-1 text-left">
+                        <div className="absolute right-0 top-11 z-30 w-44 bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#262626] rounded-xl shadow-2xl p-1 text-left animate-fade-in">
                           <button
                             onClick={() => {
                               setActiveMenuKey(null);
                               setEditingSectionId(section.id);
                               setEditingSectionName(section.name);
                             }}
-                            className="w-full min-h-[44px] px-3 rounded-lg text-xs font-bold text-[#111111] hover:bg-[#F7F7F7] flex items-center gap-2 text-left cursor-pointer"
+                            className="w-full min-h-[44px] px-3 rounded-lg text-xs font-bold text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-[#1C1C1C] flex items-center gap-2 text-left cursor-pointer"
                           >
                             <Edit3 size={15} />
                             <span>Edit Section</span>
                           </button>
                           <button
                             onClick={() => handleDeleteSectionConfirm(section)}
-                            className="w-full min-h-[44px] px-3 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 text-left cursor-pointer"
+                            className="w-full min-h-[44px] px-3 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center gap-2 text-left cursor-pointer"
                           >
                             <Trash2 size={15} />
                             <span>Delete Section</span>
@@ -253,34 +253,34 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
               </div>
 
               {/* SERVICES LIST IN SECTION */}
-              <div className="divide-y divide-[#E5E5E5]">
+              <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F]">
                 {section.services.map((srv) => (
-                  <div key={srv.id} className="p-3.5 px-4 flex items-center justify-between hover:bg-[#F7F7F7]/50">
+                  <div key={srv.id} className="p-3.5 px-4 flex items-center justify-between hover:bg-slate-50/60 dark:hover:bg-[#141414] transition-colors">
                     {editingServiceId === srv.id ? (
                       <div className="flex items-center gap-2 w-full">
                         <input
                           type="text"
                           value={editingServiceName}
                           onChange={(e) => setEditingServiceName(e.target.value)}
-                          className="flex-1 min-h-[44px] px-3 bg-white border border-[#111111] rounded-lg text-sm font-semibold text-[#111111] focus:outline-none"
+                          className="flex-1 min-h-[44px] px-3 bg-white dark:bg-[#1A1A1A] border border-slate-900 dark:border-white rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:outline-none"
                           autoFocus
                         />
                         <button
                           onClick={() => handleSaveServiceName(section.id, srv.id)}
-                          className="p-2 rounded-lg bg-[#111111] text-white min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer"
+                          className="p-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-black min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer"
                         >
                           <Check size={18} />
                         </button>
                         <button
                           onClick={() => setEditingServiceId(null)}
-                          className="p-2 rounded-lg bg-white border border-[#E5E5E5] text-[#666666] min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer"
+                          className="p-2 rounded-xl bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#262626] text-slate-500 dark:text-neutral-400 min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer"
                         >
                           <X size={18} />
                         </button>
                       </div>
                     ) : (
                       <>
-                        <span className="text-sm font-semibold text-[#111111]">
+                        <span className="text-sm font-semibold text-slate-900 dark:text-white">
                           {srv.name}
                         </span>
 
@@ -291,7 +291,7 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
                                 activeMenuKey === `srv_${srv.id}` ? null : `srv_${srv.id}`
                               )
                             }
-                            className="w-10 h-10 rounded-lg text-[#111111] hover:bg-[#E5E5E5] flex items-center justify-center transition-colors cursor-pointer"
+                            className="w-10 h-10 rounded-xl text-slate-700 dark:text-neutral-300 hover:bg-slate-200 dark:hover:bg-[#1C1C1C] flex items-center justify-center transition-colors cursor-pointer"
                             aria-label="Service options"
                           >
                             <MoreVertical size={16} />
@@ -299,21 +299,21 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
 
                           {/* SERVICE MENU POPOVER */}
                           {activeMenuKey === `srv_${srv.id}` && (
-                            <div className="absolute right-0 top-10 z-30 w-36 bg-white border border-[#E5E5E5] rounded-xl shadow-md p-1 text-left">
+                            <div className="absolute right-0 top-10 z-30 w-36 bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#262626] rounded-xl shadow-2xl p-1 text-left animate-fade-in">
                               <button
                                 onClick={() => {
                                   setActiveMenuKey(null);
                                   setEditingServiceId(srv.id);
                                   setEditingServiceName(srv.name);
                                 }}
-                                className="w-full min-h-[44px] px-3 rounded-lg text-xs font-bold text-[#111111] hover:bg-[#F7F7F7] flex items-center gap-2 text-left cursor-pointer"
+                                className="w-full min-h-[44px] px-3 rounded-lg text-xs font-bold text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-[#1C1C1C] flex items-center gap-2 text-left cursor-pointer"
                               >
                                 <Edit3 size={14} />
                                 <span>Edit</span>
                               </button>
                               <button
                                 onClick={() => handleDeleteServiceConfirm(section.id, srv.id, srv.name)}
-                                className="w-full min-h-[44px] px-3 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 text-left cursor-pointer"
+                                className="w-full min-h-[44px] px-3 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center gap-2 text-left cursor-pointer"
                               >
                                 <Trash2 size={14} />
                                 <span>Delete</span>
@@ -327,14 +327,14 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
                 ))}
 
                 {section.services.length === 0 && (
-                  <div className="p-4 text-xs font-medium text-[#666666] text-center italic">
+                  <div className="p-4 text-xs font-medium text-slate-500 dark:text-neutral-400 text-center italic">
                     No services in this section yet.
                   </div>
                 )}
               </div>
 
               {/* ADD SERVICE FORM FOR THIS SECTION */}
-              <div className="p-3 bg-[#F7F7F7]/60 border-t border-[#E5E5E5]">
+              <div className="p-3 bg-slate-50/60 dark:bg-[#0D0D0D] border-t border-slate-200 dark:border-[#1F1F1F]">
                 {addingServiceSectionId === section.id ? (
                   <form onSubmit={(e) => handleCreateService(section.id, e)} className="flex items-center gap-2">
                     <input
@@ -342,12 +342,12 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
                       value={newServiceName}
                       onChange={(e) => setNewServiceName(e.target.value)}
                       placeholder="[ Enter service name ]"
-                      className="flex-1 min-h-[48px] px-3.5 bg-white border border-[#111111] rounded-xl text-sm font-medium text-[#111111] focus:outline-none"
+                      className="flex-1 min-h-[48px] px-3.5 bg-white dark:bg-[#121212] border border-slate-900 dark:border-white rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:outline-none"
                       autoFocus
                     />
                     <button
                       type="submit"
-                      className="min-h-[48px] px-4 bg-[#111111] text-white text-xs font-bold uppercase rounded-xl hover:bg-neutral-900 cursor-pointer"
+                      className="min-h-[48px] px-4 bg-slate-900 dark:bg-white text-white dark:text-black text-xs font-bold uppercase rounded-xl hover:bg-slate-800 dark:hover:bg-neutral-200 cursor-pointer"
                     >
                       ADD SERVICE
                     </button>
@@ -357,7 +357,7 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
                         setAddingServiceSectionId(null);
                         setNewServiceName('');
                       }}
-                      className="min-h-[48px] px-3 bg-white border border-[#E5E5E5] text-[#666666] rounded-xl cursor-pointer"
+                      className="min-h-[48px] px-3 bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#262626] text-slate-500 dark:text-neutral-400 rounded-xl cursor-pointer"
                     >
                       <X size={18} />
                     </button>
@@ -368,7 +368,7 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
                       setAddingServiceSectionId(section.id);
                       setNewServiceName('');
                     }}
-                    className="w-full min-h-[48px] px-4 rounded-xl border border-dashed border-[#111111] text-[#111111] hover:bg-white text-xs font-extrabold tracking-wide uppercase flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    className="w-full min-h-[48px] px-4 rounded-xl border border-dashed border-slate-400 dark:border-neutral-700 text-slate-800 dark:text-neutral-200 hover:bg-white dark:hover:bg-[#141414] text-xs font-extrabold tracking-wide uppercase flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
                     <Plus size={16} />
                     <span>Add Service</span>
@@ -380,10 +380,10 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
         </div>
 
         {/* ADD SECTION BUTTON & FORM */}
-        <div className="mt-8 pt-4 border-t border-[#E5E5E5]">
+        <div className="mt-8 pt-4 border-t border-slate-200 dark:border-[#1F1F1F]">
           {showAddSection ? (
-            <form onSubmit={handleCreateSection} className="bg-white p-4 rounded-2xl border border-[#111111] shadow-sm space-y-3">
-              <label className="block text-xs font-bold text-[#111111] uppercase tracking-wider">
+            <form onSubmit={handleCreateSection} className="bg-white dark:bg-[#0A0A0A] p-4 rounded-2xl border border-slate-900 dark:border-white shadow-sm space-y-3">
+              <label className="block text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                 Section Name
               </label>
               <input
@@ -391,13 +391,13 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
                 value={newSectionName}
                 onChange={(e) => setNewSectionName(e.target.value)}
                 placeholder="[ Full Car Wash ]"
-                className="w-full min-h-[48px] px-3.5 bg-white border border-[#E5E5E5] rounded-xl text-sm font-semibold text-[#111111] focus:outline-none focus:border-[#111111]"
+                className="w-full min-h-[48px] px-3.5 bg-white dark:bg-[#121212] border border-slate-300 dark:border-[#262626] rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-slate-900 dark:focus:border-white"
                 autoFocus
               />
               <div className="flex gap-2">
                 <button
                   type="submit"
-                  className="flex-1 min-h-[48px] bg-[#111111] text-white font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer"
+                  className="flex-1 min-h-[48px] bg-slate-900 dark:bg-white text-white dark:text-black font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer hover:bg-slate-800 dark:hover:bg-neutral-200"
                 >
                   ADD SECTION
                 </button>
@@ -407,7 +407,7 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
                     setShowAddSection(false);
                     setNewSectionName('');
                   }}
-                  className="px-4 min-h-[48px] bg-white border border-[#E5E5E5] text-[#111111] font-bold text-xs uppercase rounded-xl cursor-pointer"
+                  className="px-4 min-h-[48px] bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#262626] text-slate-900 dark:text-white font-bold text-xs uppercase rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -416,7 +416,7 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
           ) : (
             <button
               onClick={() => setShowAddSection(true)}
-              className="w-full min-h-[54px] bg-[#111111] hover:bg-neutral-900 active:bg-neutral-800 text-white font-extrabold text-sm tracking-wider uppercase rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full min-h-[54px] bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-neutral-200 active:scale-[0.99] text-white dark:text-black font-extrabold text-sm tracking-wider uppercase rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Plus size={18} />
               <span>ADD SECTION</span>

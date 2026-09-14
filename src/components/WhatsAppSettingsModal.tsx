@@ -44,8 +44,8 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
     const timeoutId = setTimeout(() => controller.abort(), 6000);
 
     try {
-      const res = await fetch(`${activeBackendUrl}/api/whatsapp/connect`, {
-        method: 'POST',
+      const res = await fetch(`${activeBackendUrl}/api/whatsapp/status`, {
+        method: 'GET',
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -59,11 +59,37 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
         } else if (data.qrCode) {
           setStatus('qr_ready');
           setQrCode(data.qrCode);
+        } else if (data.isConnecting) {
+          setStatus('connecting');
         } else {
           setStatus('connecting');
         }
       } else {
         setServerOnline(false);
+      }
+    } catch {
+      setServerOnline(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleManualConnect = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${activeBackendUrl}/api/whatsapp/connect`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setServerOnline(true);
+        if (data.connected) {
+          setStatus('connected');
+          setConnectedUser(data.user);
+        } else if (data.qrCode) {
+          setStatus('qr_ready');
+          setQrCode(data.qrCode);
+        }
       }
     } catch {
       setServerOnline(false);
@@ -82,8 +108,9 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
 
     try {
       socket = io(activeBackendUrl, {
-        reconnectionAttempts: 3,
-        timeout: 5000,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 3000,
+        timeout: 8000,
         transports: ['websocket', 'polling'],
       });
 
@@ -93,7 +120,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
       });
 
       socket.on('disconnect', () => {
-        // Only set offline if disconnected
+        // Socket disconnected
       });
 
       socket.on('qr', (data: { qrCode: string }) => {
@@ -122,7 +149,13 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
     }
 
     return () => {
-      socket?.disconnect();
+      if (socket) {
+        socket.off('connect');
+        socket.off('disconnect');
+        socket.off('qr');
+        socket.off('status');
+        socket.disconnect();
+      }
     };
   }, [isOpen, activeBackendUrl]);
 
@@ -284,7 +317,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
                   <span>Configure Cloud Server URL</span>
                 </button>
                 <button
-                  onClick={fetchStatus}
+                  onClick={handleManualConnect}
                   className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
                 >
                   Retry Connection

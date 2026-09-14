@@ -77,6 +77,8 @@ let currentQrCode = null;
 let isConnected = false;
 let connectedUser = null;
 let isConnecting = false;
+let reconnectTimer = null;
+let socketInstanceId = 0;
 
 const logger = pino({ level: 'debug' });
 
@@ -84,16 +86,44 @@ import https from 'https';
 
 const httpsAgent = new https.Agent({ keepAlive: true });
 
-async function connectToWhatsApp() {
-  if (isConnecting) return;
+async function connectToWhatsApp(force = false) {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  if (isConnected && !force) {
+    console.log(`[BAILEYS] ℹ️ Already connected as ${connectedUser}. Skipping duplicate connection.`);
+    return;
+  }
+
+  if (isConnecting && !force) {
+    console.log('[BAILEYS] ⏳ Connection already in progress. Skipping duplicate connect call.');
+    return;
+  }
+
   isConnecting = true;
+  const currentInstance = ++socketInstanceId;
+  console.log(`[BAILEYS] 🔌 Initializing WhatsApp Baileys socket (Instance #${currentInstance})...`);
   io.emit('status', { status: 'connecting', connected: false });
+
+  // If previous socket exists, safely remove listeners and close
+  if (sock) {
+    try {
+      console.log('[BAILEYS] 🧹 Cleaning up previous socket listeners...');
+      sock.ev.removeAllListeners();
+      sock.end();
+    } catch (err) {
+      console.warn('[BAILEYS] Warning cleaning old socket:', err.message);
+    }
+    sock = null;
+  }
 
   try {
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
     const { version } = await fetchLatestBaileysVersion();
 
-    sock = makeWASocket({
+    const newSock = makeWASocket({
       version,
       auth: state,
       printQRInTerminal: true,
@@ -106,15 +136,24 @@ async function connectToWhatsApp() {
       ],
     });
 
-    sock.ev.on('creds.update', async () => {
+    sock = newSock;
+    console.log(`[BAILEYS] 🚀 Socket #${currentInstance} created successfully.`);
+
+    newSock.ev.on('creds.update', async () => {
+      if (currentInstance !== socketInstanceId) return;
       try {
         await saveCreds();
       } catch (err) {
-        console.warn('Creds update warning:', err.message);
+        console.warn('[BAILEYS] Creds update warning:', err.message);
       }
     });
 
-    sock.ev.on('connection.update', async (update) => {
+    newSock.ev.on('connection.update', async (update) => {
+      if (currentInstance !== socketInstanceId) {
+        console.log(`[BAILEYS] 🛑 Ignoring event from obsolete socket #${currentInstance}`);
+        return;
+      }
+
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
@@ -122,10 +161,11 @@ async function connectToWhatsApp() {
           currentQrCode = await QRCode.toDataURL(qr);
           isConnected = false;
           connectedUser = null;
+          console.log(`[BAILEYS] 📱 QR Code generated for socket #${currentInstance}`);
           io.emit('qr', { qrCode: currentQrCode });
           io.emit('status', { status: 'qr_ready', connected: false, qrCode: currentQrCode });
         } catch (err) {
-          console.error('Error generating QR code data URL:', err);
+          console.error('[BAILEYS] Error generating QR code data URL:', err);
         }
       }
 
@@ -133,8 +173,8 @@ async function connectToWhatsApp() {
         isConnected = true;
         isConnecting = false;
         currentQrCode = null;
-        connectedUser = sock.user ? sock.user.id.split(':')[0] : 'Go Grand Owner';
-        console.log(`✅ WhatsApp Linked successfully! Connected user: ${connectedUser}`);
+        connectedUser = newSock.user ? newSock.user.id.split(':')[0] : 'Go Grand Owner';
+        console.log(`[BAILEYS] ✅ Connection OPENED successfully! Connected user: ${connectedUser}`);
         io.emit('status', { status: 'connected', connected: true, user: connectedUser });
       }
 
@@ -142,29 +182,39 @@ async function connectToWhatsApp() {
         isConnected = false;
         isConnecting = false;
         connectedUser = null;
+
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        const closeReason = lastDisconnect?.error?.message || lastDisconnect?.error || 'Unknown error';
+        const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+        const shouldReconnect = !isLoggedOut;
 
-        console.log(`⚠️ WhatsApp connection closed. StatusCode: ${statusCode}, Reconnecting: ${shouldReconnect}`);
+        console.log(`[BAILEYS] ⚠️ Connection CLOSED for socket #${currentInstance}. StatusCode: ${statusCode}, Reason: ${closeReason}, ShouldReconnect: ${shouldReconnect}`);
 
-        if (statusCode === DisconnectReason.loggedOut) {
+        if (isLoggedOut) {
           currentQrCode = null;
-          // Clear session files
+          console.log('[BAILEYS] 🚪 Logged out. Clearing session files.');
           if (fs.existsSync(AUTH_DIR)) {
-            fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-            fs.mkdirSync(AUTH_DIR, { recursive: true });
+            try {
+              fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+              fs.mkdirSync(AUTH_DIR, { recursive: true });
+            } catch (fsErr) {
+              console.warn('[BAILEYS] Error clearing auth files:', fsErr.message);
+            }
           }
           io.emit('status', { status: 'logged_out', connected: false });
         } else if (shouldReconnect) {
           io.emit('status', { status: 'reconnecting', connected: false });
-          setTimeout(() => {
+          console.log('[BAILEYS] 🔄 Scheduling reconnect in 5000ms...');
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(() => {
+            console.log('[BAILEYS] 🔄 Executing scheduled reconnect...');
             connectToWhatsApp();
-          }, 3000);
+          }, 5000);
         }
       }
     });
   } catch (error) {
-    console.error('Failed to initialize WhatsApp connection:', error);
+    console.error(`[BAILEYS] ❌ Failed to initialize WhatsApp connection #${currentInstance}:`, error);
     isConnecting = false;
     isConnected = false;
     io.emit('status', { status: 'error', connected: false, error: error.message });
@@ -205,9 +255,11 @@ app.get('/api/whatsapp/status', (req, res) => {
 });
 
 app.post('/api/whatsapp/connect', (req, res) => {
-  if (!isConnected) {
-    isConnecting = false;
+  if (!isConnected && !isConnecting) {
+    console.log('📡 [/api/whatsapp/connect] Initiating connection...');
     connectToWhatsApp();
+  } else {
+    console.log(`📡 [/api/whatsapp/connect] Connection already active (connected: ${isConnected}, isConnecting: ${isConnecting})`);
   }
   res.json({
     connected: isConnected,
@@ -219,29 +271,34 @@ app.post('/api/whatsapp/connect', (req, res) => {
 
 app.post('/api/whatsapp/logout', async (req, res) => {
   try {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     if (sock) {
-      await sock.logout().catch(() => {});
-      sock.end();
+      try {
+        sock.ev.removeAllListeners();
+        await sock.logout().catch(() => {});
+        sock.end();
+      } catch (e) {}
       sock = null;
     }
     isConnected = false;
+    isConnecting = false;
     connectedUser = null;
     currentQrCode = null;
-    
+
     if (fs.existsSync(AUTH_DIR)) {
-      fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-      fs.mkdirSync(AUTH_DIR, { recursive: true });
+      try {
+        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        fs.mkdirSync(AUTH_DIR, { recursive: true });
+      } catch (e) {}
     }
 
     io.emit('status', { status: 'logged_out', connected: false });
-    
-    // Restart connection to generate a fresh QR code
-    setTimeout(() => {
-      connectToWhatsApp();
-    }, 1000);
-
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
+    console.error('Logout error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

@@ -466,7 +466,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       {/* MAIN JOB SHEET FORM - RESPONSIVE NATURAL VERTICAL SCROLL */}
       <main className="flex-1 px-3.5 py-3 sm:px-6 sm:py-5 max-w-lg mx-auto w-full pb-8 space-y-4">
         {/* PAGE TITLE & TOKEN HEADER */}
-        <section className="flex items-start justify-between">
+        <section className="flex items-start justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
               {isEditing && (
@@ -491,32 +491,32 @@ export const JobSheet: React.FC<JobSheetProps> = ({
             </p>
           </div>
 
-          <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 shadow-sm rounded-xl px-3 py-2 text-right flex flex-col items-end">
-            <span className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-              Job Token
-            </span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-              <span className="text-xs font-mono font-bold text-slate-950 dark:text-white tracking-tight">
-                {isEditing ? `#EDIT-${editId?.slice(-4).toUpperCase()}` : `#GG-${Math.floor(1000 + (Date.now() % 9000))}`}
+          <div className="flex items-center gap-2 shrink-0">
+            {!isEditing && hasEnteredData && (
+              <button
+                type="button"
+                onClick={handleResetForm}
+                className="text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400 bg-white dark:bg-[#111827] border border-slate-300 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-800 px-2.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                title="Clear all input fields"
+              >
+                <RotateCcw size={13} className="text-slate-500 dark:text-slate-400" />
+                <span className="hidden sm:inline">Reset</span>
+              </button>
+            )}
+
+            <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 shadow-sm rounded-xl px-3 py-2 text-right flex flex-col items-end">
+              <span className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                Job Token
               </span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span className="text-xs font-mono font-bold text-slate-950 dark:text-white tracking-tight">
+                  {isEditing ? `#EDIT-${editId?.slice(-4).toUpperCase()}` : `#GG-${Math.floor(1000 + (Date.now() % 9000))}`}
+                </span>
+              </div>
             </div>
           </div>
         </section>
-
-        {/* RESET BUTTON BAR IF DATA ENTERED */}
-        {!isEditing && hasEnteredData && (
-          <div className="flex justify-end">
-            <button
-              onClick={handleResetForm}
-              className="text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-slate-950 dark:hover:text-white bg-white dark:bg-[#111827] border border-slate-300 dark:border-slate-700 px-3 py-1 rounded-xl flex items-center gap-1.5 min-h-[30px] transition-colors cursor-pointer shadow-xs"
-              title="Clear input fields for a new job"
-            >
-              <RotateCcw size={13} />
-              <span>Reset Form</span>
-            </button>
-          </div>
-        )}
 
         {/* SUCCESS ALERT */}
         {saveSuccess && (
@@ -1102,10 +1102,21 @@ export const JobSheet: React.FC<JobSheetProps> = ({
           </section>
 
           {/* 5. PRIMARY SAVE ACTION BUTTON */}
-          <div className="pt-2 pb-2">
+          <div className="pt-2 pb-2 flex items-center gap-2.5">
+            {!isEditing && hasEnteredData && (
+              <button
+                type="button"
+                onClick={handleResetForm}
+                className="py-4 px-3.5 rounded-2xl bg-white dark:bg-[#1E293B] hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-bold text-xs uppercase tracking-wider shadow-sm active:scale-[0.98] transition-all border border-slate-300 dark:border-slate-700 hover:border-rose-300 flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                title="Clear all form fields"
+              >
+                <RotateCcw size={16} />
+                <span className="hidden sm:inline">Reset Form</span>
+              </button>
+            )}
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-slate-950 hover:bg-black dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-slate-950 font-black text-sm tracking-wide shadow-lg active:scale-[0.99] transition-all border border-slate-800 dark:border-amber-300 cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-slate-950 hover:bg-black dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-slate-950 font-black text-sm tracking-wide shadow-lg active:scale-[0.99] transition-all border border-slate-800 dark:border-amber-300 cursor-pointer"
             >
               <Save size={18} className="text-amber-400 dark:text-slate-950" />
               <span>{isEditing ? 'UPDATE JOB SHEET' : 'SAVE DRAFT & CREATE JOB'}</span>

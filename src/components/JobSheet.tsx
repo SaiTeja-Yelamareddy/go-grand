@@ -1102,21 +1102,10 @@ export const JobSheet: React.FC<JobSheetProps> = ({
           </section>
 
           {/* 5. PRIMARY SAVE ACTION BUTTON */}
-          <div className="pt-2 pb-2 flex items-center gap-2.5">
-            {!isEditing && hasEnteredData && (
-              <button
-                type="button"
-                onClick={handleResetForm}
-                className="py-4 px-3.5 rounded-2xl bg-white dark:bg-[#121212] hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-bold text-xs uppercase tracking-wider shadow-sm active:scale-[0.98] transition-all border border-slate-300 dark:border-neutral-800 hover:border-rose-300 flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
-                title="Clear all form fields"
-              >
-                <RotateCcw size={16} />
-                <span className="hidden sm:inline">Reset Form</span>
-              </button>
-            )}
+          <div className="pt-2 pb-2">
             <button
               type="submit"
-              className="flex-1 flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-slate-950 hover:bg-black dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-black font-black text-sm tracking-wide shadow-lg active:scale-[0.99] transition-all border border-slate-800 dark:border-amber-300 cursor-pointer"
+              className="w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-slate-950 hover:bg-black dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-black font-black text-sm tracking-wide shadow-lg active:scale-[0.99] transition-all border border-slate-800 dark:border-amber-300 cursor-pointer"
             >
               <Save size={18} className="text-amber-400 dark:text-black" />
               <span>{isEditing ? 'UPDATE JOB SHEET' : 'SAVE DRAFT & CREATE JOB'}</span>

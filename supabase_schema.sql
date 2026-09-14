@@ -42,6 +42,11 @@ CREATE POLICY "Allow all write operations on jobs"
     USING (true) 
     WITH CHECK (true);
 
+-- Performance Indexes for fast search & date queries
+CREATE INDEX IF NOT EXISTS idx_jobs_vehicle_number ON public.jobs (vehicle_number);
+CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON public.jobs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_phone_number ON public.jobs (phone_number);
+
 -- 2. Table: staff_profiles
 CREATE TABLE IF NOT EXISTS public.staff_profiles (
     id TEXT PRIMARY KEY,

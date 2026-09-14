@@ -1043,17 +1043,17 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <button
                 type="button"
                 onClick={handleVehicleReady}
-                className="relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-black shadow-lg transition-all active:scale-[0.96] group border-2 border-[#FDE047] bg-[#F59E0B] hover:bg-[#D97706] text-left cursor-pointer"
+                className="relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-lg transition-all active:scale-[0.96] group border-2 border-[#34D399] bg-[#059669] hover:bg-[#047857] text-left cursor-pointer"
                 title="Send Vehicle Ready WhatsApp Alert"
               >
-                <div className="w-10 h-10 rounded-xl bg-black/15 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-sm text-xl">
+                <div className="w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-sm text-xl">
                   🚗
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-black">
+                  <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-white">
                     Vehicle Ready
                   </span>
-                  <span className="block text-[10px] font-black text-black/85 uppercase tracking-tight mt-0.5">
+                  <span className="block text-[10px] font-black text-emerald-100 uppercase tracking-tight mt-0.5">
                     Customer Alert
                   </span>
                 </div>

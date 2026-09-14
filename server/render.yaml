@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: go-grand-whatsapp-server
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: node index.js
+    disk:
+      name: whatsapp-auth-data
+      mountPath: /app/auth_info
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: NODE_ENV
+        value: production

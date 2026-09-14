@@ -1,0 +1,565 @@
+import express from 'express';
+import cors from 'cors';
+import http from 'http';
+import dns from 'dns';
+import { Server as SocketIOServer } from 'socket.io';
+import QRCode from 'qrcode';
+import pino from 'pino';
+import fs from 'fs';
+import os from 'os';
+
+function getLocalIpAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name] || []) {
+      if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { generateInvoicePDF } from './pdfGenerator.js';
+import makeWASocket, {
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+} from '@whiskeysockets/baileys';
+
+process.on('uncaughtException', (err) => {
+  console.warn('⚠️ Uncaught exception caught:', err.message);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.warn('⚠️ Unhandled rejection caught:', reason);
+});
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Fix invalid system TMPDIR pointing to MongoDB directory
+const projectTmpDir = path.join(__dirname, 'temp_uploads');
+if (!fs.existsSync(projectTmpDir)) {
+  fs.mkdirSync(projectTmpDir, { recursive: true });
+}
+process.env.TMPDIR = projectTmpDir;
+process.env.TMP = projectTmpDir;
+process.env.TEMP = projectTmpDir;
+os.tmpdir = () => projectTmpDir;
+
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 5000;
+const AUTH_DIR = process.env.SESSION_DATA_PATH
+  ? path.resolve(process.env.SESSION_DATA_PATH)
+  : path.join(__dirname, 'auth_info');
+
+if (!fs.existsSync(AUTH_DIR)) {
+  fs.mkdirSync(AUTH_DIR, { recursive: true });
+}
+
+console.log(`📁 [WHATSAPP SESSION DIR]: ${AUTH_DIR}`);
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const server = http.createServer(app);
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
+});
+
+let sock = null;
+let currentQrCode = null;
+let isConnected = false;
+let connectedUser = null;
+let isConnecting = false;
+
+const logger = pino({ level: 'debug' });
+
+import https from 'https';
+
+const httpsAgent = new https.Agent({ keepAlive: true });
+
+async function connectToWhatsApp() {
+  if (isConnecting) return;
+  isConnecting = true;
+  io.emit('status', { status: 'connecting', connected: false });
+
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+    const { version } = await fetchLatestBaileysVersion();
+
+    sock = makeWASocket({
+      version,
+      auth: state,
+      printQRInTerminal: true,
+      logger,
+      browser: ['Go Grand Car Wash', 'Chrome', '1.0.0'],
+      fetchAgent: httpsAgent,
+      customUploadHosts: [
+        { hostname: 'mmg.whatsapp.net' },
+        { hostname: 'mms.whatsapp.net' },
+      ],
+    });
+
+    sock.ev.on('creds.update', async () => {
+      try {
+        await saveCreds();
+      } catch (err) {
+        console.warn('Creds update warning:', err.message);
+      }
+    });
+
+    sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        try {
+          currentQrCode = await QRCode.toDataURL(qr);
+          isConnected = false;
+          connectedUser = null;
+          io.emit('qr', { qrCode: currentQrCode });
+          io.emit('status', { status: 'qr_ready', connected: false, qrCode: currentQrCode });
+        } catch (err) {
+          console.error('Error generating QR code data URL:', err);
+        }
+      }
+
+      if (connection === 'open') {
+        isConnected = true;
+        isConnecting = false;
+        currentQrCode = null;
+        connectedUser = sock.user ? sock.user.id.split(':')[0] : 'Go Grand Owner';
+        console.log(`✅ WhatsApp Linked successfully! Connected user: ${connectedUser}`);
+        io.emit('status', { status: 'connected', connected: true, user: connectedUser });
+      }
+
+      if (connection === 'close') {
+        isConnected = false;
+        isConnecting = false;
+        connectedUser = null;
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+        console.log(`⚠️ WhatsApp connection closed. StatusCode: ${statusCode}, Reconnecting: ${shouldReconnect}`);
+
+        if (statusCode === DisconnectReason.loggedOut) {
+          currentQrCode = null;
+          // Clear session files
+          if (fs.existsSync(AUTH_DIR)) {
+            fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+            fs.mkdirSync(AUTH_DIR, { recursive: true });
+          }
+          io.emit('status', { status: 'logged_out', connected: false });
+        } else if (shouldReconnect) {
+          io.emit('status', { status: 'reconnecting', connected: false });
+          setTimeout(() => {
+            connectToWhatsApp();
+          }, 3000);
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Failed to initialize WhatsApp connection:', error);
+    isConnecting = false;
+    isConnected = false;
+    io.emit('status', { status: 'error', connected: false, error: error.message });
+  }
+}
+
+// REST API Endpoints
+
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'go-grand-whatsapp-server',
+    whatsappConnected: isConnected,
+    user: connectedUser,
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/whatsapp/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'go-grand-whatsapp-server',
+    whatsappConnected: isConnected,
+    user: connectedUser,
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/whatsapp/status', (req, res) => {
+  res.json({
+    connected: isConnected,
+    user: connectedUser,
+    qrCode: currentQrCode,
+    isConnecting,
+  });
+});
+
+app.post('/api/whatsapp/connect', (req, res) => {
+  if (!isConnected) {
+    isConnecting = false;
+    connectToWhatsApp();
+  }
+  res.json({
+    connected: isConnected,
+    user: connectedUser,
+    qrCode: currentQrCode,
+    isConnecting,
+  });
+});
+
+app.post('/api/whatsapp/logout', async (req, res) => {
+  try {
+    if (sock) {
+      await sock.logout().catch(() => {});
+      sock.end();
+      sock = null;
+    }
+    isConnected = false;
+    connectedUser = null;
+    currentQrCode = null;
+    
+    if (fs.existsSync(AUTH_DIR)) {
+      fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+      fs.mkdirSync(AUTH_DIR, { recursive: true });
+    }
+
+    io.emit('status', { status: 'logged_out', connected: false });
+    
+    // Restart connection to generate a fresh QR code
+    setTimeout(() => {
+      connectToWhatsApp();
+    }, 1000);
+
+    res.json({ success: true, message: 'Logged out successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/whatsapp/send-invoice', async (req, res) => {
+  if (!isConnected || !sock) {
+    return res.status(400).json({
+      success: false,
+      error: 'WhatsApp is not connected. Please scan the QR code first.',
+    });
+  }
+
+  try {
+    const { phoneNumber, message } = req.body;
+
+    if (!phoneNumber || !message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number and message text are required.',
+      });
+    }
+
+    // Clean phone number (strip all non-digits)
+    let cleanPhone = phoneNumber.replace(/\D/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = `91${cleanPhone}`;
+    }
+
+    // Check if user exists on WhatsApp
+    const jid = `${cleanPhone}@s.whatsapp.net`;
+    const [result] = await sock.onWhatsApp(jid);
+
+    const targetJid = result && result.exists ? result.jid : jid;
+
+    // Send WhatsApp text message
+    const sentMsg = await sock.sendMessage(targetJid, { text: message });
+
+    res.json({
+      success: true,
+      messageId: sentMsg.key.id,
+      recipient: cleanPhone,
+    });
+  } catch (error) {
+    console.error('Error sending WhatsApp message:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to send WhatsApp message',
+    });
+  }
+});
+
+app.post('/api/whatsapp/send-vehicle-ready-qr', async (req, res) => {
+  if (!isConnected || !sock) {
+    return res.status(400).json({
+      success: false,
+      error: 'WhatsApp is not connected. Please scan the QR code in Settings first.',
+    });
+  }
+
+  try {
+    const { job, phoneNumber, upiId, textMessage } = req.body;
+
+    if (!job || !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'Job details and phone number are required.',
+      });
+    }
+
+    // Clean phone number
+    let cleanPhone = phoneNumber.replace(/\D/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = `91${cleanPhone}`;
+    }
+
+    const jid = `${cleanPhone}@s.whatsapp.net`;
+    const [result] = await sock.onWhatsApp(jid);
+    const targetJid = result && result.exists ? result.jid : jid;
+
+    // Calculate exact invoice price
+    const priceStr = String(job.price || '0').replace(/[^0-9.]/g, '');
+    const discountStr = String(job.discount || '0').replace(/[^0-9.]/g, '');
+    const priceNum = parseFloat(priceStr) || 0;
+    const discountNum = parseFloat(discountStr) || 0;
+    const finalAmount = Math.max(0, priceNum - discountNum).toFixed(2);
+
+    let sentMsg;
+    const targetUpiId = (upiId || '').trim();
+
+    if (targetUpiId && parseFloat(finalAmount) > 0) {
+      // Build NPCI-compliant UPI deep-link URI with clean Payee Name (no ampersand)
+      const payeeName = encodeURIComponent('GO GRAND Car Wash and Detailing');
+      const vehNo = (job.vehicleNumber || 'Vehicle').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const note = encodeURIComponent(`GO GRAND Bill - ${vehNo}`);
+      const upiUri = `upi://pay?pa=${targetUpiId}&pn=${payeeName}&am=${finalAmount}&cu=INR&tn=${note}`;
+
+      console.log(`💳 [UPI QR GENERATION] Payee: GO GRAND Car Wash and Detailing | Amount: ₹${finalAmount} | Vehicle: ${vehNo}`);
+
+      // Generate High Quality PNG Buffer of QR Code
+      const qrPngBuffer = await QRCode.toBuffer(upiUri, {
+        type: 'png',
+        width: 600,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF',
+        },
+      });
+
+      console.log(`📱 [WHATSAPP DISPATCH] Sending Vehicle Ready QR Image to ${cleanPhone}...`);
+
+      sentMsg = await sock.sendMessage(targetJid, {
+        image: qrPngBuffer,
+        caption: textMessage,
+        mimetype: 'image/png',
+      });
+    } else {
+      console.log(`📱 [WHATSAPP DISPATCH] Sending Vehicle Ready text message to ${cleanPhone}...`);
+      sentMsg = await sock.sendMessage(targetJid, {
+        text: textMessage,
+      });
+    }
+
+    res.json({
+      success: true,
+      messageId: sentMsg.key.id,
+      recipient: cleanPhone,
+    });
+  } catch (error) {
+    console.error('❌ Error sending Vehicle Ready UPI QR:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to send Vehicle Ready UPI QR',
+    });
+  }
+});
+
+app.get('/api/whatsapp/invoice-pdf', async (req, res) => {
+  try {
+    const jobData = {
+      id: req.query.id || Date.now().toString(),
+      vehicleNumber: req.query.vehicleNumber || 'VEHICLE',
+      vehicleName: req.query.vehicleName || 'Standard Car',
+      customerName: req.query.customerName || 'Valued Customer',
+      phoneNumber: req.query.phoneNumber || '',
+      price: req.query.price || '0',
+      services: req.query.services ? req.query.services.split(',') : ['Car Wash & Detailing'],
+      createdAt: req.query.createdAt || new Date().toISOString(),
+    };
+
+    const pdfBuffer = await generateInvoicePDF(jobData);
+    const vehNo = (jobData.vehicleNumber || 'Vehicle').toUpperCase();
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Invoice_${vehNo}_GoGrand.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error serving PDF invoice:', error);
+    res.status(500).send('Error generating PDF invoice');
+  }
+});
+
+app.post('/api/whatsapp/send-invoice-pdf', async (req, res) => {
+  if (!isConnected || !sock) {
+    return res.status(400).json({
+      success: false,
+      error: 'WhatsApp is not connected. Please scan the QR code first.',
+    });
+  }
+
+  try {
+    const { job, phoneNumber, textMessage } = req.body;
+
+    if (!job || !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'Job details and phone number are required.',
+      });
+    }
+
+    // Clean phone number
+    let cleanPhone = phoneNumber.replace(/\D/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = `91${cleanPhone}`;
+    }
+
+    const jid = `${cleanPhone}@s.whatsapp.net`;
+    const [result] = await sock.onWhatsApp(jid);
+    const targetJid = result && result.exists ? result.jid : jid;
+
+    // Generate Vector PDF Document Buffer
+    console.log(`📄 Generating PDF Tax Invoice for vehicle ${job.vehicleNumber}...`);
+    const pdfBuffer = await generateInvoicePDF(job);
+    
+    // PDF Buffer Verification
+    const isBuffer = Buffer.isBuffer(pdfBuffer);
+    const bufLen = pdfBuffer ? pdfBuffer.length : 0;
+    const header = isBuffer && bufLen >= 5 ? pdfBuffer.slice(0, 5).toString('utf-8') : 'INVALID';
+
+    console.log(`🔍 [PDF VERIFICATION] IsBuffer: ${isBuffer} | Length: ${bufLen} bytes | Header: "${header}"`);
+    if (header !== '%PDF-') {
+      console.error('❌ [PDF VERIFICATION FAILED] Buffer does not start with %PDF-!');
+    } else {
+      console.log('✅ [PDF VERIFICATION PASSED] Valid PDF header detected.');
+    }
+
+    // Inspect Baileys WhatsApp Session & Media Connection
+    try {
+      console.log('🌐 [BAILEYS MEDIA CONN] Inspecting media upload hosts...');
+      const mediaConn = await sock.refreshMediaConn(true);
+      console.log('🌐 [BAILEYS MEDIA CONN] Hosts count:', mediaConn.hosts ? mediaConn.hosts.length : 0);
+      console.log('🌐 [BAILEYS MEDIA CONN] Hosts list:', mediaConn.hosts ? mediaConn.hosts.map(h => h.hostname) : []);
+    } catch (connErr) {
+      console.warn('⚠️ [BAILEYS MEDIA CONN WARNING] Could not refresh media conn:', connErr.message);
+    }
+
+    const vehNo = (job.vehicleNumber || 'Vehicle').toUpperCase();
+    const fileName = `Invoice_${vehNo}_GoGrand.pdf`;
+
+    console.log(`📎 Dispatching native WhatsApp PDF document attachment for vehicle ${vehNo}...`);
+
+    let sentDoc;
+    try {
+      sentDoc = await sock.sendMessage(targetJid, {
+        document: pdfBuffer,
+        mimetype: 'application/pdf',
+        fileName: fileName,
+        caption: textMessage,
+      });
+
+      console.log(`✅ Native WhatsApp PDF Document sent to ${cleanPhone}! Message ID: ${sentDoc.key.id}`);
+
+      res.json({
+        success: true,
+        messageId: sentDoc.key.id,
+        recipient: cleanPhone,
+        fileName: fileName,
+      });
+    } catch (sendErr) {
+      console.error('❌ [BAILEYS SEND ERROR DETAILED]:');
+      console.error('Error message:', sendErr.message);
+      console.error('Error name:', sendErr.name);
+      console.error('Error isBoom:', sendErr.isBoom);
+      if (sendErr.output) {
+        console.error('Boom Output:', JSON.stringify(sendErr.output, null, 2));
+      }
+      if (sendErr.data) {
+        console.error('Boom Underlying Data / Cause:', sendErr.data);
+      }
+      if (sendErr.cause) {
+        console.error('Error Cause:', sendErr.cause);
+      }
+      if (sendErr.stack) {
+        console.error('Stack Trace:', sendErr.stack);
+      }
+      throw sendErr;
+    }
+  } catch (error) {
+    console.error('❌ Error generating or sending PDF invoice:', error);
+    if (error.response) {
+      console.error('Axios Response Status:', error.response.status);
+      console.error('Axios Response Data:', error.response.data);
+    }
+    if (error.cause) {
+      console.error('Error Cause:', error.cause);
+    }
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to generate and send PDF invoice',
+    });
+  }
+});
+
+app.post('/api/whatsapp/test-pdf', async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    let cleanPhone = (phoneNumber || '').replace(/\D/g, '');
+    if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
+    const jid = `${cleanPhone}@s.whatsapp.net`;
+    const [result] = await sock.onWhatsApp(jid);
+    const targetJid = result && result.exists ? result.jid : jid;
+
+    const testPdfBuffer = Buffer.from(
+      '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 R<</Type/Pages/Count 1/Kids[3 0 R]>>endobj 3 0 R<</Type/Page/MediaBox[0 0 300 144]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n0000000115 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF'
+    );
+
+    console.log(`🧪 [TEST MINIMAL PDF] IsBuffer: ${Buffer.isBuffer(testPdfBuffer)} | Len: ${testPdfBuffer.length} | Header: "${testPdfBuffer.slice(0, 5).toString('utf-8')}"`);
+
+    const sentDoc = await sock.sendMessage(targetJid, {
+      document: testPdfBuffer,
+      mimetype: 'application/pdf',
+      fileName: 'test.pdf',
+      caption: '🧪 Test minimal PDF document attachment',
+    });
+
+    res.json({ success: true, messageId: sentDoc.key.id, recipient: cleanPhone });
+  } catch (err) {
+    console.error('❌ [TEST MINIMAL PDF ERROR DETAILED]:', err);
+    res.status(500).json({ success: false, error: err.message, data: err.data });
+  }
+});
+
+io.on('connection', (socket) => {
+  socket.emit('status', {
+    status: isConnected ? 'connected' : (currentQrCode ? 'qr_ready' : 'connecting'),
+    connected: isConnected,
+    user: connectedUser,
+    qrCode: currentQrCode,
+  });
+
+  socket.on('request_qr', () => {
+    if (!isConnected && !isConnecting) {
+      connectToWhatsApp();
+    }
+  });
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Go Grand WhatsApp Server running on port ${PORT} (0.0.0.0:${PORT})`);
+  connectToWhatsApp();
+});

@@ -2,19 +2,19 @@
 
 @layer base {
   :root {
-    --bg-main: #F7F7F7;
-    --text-primary: #111111;
-    --text-secondary: #444444;
-    --border-color: #D4D4D4;
+    --bg-main: #F1F5F9;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --border-color: #CBD5E1;
     --card-bg: #FFFFFF;
   }
 
   html.dark {
-    --bg-main: #0F0F0F;
-    --text-primary: #FFFFFF;
-    --text-secondary: #CCCCCC;
-    --border-color: #262626;
-    --card-bg: #171717;
+    --bg-main: #0B0F19;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --border-color: #1E293B;
+    --card-bg: #111827;
     color-scheme: dark;
   }
 
@@ -57,93 +57,68 @@
   }
 
   input::placeholder, select::placeholder, textarea::placeholder {
-    color: #666666 !important;
-    opacity: 1 !important;
+    color: #94A3B8;
+    opacity: 1;
   }
 }
 
-/* DARK MODE OVERRIDES */
+/* DARK MODE CONTRAST REFINEMENTS */
 html.dark {
   color-scheme: dark;
 }
 
 html.dark body {
-  background-color: #0F0F0F !important;
-  color: #F9FAFB !important;
+  background-color: #0B0F19 !important;
+  color: #F8FAFC !important;
 }
 
-html.dark header {
-  background-color: #171717 !important;
-  border-color: #262626 !important;
+/* Scoped dark mode overrides that do NOT affect the printable invoice */
+html.dark :not(.printable-invoice-card) .bg-white {
+  background-color: #111827;
+  color: #F8FAFC;
 }
 
-html.dark .bg-white {
-  background-color: #181818 !important;
-  color: #F9FAFB !important;
+html.dark :not(.printable-invoice-card) .bg-\[\#F7F7F7\] {
+  background-color: #0B0F19;
+  color: #E2E8F0;
 }
 
-html.dark .bg-\[\#F7F7F7\] {
-  background-color: #121212 !important;
-  color: #E5E7EB !important;
+html.dark :not(.printable-invoice-card) .border-\[\#E5E5E5\],
+html.dark :not(.printable-invoice-card) .divide-\[\#E5E5E5\] > * {
+  border-color: #1E293B;
 }
 
-html.dark .border-\[\#E5E5E5\],
-html.dark .divide-\[\#E5E5E5\] > * {
-  border-color: #2A2A2A !important;
+html.dark :not(.printable-invoice-card) .text-\[\#111111\] {
+  color: #F8FAFC;
 }
 
-html.dark .text-\[\#111111\] {
-  color: #F9FAFB !important;
+html.dark :not(.printable-invoice-card) .text-\[\#333333\],
+html.dark :not(.printable-invoice-card) .text-\[\#444444\],
+html.dark :not(.printable-invoice-card) .text-\[\#666666\] {
+  color: #94A3B8;
 }
 
-html.dark .text-\[\#333333\],
-html.dark .text-\[\#444444\],
-html.dark .text-\[\#666666\] {
-  color: #9CA3AF !important;
-}
-
-html.dark input,
-html.dark select,
-html.dark textarea {
-  background-color: #1A1A1A !important;
-  color: #FFFFFF !important;
-  border-color: #333333 !important;
-}
-
-html.dark input::placeholder,
-html.dark select::placeholder,
-html.dark textarea::placeholder {
-  color: #71717A !important;
-  opacity: 1 !important;
+html.dark :not(.printable-invoice-card) .hover\:bg-\[\#F7F7F7\]:hover {
+  background-color: #1E293B;
 }
 
 html.dark table thead tr {
-  background-color: #181818 !important;
+  background-color: #1E293B !important;
 }
 
 html.dark table th {
-  background-color: #181818 !important;
-  color: #E5E7EB !important;
-  border-color: #2A2A2A !important;
+  background-color: #1E293B !important;
+  color: #F8FAFC !important;
+  border-color: #334155 !important;
 }
 
 html.dark table td {
-  border-color: #262626 !important;
-  color: #E5E7EB !important;
+  border-color: #1E293B !important;
+  color: #E2E8F0 !important;
 }
 
-html.dark table tr:hover,
-html.dark .hover\:bg-\[\#F7F7F7\]:hover {
-  background-color: #222222 !important;
-}
-
-html.dark .shadow-2xs,
-html.dark .shadow-xs,
-html.dark .shadow-sm,
-html.dark .shadow-md,
-html.dark .shadow-xl,
-html.dark .shadow-2xl {
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.6) !important;
+html.dark table tr:hover {
+  background-color: #1E293B !important;
 }
 
 html.dark .bg-black\/50,

@@ -210,13 +210,16 @@ export async function deleteJobRecord(id: string): Promise<void> {
 
 export function getTodaysJobRecords(): JobRecord[] {
   const allJobs = getAllJobRecords();
-  const todayStr = new Date().toDateString();
+  const now = Date.now();
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
-  const todayJobs = allJobs.filter((job) => {
-    if (!job.createdAt) return true;
-    const jobDate = new Date(job.createdAt).toDateString();
-    return jobDate === todayStr;
+  return allJobs.filter((job) => {
+    if (!job.createdAt) return false;
+    const jobTime = new Date(job.createdAt).getTime();
+    if (isNaN(jobTime)) return false;
+
+    // Only include vehicles registered within the last 24 hours (clears automatically after 24h)
+    return now - jobTime >= 0 && now - jobTime < TWENTY_FOUR_HOURS_MS;
   });
-
-  return todayJobs.length > 0 ? todayJobs : allJobs;
 }
+

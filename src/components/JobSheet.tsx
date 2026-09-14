@@ -10,6 +10,12 @@ import {
   Save,
   Search,
   ArrowLeft,
+  User,
+  Phone,
+  MapPin,
+  Sliders,
+  Sparkles,
+  Car,
 } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { ThemeToggle } from './ThemeToggle';
@@ -458,153 +464,213 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       />
 
       {/* MAIN JOB SHEET FORM - RESPONSIVE NATURAL VERTICAL SCROLL */}
-      <main className="flex-1 px-3.5 py-3 sm:px-6 sm:py-5 max-w-lg mx-auto w-full pb-6">
-        {/* PAGE TITLE BAR */}
-        <div className="flex items-center justify-between mb-2.5 sm:mb-3 shrink-0">
-          <div className="flex items-center gap-2">
-            {isEditing && (
-              <button
-                onClick={() => navigate(targetTodayPath)}
-                className="p-1 rounded-md text-[#111111] hover:bg-[#E5E5E5] flex items-center justify-center cursor-pointer"
-                aria-label="Back to today's vehicles"
-              >
-                <ArrowLeft size={18} />
-              </button>
-            )}
-            <div>
-              <h2 className="text-base sm:text-xl font-black text-[#111111] tracking-tight">
+      <main className="flex-1 px-3.5 py-3 sm:px-6 sm:py-5 max-w-lg mx-auto w-full pb-8 space-y-4">
+        {/* PAGE TITLE & TOKEN HEADER */}
+        <section className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              {isEditing && (
+                <button
+                  onClick={() => navigate(targetTodayPath)}
+                  className="p-1 rounded-lg text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer"
+                  aria-label="Back to today's vehicles"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+              )}
+              <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900 dark:text-white">
                 {isEditing ? 'Edit Vehicle Job' : "Today's Job Sheet"}
               </h2>
-              <p className="text-[11px] sm:text-xs font-semibold text-[#666666] mt-0.5">
-                {isEditing ? 'Modify job details' : 'Enter vehicle & service details'}
-              </p>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-slate-200/80 dark:border-slate-800 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Live Intake
+              </span>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+              Enter vehicle specifications & detailing service package
+            </p>
           </div>
 
-          {!isEditing && hasEnteredData && (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs rounded-xl px-3 py-2 text-right flex flex-col items-end">
+            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Job Token
+            </span>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span className="text-xs font-mono font-bold text-slate-950 dark:text-white tracking-tight">
+                {isEditing ? `#EDIT-${editId?.slice(-4).toUpperCase()}` : `#GG-${Math.floor(1000 + (Date.now() % 9000))}`}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* RESET BUTTON BAR IF DATA ENTERED */}
+        {!isEditing && hasEnteredData && (
+          <div className="flex justify-end">
             <button
               onClick={handleResetForm}
-              className="text-xs font-bold text-[#666666] hover:text-[#111111] bg-white border border-[#E5E5E5] px-2.5 py-1 rounded-lg flex items-center gap-1.5 min-h-[30px] transition-colors cursor-pointer shadow-2xs"
+              className="text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 py-1 rounded-xl flex items-center gap-1.5 min-h-[30px] transition-colors cursor-pointer shadow-2xs"
               title="Clear input fields for a new job"
             >
               <RotateCcw size={13} />
-              <span>Reset</span>
+              <span>Reset Form</span>
             </button>
-          )}
-        </div>
-
-        {/* SUCCESS ALERT */}
-        {saveSuccess && (
-          <div className="shrink-0 mb-3 p-2.5 rounded-xl bg-[#F0FDF4] border border-[#BBF7D0] flex items-center gap-2 text-xs">
-            <CheckCircle2 size={16} className="text-[#166534] shrink-0" />
-            <span className="font-bold text-[#166534]">Job saved as draft ✓ preserved locally</span>
           </div>
         )}
 
-        {/* FORM CONTAINER - STACKED IN EXACT SPECIFIED ORDER */}
-        <form onSubmit={handleSaveDraft} className="space-y-2.5 sm:space-y-3">
+        {/* SUCCESS ALERT */}
+        {saveSuccess && (
+          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-xs">
+            <CheckCircle2 size={16} className="text-emerald-700 dark:text-emerald-400 shrink-0" />
+            <span className="font-bold text-emerald-800 dark:text-emerald-300">
+              Job saved as draft ✓ synchronized to cloud
+            </span>
+          </div>
+        )}
+
+        {/* FORM CONTAINER */}
+        <form onSubmit={handleSaveDraft} className="space-y-4">
           
-          {/* 1. VEHICLE NUMBER */}
-          <div className="bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-[#E5E5E5] shadow-xs">
-            <label className="block text-[11px] sm:text-xs font-bold text-[#111111] uppercase tracking-wider mb-1.5 truncate">
-              Vehicle Number <span className="text-red-600">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.vehicleNumber}
-              onChange={(e) => handleChange('vehicleNumber', e.target.value.toUpperCase())}
-              placeholder="[ Enter vehicle number ]"
-              className={`w-full min-h-[42px] sm:min-h-[46px] px-3 bg-white border ${
-                errors.vehicleNumber ? 'border-red-500' : 'border-[#E5E5E5]'
-              } rounded-xl text-xs sm:text-sm text-[#111111] font-bold uppercase placeholder-[#666666] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all`}
-            />
-            {errors.vehicleNumber && (
-              <p className="text-[10px] sm:text-[11px] font-medium text-red-600 mt-1">
-                {errors.vehicleNumber}
-              </p>
-            )}
-          </div>
-
-          {/* 2. CUSTOMER NAME */}
-          <div className="bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-[#E5E5E5] shadow-xs">
-            <label className="block text-[11px] sm:text-xs font-bold text-[#111111] uppercase tracking-wider mb-1.5 truncate">
-              Customer Name <span className="text-red-600">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.customerName}
-              onChange={(e) => handleChange('customerName', e.target.value)}
-              placeholder="[ Enter customer name ]"
-              className={`w-full min-h-[42px] sm:min-h-[46px] px-3 bg-white border ${
-                errors.customerName ? 'border-red-500' : 'border-[#E5E5E5]'
-              } rounded-xl text-xs sm:text-sm text-[#111111] font-medium placeholder-[#666666] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all`}
-            />
-            {errors.customerName && (
-              <p className="text-[10px] sm:text-[11px] font-medium text-red-600 mt-1">
-                {errors.customerName}
-              </p>
-            )}
-          </div>
-
-          {/* 3. PHONE NUMBER */}
-          <div className="bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-[#E5E5E5] shadow-xs">
-            <label className="block text-[11px] sm:text-xs font-bold text-[#111111] uppercase tracking-wider mb-1.5 truncate">
-              Phone Number <span className="text-red-600">*</span>
-            </label>
-            <input
-              type="tel"
-              value={formData.phoneNumber}
-              onChange={(e) => handleChange('phoneNumber', e.target.value)}
-              placeholder="[ Enter phone number ]"
-              className={`w-full min-h-[42px] sm:min-h-[46px] px-3 bg-white border ${
-                errors.phoneNumber ? 'border-red-500' : 'border-[#E5E5E5]'
-              } rounded-xl text-xs sm:text-sm text-[#111111] font-medium placeholder-[#666666] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all`}
-            />
-            {errors.phoneNumber && (
-              <p className="text-[10px] sm:text-[11px] font-medium text-red-600 mt-1">
-                {errors.phoneNumber}
-              </p>
-            )}
-          </div>
-
-          {/* 4. VEHICLE DETAILS */}
-          <div className="bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-[#E5E5E5] shadow-xs space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-[11px] sm:text-xs font-bold text-[#111111] uppercase tracking-wider">
-                Vehicle Details
-              </label>
-              {formData.vehicleName && (
-                <span className="text-[11px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200 truncate max-w-[200px]">
-                  {formData.vehicleName}
+          {/* 1. VEHICLE & CUSTOMER DETAILS SECTION */}
+          <section className="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-xs border border-slate-200/80 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                <span className="w-6 h-6 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xs">
+                  <Car size={14} />
                 </span>
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  Vehicle & Customer Details
+                </span>
+              </div>
+              <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md">
+                Required
+              </span>
+            </div>
+
+            {/* Vehicle Number Input (High-contrast Indian Registration Plate design) */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                Vehicle Number <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative flex rounded-xl border-2 border-slate-300 dark:border-slate-700 focus-within:border-slate-900 dark:focus-within:border-slate-300 bg-slate-50/50 dark:bg-slate-800/40 shadow-inner overflow-hidden transition-all">
+                {/* Country / IND Emblem Strip */}
+                <div className="w-9 bg-blue-700 flex flex-col items-center justify-center py-2 text-white border-r border-blue-800 select-none">
+                  <span className="text-[10px] text-amber-300 leading-none mb-0.5">☸</span>
+                  <span className="text-[9px] font-black tracking-tighter">IND</span>
+                </div>
+                <input
+                  type="text"
+                  value={formData.vehicleNumber}
+                  onChange={(e) => handleChange('vehicleNumber', e.target.value.toUpperCase())}
+                  placeholder="MH 02 EQ 8899"
+                  className="w-full bg-transparent border-none py-3 px-3 text-base md:text-lg font-mono font-bold tracking-widest uppercase text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-0 focus:outline-none"
+                  required
+                />
+              </div>
+              {errors.vehicleNumber && (
+                <p className="text-[10px] sm:text-[11px] font-medium text-rose-500 mt-1">
+                  {errors.vehicleNumber}
+                </p>
               )}
             </div>
 
-            {/* QUICK SEARCH MODEL */}
-            <div className="relative">
-              <div className="relative flex items-center">
-                <Search size={15} className="absolute left-3 text-[#999999]" />
+            {/* Customer Name Input */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                Customer Name <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 shadow-xs focus-within:border-slate-900 dark:focus-within:border-slate-300 focus-within:ring-1 focus-within:ring-slate-900 transition-all">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                  <User size={15} />
+                </span>
                 <input
                   type="text"
-                  value={vehicleSearchQuery}
-                  onChange={(e) => setVehicleSearchQuery(e.target.value)}
-                  placeholder="Quick search model (e.g. Nexon, Thar, Creta)..."
-                  className="w-full min-h-[40px] pl-9 pr-7 bg-[#F7F7F7] border border-[#E5E5E5] rounded-xl text-xs font-medium text-[#111111] placeholder-[#666666] focus:outline-none focus:border-[#111111]"
+                  value={formData.customerName}
+                  onChange={(e) => handleChange('customerName', e.target.value)}
+                  placeholder="e.g. Vikramaditya Sharma"
+                  className="w-full rounded-xl border-none pl-10 pr-3.5 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-0 focus:outline-none bg-transparent"
+                  required
                 />
-                {vehicleSearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setVehicleSearchQuery('')}
-                    className="absolute right-2 text-[#999999] hover:text-[#111111] p-1 cursor-pointer"
-                  >
-                    <X size={13} />
-                  </button>
-                )}
               </div>
+              {errors.customerName && (
+                <p className="text-[10px] sm:text-[11px] font-medium text-rose-500 mt-1">
+                  {errors.customerName}
+                </p>
+              )}
+            </div>
+
+            {/* Phone Number Input */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                Phone Number <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative flex rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 shadow-xs focus-within:border-slate-900 dark:focus-within:border-slate-300 focus-within:ring-1 focus-within:ring-slate-900 transition-all overflow-hidden">
+                <div className="flex items-center gap-1 px-3 bg-slate-100/70 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 select-none">
+                  <span className="text-sm">🇮🇳</span>
+                  <span>+91</span>
+                </div>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  value={formData.phoneNumber}
+                  onChange={(e) => handleChange('phoneNumber', e.target.value)}
+                  placeholder="98765 43210"
+                  className="w-full border-none py-2.5 px-3.5 text-sm font-medium tracking-wide text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-0 focus:outline-none bg-transparent"
+                  required
+                />
+                <div className="pr-3 flex items-center text-slate-400">
+                  <Phone size={14} />
+                </div>
+              </div>
+              {errors.phoneNumber && (
+                <p className="text-[10px] sm:text-[11px] font-medium text-rose-500 mt-1">
+                  {errors.phoneNumber}
+                </p>
+              )}
+            </div>
+          </section>
+
+          {/* 2. VEHICLE SPECIFICATIONS SECTION */}
+          <section className="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-xs border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                <span className="w-6 h-6 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs">
+                  <Sliders size={14} />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  Vehicle Details
+                </span>
+              </div>
+              <span className="text-[11px] font-medium text-slate-400">
+                Model & Location
+              </span>
+            </div>
+
+            {/* Quick Search Filter Bar */}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                <Search size={14} />
+              </span>
+              <input
+                type="text"
+                value={vehicleSearchQuery}
+                onChange={(e) => setVehicleSearchQuery(e.target.value)}
+                placeholder="Quick search model (e.g. Nexon, Thar, Creta)..."
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 pl-9 pr-7 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-slate-900 dark:focus:border-slate-300 focus:ring-1 focus:ring-slate-900 transition-all"
+              />
+              {vehicleSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setVehicleSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 cursor-pointer"
+                >
+                  <X size={13} />
+                </button>
+              )}
 
               {/* SEARCH RESULTS DROPDOWN */}
               {vehicleSearchQuery.trim() !== '' && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-40 bg-white border border-[#E5E5E5] rounded-xl shadow-xl max-h-48 overflow-y-auto p-1.5 space-y-1">
+                <div className="absolute left-0 right-0 top-full mt-1 z-40 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto p-1.5 space-y-1">
                   {searchedModels.length > 0 ? (
                     searchedModels.map((item) => (
                       <button
@@ -617,14 +683,14 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                           handleChange('vehicleName', `${item.company} ${item.model}`);
                           setVehicleSearchQuery('');
                         }}
-                        className="w-full px-3 py-1.5 text-left rounded-lg text-xs font-semibold text-[#111111] hover:bg-[#F7F7F7] flex items-center justify-between cursor-pointer"
+                        className="w-full px-3 py-1.5 text-left rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer"
                       >
                         <span>{item.company} <span className="font-bold">{item.model}</span></span>
-                        <span className="text-[10px] text-[#666666] uppercase">{item.company}</span>
+                        <span className="text-[10px] text-slate-400 uppercase">{item.company}</span>
                       </button>
                     ))
                   ) : (
-                    <div className="py-2 text-center text-xs text-[#666666]">
+                    <div className="py-2 text-center text-xs text-slate-400">
                       No matching models found
                     </div>
                   )}
@@ -632,81 +698,84 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               )}
             </div>
 
-            {/* SELECT COMPANY */}
-            <div>
-              <label className="block text-[10px] sm:text-[11px] font-bold text-[#666666] uppercase tracking-wider mb-1">
-                Select Company ▼
-              </label>
-              <div className="relative flex items-center">
-                <select
-                  value={selectedCompany}
-                  onChange={(e) => {
-                    const comp = e.target.value;
-                    setSelectedCompany(comp);
-                    setSelectedModel('');
-                    if (comp === 'Other') {
-                      setIsManualEntry(true);
-                      handleChange('vehicleName', '');
-                    } else if (comp) {
-                      setIsManualEntry(false);
-                      handleChange('vehicleName', comp);
-                    } else {
-                      setIsManualEntry(false);
-                      handleChange('vehicleName', '');
-                    }
-                  }}
-                  className="w-full min-h-[40px] pl-3 pr-9 bg-white border border-[#E5E5E5] rounded-xl text-xs font-bold text-[#111111] appearance-none focus:outline-none focus:border-[#111111] cursor-pointer"
-                >
-                  <option value="">– Select Company –</option>
-                  {INDIAN_VEHICLE_BRANDS.map((b) => (
-                    <option key={b.company} value={b.company}>
-                      {b.company}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute right-3 pointer-events-none text-[#666666]">
-                  <ChevronDown size={15} />
-                </div>
-              </div>
-            </div>
-
-            {/* SELECT VEHICLE MODEL */}
-            <div>
-              <label className="block text-[10px] sm:text-[11px] font-bold text-[#666666] uppercase tracking-wider mb-1">
-                Select Vehicle Model ▼
-              </label>
-              <div className="relative flex items-center">
-                <select
-                  disabled={!selectedCompany || selectedCompany === 'Other'}
-                  value={selectedModel}
-                  onChange={(e) => {
-                    const mod = e.target.value;
-                    setSelectedModel(mod);
-                    if (mod) {
-                      handleChange('vehicleName', `${selectedCompany} ${mod}`);
-                    } else {
-                      handleChange('vehicleName', selectedCompany);
-                    }
-                  }}
-                  className="w-full min-h-[40px] pl-3 pr-9 bg-white border border-[#E5E5E5] rounded-xl text-xs font-bold text-[#111111] disabled:bg-[#F7F7F7] disabled:text-[#999999] disabled:cursor-not-allowed appearance-none focus:outline-none focus:border-[#111111] cursor-pointer"
-                >
-                  <option value="">
-                    {!selectedCompany
-                      ? '– Select Company First –'
-                      : selectedCompany === 'Other'
-                      ? '– Manual Entry Below –'
-                      : '– Select Model –'}
-                  </option>
-                  {selectedCompany &&
-                    selectedCompany !== 'Other' &&
-                    INDIAN_VEHICLE_BRANDS.find((b) => b.company === selectedCompany)?.models.map((mod) => (
-                      <option key={mod} value={mod}>
-                        {mod}
+            {/* Cascading Selectors: Company & Model in Grid */}
+            <div className="grid grid-cols-2 gap-3 pt-0.5">
+              {/* Company Selection */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-tight">
+                  Company <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedCompany}
+                    onChange={(e) => {
+                      const comp = e.target.value;
+                      setSelectedCompany(comp);
+                      setSelectedModel('');
+                      if (comp === 'Other') {
+                        setIsManualEntry(true);
+                        handleChange('vehicleName', '');
+                      } else if (comp) {
+                        setIsManualEntry(false);
+                        handleChange('vehicleName', comp);
+                      } else {
+                        setIsManualEntry(false);
+                        handleChange('vehicleName', '');
+                      }
+                    }}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 pl-3 pr-8 text-xs font-semibold text-slate-800 dark:text-slate-100 appearance-none focus:border-slate-900 dark:focus:border-slate-300 focus:ring-1 focus:ring-slate-900 shadow-2xs transition-all truncate cursor-pointer"
+                  >
+                    <option value="">— Select Make —</option>
+                    {INDIAN_VEHICLE_BRANDS.map((b) => (
+                      <option key={b.company} value={b.company}>
+                        {b.company}
                       </option>
                     ))}
-                </select>
-                <div className="absolute right-3 pointer-events-none text-[#666666]">
-                  <ChevronDown size={15} />
+                  </select>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
+                    <ChevronDown size={14} />
+                  </span>
+                </div>
+              </div>
+
+              {/* Model Selection */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-tight">
+                  Model <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    disabled={!selectedCompany || selectedCompany === 'Other'}
+                    value={selectedModel}
+                    onChange={(e) => {
+                      const mod = e.target.value;
+                      setSelectedModel(mod);
+                      if (mod) {
+                        handleChange('vehicleName', `${selectedCompany} ${mod}`);
+                      } else {
+                        handleChange('vehicleName', selectedCompany);
+                      }
+                    }}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 pl-3 pr-8 text-xs font-semibold text-slate-800 dark:text-slate-100 disabled:bg-slate-100 dark:disabled:bg-slate-850 disabled:text-slate-400 disabled:cursor-not-allowed appearance-none focus:border-slate-900 dark:focus:border-slate-300 focus:ring-1 focus:ring-slate-900 shadow-2xs transition-all truncate cursor-pointer"
+                  >
+                    <option value="">
+                      {!selectedCompany
+                        ? '— Select Model —'
+                        : selectedCompany === 'Other'
+                        ? '— Manual Entry —'
+                        : '— Select Model —'}
+                    </option>
+                    {selectedCompany &&
+                      selectedCompany !== 'Other' &&
+                      INDIAN_VEHICLE_BRANDS.find((b) => b.company === selectedCompany)?.models.map((mod) => (
+                        <option key={mod} value={mod}>
+                          {mod}
+                        </option>
+                      ))}
+                  </select>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
+                    <ChevronDown size={14} />
+                  </span>
                 </div>
               </div>
             </div>
@@ -718,136 +787,184 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 value={formData.vehicleName}
                 onChange={(e) => handleChange('vehicleName', e.target.value)}
                 placeholder="Custom vehicle name (e.g. BMW X5)..."
-                className="w-full min-h-[40px] px-3 bg-white border border-[#E5E5E5] rounded-xl text-xs text-[#111111] font-medium placeholder-[#666666] focus:outline-none focus:border-[#111111]"
+                className="w-full min-h-[40px] px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-medium placeholder:text-slate-400 focus:outline-none focus:border-slate-900 dark:focus:border-slate-300"
                 autoFocus
               />
             )}
-          </div>
 
-          {/* 5. LOCATION */}
-          <div className="bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-[#E5E5E5] shadow-xs">
-            <label className="block text-[11px] sm:text-xs font-bold text-[#111111] uppercase tracking-wider mb-1.5 truncate">
-              Location
-            </label>
-            <input
-              type="text"
-              value={formData.location}
-              onChange={(e) => handleChange('location', e.target.value)}
-              placeholder="[ Enter location ]"
-              className="w-full min-h-[42px] sm:min-h-[46px] px-3 bg-white border border-[#E5E5E5] rounded-xl text-xs sm:text-sm text-[#111111] font-medium placeholder-[#666666] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all"
-            />
-          </div>
+            {/* Location / Studio Bay Input */}
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                Studio Location / Bay
+              </label>
+              <div className="relative rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 shadow-xs focus-within:border-slate-900 dark:focus-within:border-slate-300 focus-within:ring-1 focus-within:ring-slate-900 transition-all">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                  <MapPin size={15} />
+                </span>
+                <input
+                  type="text"
+                  value={formData.location}
+                  onChange={(e) => handleChange('location', e.target.value)}
+                  placeholder="e.g. Wash Bay 02 / Detailing Booth A"
+                  className="w-full rounded-xl border-none pl-10 pr-3.5 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-0 focus:outline-none bg-transparent"
+                />
+              </div>
+            </div>
+          </section>
 
-          {/* 6. SERVICES */}
-          <div className="bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-[#E5E5E5] shadow-xs relative">
-            <label className="block text-[11px] sm:text-xs font-bold text-[#111111] uppercase tracking-wider mb-1.5 truncate">
-              Services <span className="text-red-600">*</span>
-            </label>
-
-            <button
-              type="button"
-              onClick={() => setShowDropdownPicker(!showDropdownPicker)}
-              className={`w-full min-h-[42px] sm:min-h-[46px] px-3 bg-white border ${
-                errors.services ? 'border-red-500' : 'border-[#E5E5E5]'
-              } rounded-xl text-xs sm:text-sm font-semibold text-left flex items-center justify-between cursor-pointer`}
-            >
-              <span className="truncate">
-                {formData.selectedServices.length > 0
-                  ? `${formData.selectedServices.length} Selected`
-                  : 'Select Service'}
+          {/* 3. SERVICE & COMMERCIALS SECTION */}
+          <section className="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-xs border border-slate-200/80 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                <span className="w-6 h-6 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs">
+                  <Sparkles size={14} />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  Service & Commercials
+                </span>
+              </div>
+              <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
+                Billing Info
               </span>
-              <ChevronDown size={15} className="text-[#666666] shrink-0 ml-0.5" />
-            </button>
+            </div>
 
-            {/* BACKDROP TO DISMISS DROPDOWN */}
-            {showDropdownPicker && (
-              <div
-                className="fixed inset-0 z-30 bg-transparent"
-                onClick={() => setShowDropdownPicker(false)}
-              />
-            )}
+            {/* Primary Package / Service Selection */}
+            <div className="space-y-1.5 relative">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                Primary Package / Service <span className="text-rose-500">*</span>
+              </label>
 
-            {/* SERVICES POPUP MENU */}
-            {showDropdownPicker && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-white border border-[#E5E5E5] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-60">
-                <div className="p-2 border-b border-[#E5E5E5] bg-white flex items-center gap-2">
-                  <div className="relative flex-1 flex items-center">
-                    <Search size={14} className="absolute left-3 text-[#999999]" />
-                    <input
-                      type="text"
-                      value={serviceSearchQuery}
-                      onChange={(e) => setServiceSearchQuery(e.target.value)}
-                      placeholder="Search services..."
-                      className="w-full min-h-[36px] pl-9 pr-7 bg-[#F7F7F7] border border-[#E5E5E5] rounded-xl text-xs font-medium text-[#111111] placeholder-[#666666] focus:outline-none"
-                    />
-                    {serviceSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setServiceSearchQuery('')}
-                        className="absolute right-2 text-[#999999] hover:text-[#111111] p-1"
-                      >
-                        <X size={13} />
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowDropdownPicker(false)}
-                    className="px-3 min-h-[36px] bg-[#111111] text-white text-xs font-bold rounded-xl cursor-pointer shrink-0"
-                  >
-                    Done
-                  </button>
-                </div>
+              <button
+                type="button"
+                onClick={() => setShowDropdownPicker(!showDropdownPicker)}
+                className={`w-full min-h-[42px] px-3.5 py-2.5 bg-white dark:bg-slate-800 border ${
+                  errors.services ? 'border-rose-500' : 'border-slate-200 dark:border-slate-700'
+                } rounded-xl text-xs sm:text-sm font-semibold text-left flex items-center justify-between cursor-pointer shadow-2xs`}
+              >
+                <span className="truncate text-slate-800 dark:text-slate-100">
+                  {formData.selectedServices.length > 0
+                    ? `${formData.selectedServices.length} Selected (${formData.selectedServices.join(', ')})`
+                    : 'Choose a package or service...'}
+                </span>
+                <ChevronDown size={15} className="text-slate-400 shrink-0 ml-1" />
+              </button>
 
-                <div className="p-1.5 space-y-0.5 overflow-y-auto max-h-44">
-                  {filteredServices.length > 0 ? (
-                    filteredServices.map((serviceName) => {
-                      const isSelected = formData.selectedServices.includes(serviceName);
-                      return (
+              {/* BACKDROP TO DISMISS DROPDOWN */}
+              {showDropdownPicker && (
+                <div
+                  className="fixed inset-0 z-30 bg-transparent"
+                  onClick={() => setShowDropdownPicker(false)}
+                />
+              )}
+
+              {/* SERVICES POPUP MENU */}
+              {showDropdownPicker && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-64">
+                  <div className="p-2 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2">
+                    <div className="relative flex-1 flex items-center">
+                      <Search size={14} className="absolute left-3 text-slate-400" />
+                      <input
+                        type="text"
+                        value={serviceSearchQuery}
+                        onChange={(e) => setServiceSearchQuery(e.target.value)}
+                        placeholder="Search services..."
+                        className="w-full min-h-[36px] pl-9 pr-7 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none"
+                      />
+                      {serviceSearchQuery && (
                         <button
                           type="button"
-                          key={serviceName}
-                          onClick={() => handleToggleService(serviceName)}
-                          className={`w-full px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-between text-left transition-colors cursor-pointer ${
-                            isSelected
-                              ? 'bg-[#111111] text-white'
-                              : 'text-[#111111] hover:bg-[#F7F7F7]'
-                          }`}
+                          onClick={() => setServiceSearchQuery('')}
+                          className="absolute right-2 text-slate-400 hover:text-slate-700 p-1"
                         >
-                          <span className="truncate">{serviceName}</span>
-                          {isSelected && <Check size={15} className="text-white shrink-0 ml-1" />}
+                          <X size={13} />
                         </button>
-                      );
-                    })
-                  ) : (
-                    <div className="py-2.5 text-center text-xs text-[#666666]">
-                      No services found
+                      )}
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => setShowDropdownPicker(false)}
+                      className="px-3 min-h-[36px] bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold rounded-xl cursor-pointer shrink-0"
+                    >
+                      Done
+                    </button>
+                  </div>
+
+                  <div className="p-1.5 space-y-0.5 overflow-y-auto max-h-48">
+                    {filteredServices.length > 0 ? (
+                      filteredServices.map((serviceName) => {
+                        const isSelected = formData.selectedServices.includes(serviceName);
+                        return (
+                          <button
+                            type="button"
+                            key={serviceName}
+                            onClick={() => handleToggleService(serviceName)}
+                            className={`w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between text-left transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-400 text-slate-950 font-black shadow-2xs'
+                                : 'text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <span className="truncate">{serviceName}</span>
+                            {isSelected && <Check size={15} className="text-slate-950 shrink-0 ml-1" />}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="py-2.5 text-center text-xs text-slate-400">
+                        No services found
+                      </div>
+                    )}
+                  </div>
                 </div>
+              )}
+
+              {errors.services && (
+                <p className="text-[10px] sm:text-[11px] font-medium text-rose-500 mt-1">
+                  {errors.services}
+                </p>
+              )}
+            </div>
+
+            {/* Quick Service Chips (Fast Selection) */}
+            <div className="space-y-1.5">
+              <span className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Quick Service Chips:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {['Full Foam Wash', 'Interior Deep Clean', 'Engine Bay Cleaning', 'Wax Polish', 'Underbody Wash'].map((quickName) => {
+                  const isSelected = formData.selectedServices.includes(quickName);
+                  return (
+                    <button
+                      key={quickName}
+                      type="button"
+                      onClick={() => handleToggleService(quickName)}
+                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-amber-400 text-slate-950 border-amber-500 font-bold shadow-2xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-200/80 dark:border-slate-700'
+                      }`}
+                    >
+                      {isSelected ? `✓ ${quickName}` : `+ ${quickName}`}
+                    </button>
+                  );
+                })}
               </div>
-            )}
+            </div>
 
-            {errors.services && (
-              <p className="text-[10px] sm:text-[11px] font-medium text-red-600 mt-1">
-                {errors.services}
-              </p>
-            )}
-
-            {/* SERVICE CHIPS */}
+            {/* Selected Service Pills */}
             {formData.selectedServices.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-2">
+              <div className="flex flex-wrap gap-1.5 pt-1">
                 {formData.selectedServices.map((srvName) => (
                   <span
                     key={srvName}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-[#F7F7F7] border border-[#E5E5E5] rounded-lg text-[11px] font-bold text-[#111111] shadow-2xs"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-bold text-slate-800 dark:text-slate-100 shadow-2xs"
                   >
-                    <Check size={12} className="text-green-700" />
+                    <Check size={12} className="text-emerald-600" />
                     <span>{srvName}</span>
                     <button
                       type="button"
                       onClick={() => handleRemoveService(srvName)}
-                      className="text-[#666666] hover:text-red-600 p-0.5 cursor-pointer ml-0.5"
+                      className="text-slate-400 hover:text-rose-500 p-0.5 cursor-pointer ml-0.5"
                     >
                       <X size={12} />
                     </button>
@@ -855,106 +972,108 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 ))}
               </div>
             )}
-          </div>
 
-          {/* 7. PRICE */}
-          <div className="bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-[#E5E5E5] shadow-xs">
-            <label className="block text-[11px] sm:text-xs font-bold text-[#111111] uppercase tracking-wider mb-1.5 truncate">
-              Price <span className="text-red-600">*</span>
-            </label>
-            <div className="relative flex items-center">
-              <span className="absolute left-3 text-xs sm:text-sm font-bold text-[#111111]">
-                ₹
-              </span>
-              <input
-                type="text"
-                value={formData.price}
-                onChange={(e) => handleChange('price', e.target.value)}
-                placeholder="0"
-                className={`w-full min-h-[42px] sm:min-h-[46px] pl-7 pr-3 bg-white border ${
-                  errors.price ? 'border-red-500' : 'border-[#E5E5E5]'
-                } rounded-xl text-xs sm:text-sm text-[#111111] font-bold placeholder-[#666666] focus:outline-none focus:border-[#111111] focus:ring-1 focus:ring-[#111111] transition-all`}
-              />
+            {/* Price & Currency Input */}
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                Total Amount (INR) <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative flex rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs focus-within:border-slate-900 dark:focus-within:border-slate-300 focus-within:ring-1 focus-within:ring-slate-900 transition-all overflow-hidden">
+                <span className="inline-flex items-center px-4 bg-slate-50 dark:bg-slate-850 border-r border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-base">
+                  ₹
+                </span>
+                <input
+                  type="number"
+                  value={formData.price}
+                  onChange={(e) => handleChange('price', e.target.value)}
+                  placeholder="0.00"
+                  className="w-full border-none py-3 px-3.5 text-base font-bold font-mono text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-0 focus:outline-none bg-transparent"
+                  required
+                />
+                <div className="pr-3.5 flex items-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span>INC. TAX</span>
+                </div>
+              </div>
+              {errors.price && (
+                <p className="text-[10px] sm:text-[11px] font-medium text-rose-500 mt-1">
+                  {errors.price}
+                </p>
+              )}
             </div>
-            {errors.price && (
-              <p className="text-[10px] sm:text-[11px] font-medium text-red-600 mt-1">
-                {errors.price}
-              </p>
-            )}
-          </div>
+          </section>
 
-          {/* BOTTOM ACTION BUTTONS */}
-          <div className="space-y-2.5 pt-2">
-            {/* 4 QUICK ACTION BUTTONS */}
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+          {/* 4. QUICK TRIGGERS & UPDATES */}
+          <section className="space-y-2 pt-1">
+            <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1">
+              Quick Triggers & Updates
+            </span>
+            <div className="grid grid-cols-2 gap-2.5">
+              {/* Action 1: Vehicle Received */}
               <button
                 type="button"
                 onClick={handleVehicleReceived}
                 disabled={!formData.phoneNumber.trim()}
-                className={`w-full min-h-[48px] sm:min-h-[50px] px-3 py-2.5 bg-[#1A1A1A] border border-[#2E2E2E] hover:bg-[#262626] active:bg-[#141414] hover:border-[#404040] rounded-[15px] text-[11px] sm:text-xs font-black text-[#FFFFFF] uppercase tracking-wider flex items-center justify-center gap-2 sm:gap-2.5 text-center shadow-xs transition-all ${
-                  !formData.phoneNumber.trim()
-                    ? 'opacity-40 cursor-not-allowed'
-                    : 'cursor-pointer hover:shadow-sm'
+                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-white shadow-xs transition-all group bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] ${
+                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
                 }`}
                 title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number' : 'Send Vehicle Received WhatsApp Alert'}
               >
-                <WhatsAppIcon className="w-[22px] h-[22px] sm:w-[24px] sm:h-[24px] text-[#25D366] shrink-0" />
-                <span className="truncate">Vehicle Received</span>
+                <CheckCircle2 size={16} className="text-emerald-300 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-bold tracking-tight">Vehicle Received</span>
               </button>
 
+              {/* Action 2: Vehicle Ready */}
               <button
                 type="button"
                 onClick={handleVehicleReady}
                 disabled={!formData.phoneNumber.trim()}
-                className={`w-full min-h-[48px] sm:min-h-[50px] px-3 py-2.5 bg-[#1A1A1A] border border-[#2E2E2E] hover:bg-[#262626] active:bg-[#141414] hover:border-[#404040] rounded-[15px] text-[11px] sm:text-xs font-black text-[#FFFFFF] uppercase tracking-wider flex items-center justify-center gap-2 sm:gap-2.5 text-center shadow-xs transition-all ${
-                  !formData.phoneNumber.trim()
-                    ? 'opacity-40 cursor-not-allowed'
-                    : 'cursor-pointer hover:shadow-sm'
+                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-white shadow-xs transition-all group bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] ${
+                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
                 }`}
                 title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number' : 'Send Vehicle Ready WhatsApp Alert'}
               >
-                <WhatsAppIcon className="w-[22px] h-[22px] sm:w-[24px] sm:h-[24px] text-[#25D366] shrink-0" />
-                <span className="truncate">Vehicle Ready</span>
+                <span className="text-sm leading-none">🚗</span>
+                <span className="text-xs font-bold tracking-tight">Vehicle Ready</span>
               </button>
 
+              {/* Action 3: Text SMS */}
               <button
                 type="button"
                 onClick={handleTextMessage}
                 disabled={!formData.phoneNumber.trim()}
-                className={`w-full min-h-[48px] sm:min-h-[50px] px-3 py-2.5 bg-[#1A1A1A] border border-[#2E2E2E] hover:bg-[#262626] active:bg-[#141414] hover:border-[#404040] rounded-[15px] text-[11px] sm:text-xs font-black text-[#FFFFFF] uppercase tracking-wider flex items-center justify-center gap-2 sm:gap-2.5 text-center shadow-xs transition-all ${
-                  !formData.phoneNumber.trim()
-                    ? 'opacity-40 cursor-not-allowed'
-                    : 'cursor-pointer hover:shadow-sm'
+                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-white shadow-xs transition-all group bg-blue-700 hover:bg-blue-800 active:scale-[0.98] ${
+                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
                 }`}
                 title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number' : 'Send SMS Text Message'}
               >
-                <SmsIcon className="w-[22px] h-[22px] sm:w-[24px] sm:h-[24px] text-[#2196F3] shrink-0" />
-                <span className="truncate">Text SMS</span>
+                <SmsIcon className="w-4 h-4 text-sky-300 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-bold tracking-tight">Text SMS</span>
               </button>
 
+              {/* Action 4: WhatsApp Bill */}
               <button
                 type="button"
                 onClick={handleBillWhatsApp}
                 disabled={!formData.phoneNumber.trim()}
-                className={`w-full min-h-[48px] sm:min-h-[50px] px-3 py-2.5 bg-[#1A1A1A] border border-[#2E2E2E] hover:bg-[#262626] active:bg-[#141414] hover:border-[#404040] rounded-[15px] text-[11px] sm:text-xs font-black text-[#FFFFFF] uppercase tracking-wider flex items-center justify-center gap-2 sm:gap-2.5 text-center shadow-xs transition-all ${
-                  !formData.phoneNumber.trim()
-                    ? 'opacity-40 cursor-not-allowed'
-                    : 'cursor-pointer hover:shadow-sm'
+                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs transition-all group active:scale-[0.98] ${
+                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
                 }`}
                 title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number' : 'Send PDF Invoice on WhatsApp'}
               >
-                <WhatsAppIcon className="w-[22px] h-[22px] sm:w-[24px] sm:h-[24px] text-[#25D366] shrink-0" />
-                <span className="truncate">WhatsApp Bill</span>
+                <WhatsAppIcon className="w-4 h-4 text-emerald-300 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-bold tracking-tight">WhatsApp Bill</span>
               </button>
             </div>
+          </section>
 
-            {/* PRIMARY SAVE DRAFT CTA BUTTON */}
+          {/* 5. PRIMARY SAVE ACTION BUTTON */}
+          <div className="pt-2 pb-2">
             <button
               type="submit"
-              className="w-full min-h-[48px] sm:min-h-[52px] bg-[#111111] text-white font-black text-xs sm:text-sm rounded-xl uppercase tracking-wider hover:bg-neutral-900 active:bg-neutral-800 transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
+              className="w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 font-bold text-sm tracking-wide shadow-md active:scale-[0.99] transition-all border border-slate-800 dark:border-slate-200 cursor-pointer"
             >
-              <Save size={16} />
-              <span>{isEditing ? 'UPDATE JOB SHEET' : 'SAVE DRAFT'}</span>
+              <Save size={18} className="text-amber-400 dark:text-amber-600" />
+              <span>{isEditing ? 'UPDATE JOB SHEET' : 'SAVE DRAFT & CREATE JOB'}</span>
             </button>
           </div>
         </form>

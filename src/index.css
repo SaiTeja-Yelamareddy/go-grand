@@ -2,20 +2,27 @@
 
 @layer base {
   :root {
-    --bg-main: #F7F7F7;
-    --text-primary: #111111;
-    --text-secondary: #444444;
-    --border-color: #D4D4D4;
-    --card-bg: #FFFFFF;
+    --bg-main: #0B0D11;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --border-color: #262B34;
+    --card-bg: #14171D;
+    --card-elevated: #1C2028;
+    --brand-accent: #22C55E;
+    --brand-accent-hover: #16A34A;
+    color-scheme: dark;
   }
 
-  html.dark {
-    --bg-main: #0F0F0F;
-    --text-primary: #FFFFFF;
-    --text-secondary: #CCCCCC;
-    --border-color: #262626;
-    --card-bg: #171717;
-    color-scheme: dark;
+  html.light {
+    --bg-main: #F4F5F7;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --border-color: #E2E8F0;
+    --card-bg: #FFFFFF;
+    --card-elevated: #F8FAFC;
+    --brand-accent: #16A34A;
+    --brand-accent-hover: #15803D;
+    color-scheme: light;
   }
 
   html,
@@ -44,124 +51,199 @@
   body {
     background-color: var(--bg-main);
     color: var(--text-primary);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Helvetica, Arial, sans-serif;
     -webkit-tap-highlight-color: transparent;
     margin: 0;
     padding: 0;
     min-height: 0;
     height: auto;
+    letter-spacing: -0.01em;
   }
 
   button, input, select, textarea {
     font-size: 16px;
+    font-family: inherit;
   }
 
   input::placeholder, select::placeholder, textarea::placeholder {
-    color: #666666 !important;
+    color: #64748B !important;
     opacity: 1 !important;
   }
 }
 
-/* DARK MODE OVERRIDES */
-html.dark {
-  color-scheme: dark;
-}
-
+/* ==========================================================================
+   PREMIUM AUTOMOTIVE DARK THEME OVERRIDES (DEFAULT & HTML.DARK)
+   ========================================================================== */
+html:not(.light) body,
 html.dark body {
-  background-color: #0F0F0F !important;
-  color: #F9FAFB !important;
+  background-color: #0B0D11 !important;
+  color: #F8FAFC !important;
 }
 
+html:not(.light) header,
 html.dark header {
-  background-color: #171717 !important;
-  border-color: #262626 !important;
+  background-color: #12151B !important;
+  border-color: #232832 !important;
 }
 
+/* CARDS & PANELS */
+html:not(.light) .bg-white,
 html.dark .bg-white {
-  background-color: #181818 !important;
-  color: #F9FAFB !important;
+  background-color: #14171D !important;
+  color: #F8FAFC !important;
+  border-color: #232832 !important;
 }
 
+html:not(.light) .bg-\[\#F7F7F7\],
 html.dark .bg-\[\#F7F7F7\] {
-  background-color: #121212 !important;
-  color: #E5E7EB !important;
+  background-color: #0B0D11 !important;
+  color: #E2E8F0 !important;
 }
 
+/* BORDERS & DIVIDERS */
+html:not(.light) .border-\[\#E5E5E5\],
 html.dark .border-\[\#E5E5E5\],
+html:not(.light) .divide-\[\#E5E5E5\] > *,
 html.dark .divide-\[\#E5E5E5\] > * {
-  border-color: #2A2A2A !important;
+  border-color: #232832 !important;
 }
 
+/* TYPOGRAPHY */
+html:not(.light) .text-\[\#111111\],
 html.dark .text-\[\#111111\] {
-  color: #F9FAFB !important;
+  color: #F8FAFC !important;
 }
 
+html:not(.light) .text-\[\#333333\],
 html.dark .text-\[\#333333\],
+html:not(.light) .text-\[\#444444\],
 html.dark .text-\[\#444444\],
+html:not(.light) .text-\[\#666666\],
 html.dark .text-\[\#666666\] {
-  color: #9CA3AF !important;
+  color: #94A3B8 !important;
 }
 
+/* INPUT FIELDS */
+html:not(.light) input,
 html.dark input,
+html:not(.light) select,
 html.dark select,
+html:not(.light) textarea,
 html.dark textarea {
-  background-color: #1A1A1A !important;
-  color: #FFFFFF !important;
-  border-color: #333333 !important;
+  background-color: #181C23 !important;
+  color: #F8FAFC !important;
+  border-color: #2C323E !important;
 }
 
+html:not(.light) input:focus,
+html.dark input:focus,
+html:not(.light) select:focus,
+html.dark select:focus,
+html:not(.light) textarea:focus,
+html.dark textarea:focus {
+  border-color: #22C55E !important;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.4) !important;
+}
+
+html:not(.light) input::placeholder,
 html.dark input::placeholder,
+html:not(.light) select::placeholder,
 html.dark select::placeholder,
+html:not(.light) textarea::placeholder,
 html.dark textarea::placeholder {
-  color: #71717A !important;
+  color: #64748B !important;
   opacity: 1 !important;
 }
 
+/* TABLES */
+html:not(.light) table thead tr,
 html.dark table thead tr {
-  background-color: #181818 !important;
+  background-color: #12151B !important;
+  border-color: #232832 !important;
 }
 
+html:not(.light) table th,
 html.dark table th {
-  background-color: #181818 !important;
-  color: #E5E7EB !important;
-  border-color: #2A2A2A !important;
+  background-color: #12151B !important;
+  color: #94A3B8 !important;
+  border-color: #232832 !important;
+  font-weight: 700 !important;
 }
 
+html:not(.light) table td,
 html.dark table td {
-  border-color: #262626 !important;
-  color: #E5E7EB !important;
+  border-color: #1C2028 !important;
+  color: #E2E8F0 !important;
 }
 
+html:not(.light) table tr:hover,
 html.dark table tr:hover,
+html:not(.light) .hover\:bg-\[\#F7F7F7\]:hover,
 html.dark .hover\:bg-\[\#F7F7F7\]:hover {
-  background-color: #222222 !important;
+  background-color: #1A1E26 !important;
 }
 
+/* POPUPS & MODALS */
+html:not(.light) .shadow-2xs,
 html.dark .shadow-2xs,
+html:not(.light) .shadow-xs,
 html.dark .shadow-xs,
+html:not(.light) .shadow-sm,
 html.dark .shadow-sm,
+html:not(.light) .shadow-md,
 html.dark .shadow-md,
+html:not(.light) .shadow-xl,
 html.dark .shadow-xl,
+html:not(.light) .shadow-2xl,
 html.dark .shadow-2xl {
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.6) !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
 }
 
+html:not(.light) .bg-black\/50,
 html.dark .bg-black\/50,
+html:not(.light) .bg-black\/40,
 html.dark .bg-black\/40 {
-  background-color: rgba(0, 0, 0, 0.75) !important;
+  background-color: rgba(5, 7, 10, 0.85) !important;
+  backdrop-filter: blur(4px);
+}
+
+/* PRIMARY AUTOMOTIVE BUTTONS */
+html:not(.light) button.bg-\[\#111111\],
+html.dark button.bg-\[\#111111\] {
+  background-color: #22C55E !important;
+  color: #052E16 !important;
+  font-weight: 800 !important;
+  border: none !important;
+}
+
+html:not(.light) button.bg-\[\#111111\]:hover,
+html.dark button.bg-\[\#111111\]:hover {
+  background-color: #16A34A !important;
+  color: #052E16 !important;
+}
+
+/* BADGES & CHIPS */
+html:not(.light) .bg-neutral-100,
+html.dark .bg-neutral-100 {
+  background-color: #181C23 !important;
+  color: #94A3B8 !important;
+  border-color: #282E3A !important;
 }
 
 /* ==========================================================================
    OFFICIAL TAX INVOICE: ALWAYS CRISP CLEAN WHITE PAPER IN LIGHT & DARK MODE
    ========================================================================== */
 .printable-invoice-card,
-html.dark .printable-invoice-card {
+html.dark .printable-invoice-card,
+html:not(.light) .printable-invoice-card {
   background-color: #ffffff !important;
   color: #171717 !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5) !important;
 }
 
 .printable-invoice-card .bg-white,
-html.dark .printable-invoice-card .bg-white {
+html.dark .printable-invoice-card .bg-white,
+html:not(.light) .printable-invoice-card .bg-white {
   background-color: #ffffff !important;
   color: #171717 !important;
 }
@@ -179,71 +261,90 @@ html.dark .printable-invoice-card h1,
 html.dark .printable-invoice-card h2,
 html.dark .printable-invoice-card h3,
 html.dark .printable-invoice-card h4,
-html.dark .printable-invoice-card div {
+html.dark .printable-invoice-card div,
+html:not(.light) .printable-invoice-card p,
+html:not(.light) .printable-invoice-card span,
+html:not(.light) .printable-invoice-card h1,
+html:not(.light) .printable-invoice-card h2,
+html:not(.light) .printable-invoice-card h3,
+html:not(.light) .printable-invoice-card h4,
+html:not(.light) .printable-invoice-card div {
   color: #171717 !important;
 }
 
 .printable-invoice-card .text-\[\#555555\],
-html.dark .printable-invoice-card .text-\[\#555555\] {
+html.dark .printable-invoice-card .text-\[\#555555\],
+html:not(.light) .printable-invoice-card .text-\[\#555555\] {
   color: #555555 !important;
 }
 
 .printable-invoice-card .text-\[\#777777\],
-html.dark .printable-invoice-card .text-\[\#777777\] {
+html.dark .printable-invoice-card .text-\[\#777777\],
+html:not(.light) .printable-invoice-card .text-\[\#777777\] {
   color: #777777 !important;
 }
 
 .printable-invoice-card .bg-\[\#F3F3F3\],
-html.dark .printable-invoice-card .bg-\[\#F3F3F3\] {
+html.dark .printable-invoice-card .bg-\[\#F3F3F3\],
+html:not(.light) .printable-invoice-card .bg-\[\#F3F3F3\] {
   background-color: #F3F3F3 !important;
   color: #171717 !important;
 }
 
 .printable-invoice-card .bg-\[\#F4C430\],
-html.dark .printable-invoice-card .bg-\[\#F4C430\] {
+html.dark .printable-invoice-card .bg-\[\#F4C430\],
+html:not(.light) .printable-invoice-card .bg-\[\#F4C430\] {
   background-color: #F4C430 !important;
 }
 
 .printable-invoice-card .border-\[\#D8D8D8\],
 html.dark .printable-invoice-card .border-\[\#D8D8D8\],
+html:not(.light) .printable-invoice-card .border-\[\#D8D8D8\],
 .printable-invoice-card .divide-\[\#D8D8D8\] > *,
-html.dark .printable-invoice-card .divide-\[\#D8D8D8\] > * {
+html.dark .printable-invoice-card .divide-\[\#D8D8D8\] > *,
+html:not(.light) .printable-invoice-card .divide-\[\#D8D8D8\] > * {
   border-color: #D8D8D8 !important;
 }
 
 .printable-invoice-card table,
-html.dark .printable-invoice-card table {
+html.dark .printable-invoice-card table,
+html:not(.light) .printable-invoice-card table {
   background-color: transparent !important;
 }
 
 .printable-invoice-card table thead tr,
-html.dark .printable-invoice-card table thead tr {
+html.dark .printable-invoice-card table thead tr,
+html:not(.light) .printable-invoice-card table thead tr {
   background-color: transparent !important;
   border-color: #171717 !important;
 }
 
 .printable-invoice-card table th,
-html.dark .printable-invoice-card table th {
+html.dark .printable-invoice-card table th,
+html:not(.light) .printable-invoice-card table th {
   background-color: transparent !important;
   color: #171717 !important;
   border-color: #171717 !important;
 }
 
 .printable-invoice-card table td,
-html.dark .printable-invoice-card table td {
+html.dark .printable-invoice-card table td,
+html:not(.light) .printable-invoice-card table td {
   border-color: #E5E5E5 !important;
   color: #171717 !important;
 }
 
 .printable-invoice-card table tr:hover,
-html.dark .printable-invoice-card table tr:hover {
+html.dark .printable-invoice-card table tr:hover,
+html:not(.light) .printable-invoice-card table tr:hover {
   background-color: transparent !important;
 }
 
-/* Modal top bar in invoice preview stays dark */
+/* Modal top bar in invoice preview stays sleek dark */
 .printable-invoice-card .sticky.top-0,
-html.dark .printable-invoice-card .sticky.top-0 {
-  background-color: #111111 !important;
+html.dark .printable-invoice-card .sticky.top-0,
+html:not(.light) .printable-invoice-card .sticky.top-0 {
+  background-color: #11141A !important;
 }
 
 .printable-invoice-card .sticky.top-0 p,
@@ -251,40 +352,35 @@ html.dark .printable-invoice-card .sticky.top-0 {
 .printable-invoice-card .sticky.top-0 h3,
 html.dark .printable-invoice-card .sticky.top-0 p,
 html.dark .printable-invoice-card .sticky.top-0 span,
-html.dark .printable-invoice-card .sticky.top-0 h3 {
+html.dark .printable-invoice-card .sticky.top-0 h3,
+html:not(.light) .printable-invoice-card .sticky.top-0 p,
+html:not(.light) .printable-invoice-card .sticky.top-0 span,
+html:not(.light) .printable-invoice-card .sticky.top-0 h3 {
   color: #FFFFFF !important;
 }
 
 .printable-invoice-card .sticky.top-0 button.bg-white,
-html.dark .printable-invoice-card .sticky.top-0 button.bg-white {
+html.dark .printable-invoice-card .sticky.top-0 button.bg-white,
+html:not(.light) .printable-invoice-card .sticky.top-0 button.bg-white {
   background-color: #FFFFFF !important;
 }
 
 .printable-invoice-card .sticky.top-0 button.bg-white span,
-html.dark .printable-invoice-card .sticky.top-0 button.bg-white span {
+html.dark .printable-invoice-card .sticky.top-0 button.bg-white span,
+html:not(.light) .printable-invoice-card .sticky.top-0 button.bg-white span {
   color: #111111 !important;
 }
 
 .printable-invoice-card .sticky.top-0 button.bg-\[\#25D366\],
-html.dark .printable-invoice-card .sticky.top-0 button.bg-\[\#25D366\] {
+html.dark .printable-invoice-card .sticky.top-0 button.bg-\[\#25D366\],
+html:not(.light) .printable-invoice-card .sticky.top-0 button.bg-\[\#25D366\] {
   background-color: #25D366 !important;
 }
 
 .printable-invoice-card .sticky.top-0 button.bg-\[\#25D366\] span,
-html.dark .printable-invoice-card .sticky.top-0 button.bg-\[\#25D366\] span {
+html.dark .printable-invoice-card .sticky.top-0 button.bg-\[\#25D366\] span,
+html:not(.light) .printable-invoice-card .sticky.top-0 button.bg-\[\#25D366\] span {
   color: #FFFFFF !important;
-}
-
-/* Custom subtle scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bg-main);
-}
-::-webkit-scrollbar-thumb {
-  background: #A3A3A3;
-  border-radius: 3px;
 }
 
 /* ==========================================================================
@@ -307,12 +403,10 @@ html.dark .printable-invoice-card .sticky.top-0 button.bg-\[\#25D366\] span {
     print-color-adjust: exact !important;
   }
 
-  /* Hide the entire React root app background */
   #root {
     display: none !important;
   }
 
-  /* Display printable invoice portal */
   .printable-invoice-modal-root {
     display: block !important;
     position: static !important;
@@ -337,7 +431,6 @@ html.dark .printable-invoice-card .sticky.top-0 button.bg-\[\#25D366\] span {
     background: #ffffff !important;
   }
 
-  /* Hide modal top bar, action buttons & navigation elements */
   .print\:hidden,
   .print-hidden,
   button {

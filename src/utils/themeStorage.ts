@@ -8,13 +8,13 @@ export function getStoredTheme(): ThemeMode {
     if (stored === 'dark' || stored === 'light') {
       return stored;
     }
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      return 'light';
     }
   } catch {
-    // default light
+    // default dark
   }
-  return 'light';
+  return 'dark';
 }
 
 export function applyTheme(theme: ThemeMode = 'light'): void {

@@ -5,9 +5,9 @@
     --bg-main: #0B0D11;
     --text-primary: #F8FAFC;
     --text-secondary: #94A3B8;
-    --border-color: #232832;
-    --card-bg: #14171D;
-    --card-elevated: #1C2028;
+    --border-color: #232834;
+    --card-bg: #14171E;
+    --card-elevated: #1A1E27;
     --brand-accent: #22C55E;
     --brand-accent-hover: #16A34A;
     color-scheme: dark;
@@ -77,32 +77,33 @@
 }
 
 /* ==========================================================================
-   PREMIUM AUTOMOTIVE DARK THEME (FIRST-CLASS DEFAULT)
+   ULTRA-PREMIUM AUTOMOTIVE DARK THEME (FIRST-CLASS DEFAULT)
    ========================================================================== */
 html:not(.light) body,
 html.dark body {
-  background-color: #0B0D11 !important;
+  background-color: #080A0D !important;
   color: #F8FAFC !important;
 }
 
 html:not(.light) header,
 html.dark header {
-  background-color: #12151B !important;
-  border-color: #232832 !important;
+  background-color: #0F1217 !important;
+  border-color: #1F2530 !important;
+  box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.6) !important;
 }
 
-/* CARDS & CONTAINERS */
+/* CARDS & PANELS */
 html:not(.light) .bg-white,
 html.dark .bg-white {
-  background-color: #14171D !important;
+  background-color: #12151C !important;
   color: #F8FAFC !important;
-  border-color: #232832 !important;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.05) !important;
+  border-color: #202633 !important;
+  box-shadow: 0 6px 24px -4px rgba(0, 0, 0, 0.75), inset 0 1px 0 0 rgba(255, 255, 255, 0.06) !important;
 }
 
 html:not(.light) .bg-\[\#F7F7F7\],
 html.dark .bg-\[\#F7F7F7\] {
-  background-color: #0B0D11 !important;
+  background-color: #080A0D !important;
   color: #E2E8F0 !important;
 }
 
@@ -111,7 +112,7 @@ html:not(.light) .border-\[\#E5E5E5\],
 html.dark .border-\[\#E5E5E5\],
 html:not(.light) .divide-\[\#E5E5E5\] > *,
 html.dark .divide-\[\#E5E5E5\] > * {
-  border-color: #232832 !important;
+  border-color: #1F2532 !important;
 }
 
 /* TYPOGRAPHY */
@@ -136,9 +137,11 @@ html:not(.light) select,
 html.dark select,
 html:not(.light) textarea,
 html.dark textarea {
-  background-color: #181C23 !important;
+  background-color: #171B24 !important;
   color: #F8FAFC !important;
-  border-color: #2C323E !important;
+  border-color: #293140 !important;
+  border-radius: 0.75rem !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3) !important;
 }
 
 html:not(.light) input:focus,
@@ -148,7 +151,7 @@ html.dark select:focus,
 html:not(.light) textarea:focus,
 html.dark textarea:focus {
   border-color: #22C55E !important;
-  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.4) !important;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.4), inset 0 1px 2px rgba(0, 0, 0, 0.3) !important;
 }
 
 html:not(.light) input::placeholder,
@@ -164,21 +167,22 @@ html.dark textarea::placeholder {
 /* TABLES */
 html:not(.light) table thead tr,
 html.dark table thead tr {
-  background-color: #12151B !important;
-  border-color: #232832 !important;
+  background-color: #0F1217 !important;
+  border-color: #1F2532 !important;
 }
 
 html:not(.light) table th,
 html.dark table th {
-  background-color: #12151B !important;
+  background-color: #0F1217 !important;
   color: #94A3B8 !important;
-  border-color: #232832 !important;
-  font-weight: 700 !important;
+  border-color: #1F2532 !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em !important;
 }
 
 html:not(.light) table td,
 html.dark table td {
-  border-color: #1C2028 !important;
+  border-color: #181C26 !important;
   color: #E2E8F0 !important;
 }
 
@@ -186,7 +190,7 @@ html:not(.light) table tr:hover,
 html.dark table tr:hover,
 html:not(.light) .hover\:bg-\[\#F7F7F7\]:hover,
 html.dark .hover\:bg-\[\#F7F7F7\]:hover {
-  background-color: #1A1E26 !important;
+  background-color: #181D26 !important;
 }
 
 /* POPUPS & MODALS */
@@ -202,39 +206,63 @@ html:not(.light) .shadow-xl,
 html.dark .shadow-xl,
 html:not(.light) .shadow-2xl,
 html.dark .shadow-2xl {
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
 }
 
 html:not(.light) .bg-black\/50,
 html.dark .bg-black\/50,
 html:not(.light) .bg-black\/40,
 html.dark .bg-black\/40 {
-  background-color: rgba(5, 7, 10, 0.85) !important;
-  backdrop-filter: blur(6px);
+  background-color: rgba(4, 5, 8, 0.88) !important;
+  backdrop-filter: blur(8px);
 }
 
-/* PRIMARY AUTOMOTIVE BUTTONS */
+/* QUICK ACTION BUTTONS IN JOBSHEET */
+html:not(.light) .bg-\[\#1A1A1A\],
+html.dark .bg-\[\#1A1A1A\] {
+  background-color: #151922 !important;
+  border-color: #27303E !important;
+  color: #F8FAFC !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+html:not(.light) .bg-\[\#1A1A1A\]:hover,
+html.dark .bg-\[\#1A1A1A\]:hover {
+  background-color: #1C2230 !important;
+  border-color: #384558 !important;
+}
+
+/* PRIMARY AUTOMOTIVE CTA BUTTON (SAVE DRAFT / LOGIN) */
 html:not(.light) button.bg-\[\#111111\],
 html.dark button.bg-\[\#111111\] {
   background-color: #22C55E !important;
   color: #052E16 !important;
-  font-weight: 800 !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.04em !important;
   border: none !important;
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25) !important;
+  box-shadow: 0 4px 14px 0 rgba(34, 197, 94, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+  transition: all 0.15s ease !important;
 }
 
 html:not(.light) button.bg-\[\#111111\]:hover,
 html.dark button.bg-\[\#111111\]:hover {
   background-color: #16A34A !important;
-  color: #052E16 !important;
+  box-shadow: 0 6px 20px 0 rgba(34, 197, 94, 0.5) !important;
+  transform: translateY(-1px);
+}
+
+html:not(.light) button.bg-\[\#111111\]:active,
+html.dark button.bg-\[\#111111\]:active {
+  transform: translateY(0);
 }
 
 /* SECONDARY OUTLINE BUTTONS */
 html:not(.light) button.border-2.border-\[\#111111\],
 html.dark button.border-2.border-\[\#111111\] {
-  border-color: #282E3A !important;
-  background-color: #14171D !important;
+  border-color: #27303E !important;
+  background-color: #12151C !important;
   color: #F8FAFC !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
 }
 
 html:not(.light) button.border-2.border-\[\#111111\]:hover,
@@ -246,9 +274,22 @@ html.dark button.border-2.border-\[\#111111\]:hover {
 /* BADGES & CHIPS */
 html:not(.light) .bg-neutral-100,
 html.dark .bg-neutral-100 {
-  background-color: #181C23 !important;
+  background-color: #171B24 !important;
   color: #94A3B8 !important;
-  border-color: #282E3A !important;
+  border-color: #27303E !important;
+}
+
+/* SUCCESS BOX */
+html:not(.light) .bg-\[\#F0FDF4\],
+html.dark .bg-\[\#F0FDF4\] {
+  background-color: rgba(34, 197, 94, 0.12) !important;
+  border-color: rgba(34, 197, 94, 0.3) !important;
+  color: #4ADE80 !important;
+}
+
+html:not(.light) .text-\[\#166534\],
+html.dark .text-\[\#166534\] {
+  color: #4ADE80 !important;
 }
 
 /* ==========================================================================

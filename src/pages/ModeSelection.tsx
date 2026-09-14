@@ -47,7 +47,7 @@ export const ModeSelection: React.FC = () => {
 
         {/* FOOTER LABEL */}
         <div className="mt-8 text-xs text-[#666666]">
-          Professional Mobile Management • v1.0
+          Professional Automotive Management • v2.0
         </div>
       </div>
     </div>

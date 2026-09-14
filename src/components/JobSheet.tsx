@@ -1003,23 +1003,43 @@ export const JobSheet: React.FC<JobSheetProps> = ({
           </section>
 
           {/* 4. QUICK TRIGGERS & UPDATES */}
-          <section className="space-y-2 pt-1">
-            <span className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider px-1">
-              Quick Triggers & Updates
-            </span>
-            <div className="grid grid-cols-2 gap-2.5">
+          <section className="space-y-2.5 pt-1.5" data-purpose="status-and-messaging-actions">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-black text-slate-900 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+                Quick Triggers & Instant Updates
+              </span>
+              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tight bg-slate-200/80 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-300/80 dark:border-slate-700">
+                1-Tap Actions
+              </span>
+            </div>
+
+            {/* 2x2 High-Impact Bold Action Buttons */}
+            <div className="grid grid-cols-2 gap-3">
               {/* Action 1: Vehicle Received */}
               <button
                 type="button"
                 onClick={handleVehicleReceived}
                 disabled={!formData.phoneNumber.trim()}
-                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-white shadow-xs transition-all group bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 active:scale-[0.98] border border-emerald-500/40 ${
-                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                className={`relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-md hover:shadow-lg transition-all active:scale-[0.97] group border-2 border-emerald-400/40 bg-gradient-to-br from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-left cursor-pointer ${
+                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed grayscale-[40%]' : ''
                 }`}
-                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number' : 'Send Vehicle Received WhatsApp Alert'}
+                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number to send' : 'Send Vehicle Received WhatsApp Alert'}
               >
-                <CheckCircle2 size={16} className="text-white group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold tracking-tight">Vehicle Received</span>
+                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-white/30 transition-all shadow-2xs">
+                  <CheckCircle2 size={20} className="text-white drop-shadow-sm" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="block text-xs font-black tracking-wide uppercase leading-tight truncate">
+                    Vehicle Received
+                  </span>
+                  <span className="block text-[10px] font-bold text-emerald-100 uppercase tracking-tighter mt-0.5 opacity-90">
+                    WhatsApp Alert
+                  </span>
+                </div>
               </button>
 
               {/* Action 2: Vehicle Ready */}
@@ -1027,13 +1047,22 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 type="button"
                 onClick={handleVehicleReady}
                 disabled={!formData.phoneNumber.trim()}
-                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-slate-950 font-black shadow-xs transition-all group bg-amber-500 hover:bg-amber-600 dark:bg-amber-500 dark:hover:bg-amber-400 active:scale-[0.98] border border-amber-400/60 ${
-                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                className={`relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-slate-950 shadow-md hover:shadow-lg transition-all active:scale-[0.97] group border-2 border-amber-300 bg-gradient-to-br from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-left cursor-pointer ${
+                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed grayscale-[40%]' : ''
                 }`}
-                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number' : 'Send Vehicle Ready WhatsApp Alert'}
+                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number to send' : 'Send Vehicle Ready WhatsApp Alert'}
               >
-                <span className="text-sm leading-none">🚗</span>
-                <span className="text-xs font-black tracking-tight">Vehicle Ready</span>
+                <div className="w-9 h-9 rounded-xl bg-slate-950/15 flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-slate-950/25 transition-all shadow-2xs text-lg">
+                  🚗
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="block text-xs font-black tracking-wide uppercase leading-tight truncate text-slate-950">
+                    Vehicle Ready
+                  </span>
+                  <span className="block text-[10px] font-extrabold text-slate-800 uppercase tracking-tighter mt-0.5">
+                    Customer Alert
+                  </span>
+                </div>
               </button>
 
               {/* Action 3: Text SMS */}
@@ -1041,13 +1070,22 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 type="button"
                 onClick={handleTextMessage}
                 disabled={!formData.phoneNumber.trim()}
-                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-white shadow-xs transition-all group bg-sky-600 hover:bg-sky-700 dark:bg-sky-600 dark:hover:bg-sky-500 active:scale-[0.98] border border-sky-500/40 ${
-                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                className={`relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-md hover:shadow-lg transition-all active:scale-[0.97] group border-2 border-sky-400/40 bg-gradient-to-br from-blue-600 via-sky-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-left cursor-pointer ${
+                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed grayscale-[40%]' : ''
                 }`}
-                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number' : 'Send SMS Text Message'}
+                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number to send' : 'Send SMS Text Message'}
               >
-                <SmsIcon className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-bold tracking-tight">Text SMS</span>
+                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-white/30 transition-all shadow-2xs">
+                  <SmsIcon className="w-5 h-5 text-white drop-shadow-sm" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="block text-xs font-black tracking-wide uppercase leading-tight truncate">
+                    Text SMS
+                  </span>
+                  <span className="block text-[10px] font-bold text-sky-100 uppercase tracking-tighter mt-0.5 opacity-90">
+                    Direct Message
+                  </span>
+                </div>
               </button>
 
               {/* Action 4: WhatsApp Bill */}
@@ -1055,13 +1093,22 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 type="button"
                 onClick={handleBillWhatsApp}
                 disabled={!formData.phoneNumber.trim()}
-                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] dark:bg-[#25D366] dark:hover:bg-[#20bd5a] text-white shadow-xs transition-all group active:scale-[0.98] border border-emerald-400/40 ${
-                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                className={`relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-md hover:shadow-lg transition-all active:scale-[0.97] group border-2 border-emerald-300/50 bg-gradient-to-br from-[#25D366] to-[#128C7E] hover:from-[#20bd5a] hover:to-[#0f776a] text-left cursor-pointer ${
+                  !formData.phoneNumber.trim() ? 'opacity-40 cursor-not-allowed grayscale-[40%]' : ''
                 }`}
-                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number' : 'Send PDF Invoice on WhatsApp'}
+                title={!formData.phoneNumber.trim() ? 'Enter Customer Phone Number to send' : 'Send PDF Invoice on WhatsApp'}
               >
-                <WhatsAppIcon className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-black tracking-tight">WhatsApp Bill</span>
+                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-white/30 transition-all shadow-2xs">
+                  <WhatsAppIcon className="w-5 h-5 text-white drop-shadow-sm" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="block text-xs font-black tracking-wide uppercase leading-tight truncate">
+                    WhatsApp Bill
+                  </span>
+                  <span className="block text-[10px] font-bold text-emerald-100 uppercase tracking-tighter mt-0.5 opacity-90">
+                    PDF Tax Invoice
+                  </span>
+                </div>
               </button>
             </div>
           </section>

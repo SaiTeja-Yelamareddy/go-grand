@@ -418,13 +418,13 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const targetTodayPath = mode === 'owner' ? '/owner/today' : '/staff/today';
 
   return (
-    <div className="w-full min-h-0 h-auto bg-slate-100 dark:bg-[#0B0F19] text-slate-900 dark:text-slate-50 flex flex-col transition-colors">
+    <div className="w-full min-h-0 h-auto bg-slate-100 dark:bg-black text-slate-900 dark:text-white flex flex-col transition-colors">
       {/* HEADER */}
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between shadow-2xs w-full max-w-full">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-black/95 backdrop-blur-md border-b border-slate-200 dark:border-neutral-900 px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between shadow-2xs w-full max-w-full">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             onClick={() => setDrawerOpen(true)}
-            className="p-1.5 rounded-lg text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 min-w-[40px] min-h-[40px] flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            className="p-1.5 rounded-lg text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-neutral-900 active:bg-slate-200 dark:active:bg-neutral-800 min-w-[40px] min-h-[40px] flex items-center justify-center transition-colors cursor-pointer shrink-0"
             aria-label="Open menu"
           >
             <Menu size={22} />
@@ -435,7 +435,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <h1 className="font-extrabold text-sm sm:text-base leading-none tracking-tight text-slate-900 dark:text-white uppercase truncate">
                 GO GRAND
               </h1>
-              <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 dark:text-slate-400 tracking-wider uppercase leading-none mt-0.5 truncate">
+              <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 dark:text-neutral-400 tracking-wider uppercase leading-none mt-0.5 truncate">
                 CAR WASH & DETAILING
               </p>
             </div>
@@ -444,7 +444,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
         <div className="flex items-center gap-2 shrink-0">
           <ThemeToggle />
-          <div className="px-2.5 sm:px-3 py-1 rounded-full text-[11px] font-bold tracking-wide border uppercase bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 shadow-2xs">
+          <div className="px-2.5 sm:px-3 py-1 rounded-full text-[11px] font-bold tracking-wide border uppercase bg-slate-100 dark:bg-neutral-900 text-slate-800 dark:text-neutral-200 border-slate-200 dark:border-neutral-800 shadow-2xs">
             {mode === 'owner'
               ? 'Owner Mode'
               : currentStaff?.staff_name
@@ -472,7 +472,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               {isEditing && (
                 <button
                   onClick={() => navigate(targetTodayPath)}
-                  className="p-1 rounded-lg text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer"
+                  className="p-1 rounded-lg text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-neutral-900 flex items-center justify-center cursor-pointer"
                   aria-label="Back to today's vehicles"
                 >
                   <ArrowLeft size={18} />
@@ -486,7 +486,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 Live Intake
               </span>
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-medium">
+            <p className="text-xs text-slate-600 dark:text-neutral-400 mt-1 font-medium">
               Enter vehicle specifications & detailing service package
             </p>
           </div>
@@ -496,16 +496,16 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <button
                 type="button"
                 onClick={handleResetForm}
-                className="text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400 bg-white dark:bg-[#111827] border border-slate-300 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-800 px-2.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                className="text-xs font-bold text-slate-700 dark:text-neutral-200 hover:text-rose-600 dark:hover:text-rose-400 bg-white dark:bg-[#121212] border border-slate-300 dark:border-neutral-800 hover:border-rose-300 dark:hover:border-rose-800 px-2.5 py-2 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
                 title="Clear all input fields"
               >
-                <RotateCcw size={13} className="text-slate-500 dark:text-slate-400" />
+                <RotateCcw size={13} className="text-slate-500 dark:text-neutral-400" />
                 <span className="hidden sm:inline">Reset</span>
               </button>
             )}
 
-            <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 shadow-sm rounded-xl px-3 py-2 text-right flex flex-col items-end">
-              <span className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+            <div className="bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-neutral-850 shadow-sm rounded-xl px-3 py-2 text-right flex flex-col items-end">
+              <span className="block text-[9px] font-bold text-slate-500 dark:text-neutral-400 uppercase tracking-widest">
                 Job Token
               </span>
               <div className="flex items-center gap-1.5 mt-0.5">
@@ -532,13 +532,13 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         <form onSubmit={handleSaveDraft} className="space-y-4">
           
           {/* 1. VEHICLE & CUSTOMER DETAILS SECTION */}
-          <section className="bg-white dark:bg-[#111827] rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+          <section className="bg-white dark:bg-[#0A0A0A] rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-neutral-850 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-850 pb-2.5">
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-md bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400 flex items-center justify-center text-xs">
                   <Car size={14} />
                 </span>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                   Vehicle & Customer Details
                 </span>
               </div>
@@ -549,10 +549,10 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
             {/* Vehicle Number Input (High-contrast Indian Registration Plate design) */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+              <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
                 Vehicle Number <span className="text-rose-500">*</span>
               </label>
-              <div className="relative flex rounded-xl border-2 border-slate-300 dark:border-slate-700 focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 bg-slate-50 dark:bg-[#070A11] shadow-inner overflow-hidden transition-all">
+              <div className="relative flex rounded-xl border-2 border-slate-300 dark:border-neutral-800 focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 bg-slate-50 dark:bg-[#050505] shadow-inner overflow-hidden transition-all">
                 {/* Country / IND Emblem Strip */}
                 <div className="w-9 bg-[#002B7F] flex flex-col items-center justify-center py-2 text-white border-r border-blue-900 select-none">
                   <span className="text-[10px] text-amber-300 leading-none mb-0.5">☸</span>
@@ -563,7 +563,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                   value={formData.vehicleNumber}
                   onChange={(e) => handleChange('vehicleNumber', e.target.value.toUpperCase())}
                   placeholder="MH 02 EQ 8899"
-                  className="w-full bg-transparent border-none py-3 px-3 text-base md:text-lg font-mono font-black tracking-widest uppercase text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:ring-0 focus:outline-none"
+                  className="w-full bg-transparent border-none py-3 px-3 text-base md:text-lg font-mono font-black tracking-widest uppercase text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-600 focus:ring-0 focus:outline-none"
                   required
                 />
               </div>
@@ -576,11 +576,11 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
             {/* Customer Name Input */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+              <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
                 Customer Name <span className="text-rose-500">*</span>
               </label>
-              <div className="relative rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1E293B] shadow-xs focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 dark:text-slate-400">
+              <div className="relative rounded-xl border border-slate-300 dark:border-neutral-800 bg-white dark:bg-[#121212] shadow-xs focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 dark:text-neutral-400">
                   <User size={15} />
                 </span>
                 <input
@@ -588,7 +588,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                   value={formData.customerName}
                   onChange={(e) => handleChange('customerName', e.target.value)}
                   placeholder="e.g. Vikramaditya Sharma"
-                  className="w-full rounded-xl border-none pl-10 pr-3.5 py-2.5 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-0 focus:outline-none bg-transparent"
+                  className="w-full rounded-xl border-none pl-10 pr-3.5 py-2.5 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:ring-0 focus:outline-none bg-transparent"
                   required
                 />
               </div>
@@ -601,11 +601,11 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
             {/* Phone Number Input */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+              <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
                 Phone Number <span className="text-rose-500">*</span>
               </label>
-              <div className="relative flex rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1E293B] shadow-xs focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all overflow-hidden">
-                <div className="flex items-center gap-1 px-3 bg-slate-100 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 select-none">
+              <div className="relative flex rounded-xl border border-slate-300 dark:border-neutral-800 bg-white dark:bg-[#121212] shadow-xs focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all overflow-hidden">
+                <div className="flex items-center gap-1 px-3 bg-slate-100 dark:bg-neutral-900 border-r border-slate-300 dark:border-neutral-800 text-xs font-bold text-slate-800 dark:text-neutral-200 select-none">
                   <span className="text-sm">🇮🇳</span>
                   <span>+91</span>
                 </div>
@@ -615,10 +615,10 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                   value={formData.phoneNumber}
                   onChange={(e) => handleChange('phoneNumber', e.target.value)}
                   placeholder="98765 43210"
-                  className="w-full border-none py-2.5 px-3.5 text-sm font-semibold tracking-wide text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-0 focus:outline-none bg-transparent"
+                  className="w-full border-none py-2.5 px-3.5 text-sm font-semibold tracking-wide text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:ring-0 focus:outline-none bg-transparent"
                   required
                 />
-                <div className="pr-3 flex items-center text-slate-400 dark:text-slate-400">
+                <div className="pr-3 flex items-center text-slate-400 dark:text-neutral-400">
                   <Phone size={14} />
                 </div>
               </div>
@@ -631,24 +631,24 @@ export const JobSheet: React.FC<JobSheetProps> = ({
           </section>
 
           {/* 2. VEHICLE SPECIFICATIONS SECTION */}
-          <section className="bg-white dark:bg-[#111827] rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+          <section className="bg-white dark:bg-[#0A0A0A] rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-neutral-850 space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-850 pb-2.5">
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-400 flex items-center justify-center text-xs">
                   <Sliders size={14} />
                 </span>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                   Vehicle Details
                 </span>
               </div>
-              <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md">
+              <span className="text-[10px] font-bold text-slate-700 dark:text-neutral-300 bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 px-2 py-0.5 rounded-md">
                 Model & Location
               </span>
             </div>
 
             {/* Quick Search Filter Bar */}
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 dark:text-slate-400">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 dark:text-neutral-400">
                 <Search size={14} />
               </span>
               <input
@@ -656,7 +656,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 value={vehicleSearchQuery}
                 onChange={(e) => setVehicleSearchQuery(e.target.value)}
                 placeholder="Quick search model (e.g. Nexon, Thar, Creta)..."
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#1E293B] pl-9 pr-7 py-2.5 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:bg-white dark:focus:bg-[#1E293B] focus:border-slate-900 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition-all"
+                className="w-full rounded-xl border border-slate-300 dark:border-neutral-800 bg-slate-50 dark:bg-[#121212] pl-9 pr-7 py-2.5 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:bg-white dark:focus:bg-[#121212] focus:border-slate-900 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition-all"
               />
               {vehicleSearchQuery && (
                 <button
@@ -670,7 +670,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
               {/* SEARCH RESULTS DROPDOWN */}
               {vehicleSearchQuery.trim() !== '' && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-40 bg-white dark:bg-[#1E293B] border border-slate-300 dark:border-slate-700 rounded-xl shadow-2xl max-h-48 overflow-y-auto p-1.5 space-y-1">
+                <div className="absolute left-0 right-0 top-full mt-1 z-40 bg-white dark:bg-[#121212] border border-slate-300 dark:border-neutral-800 rounded-xl shadow-2xl max-h-48 overflow-y-auto p-1.5 space-y-1">
                   {searchedModels.length > 0 ? (
                     searchedModels.map((item) => (
                       <button
@@ -683,14 +683,14 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                           handleChange('vehicleName', `${item.company} ${item.model}`);
                           setVehicleSearchQuery('');
                         }}
-                        className="w-full px-3 py-2 text-left rounded-lg text-xs font-bold text-slate-900 dark:text-white hover:bg-amber-50 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer transition-colors"
+                        className="w-full px-3 py-2 text-left rounded-lg text-xs font-bold text-slate-900 dark:text-white hover:bg-amber-50 dark:hover:bg-neutral-800 flex items-center justify-between cursor-pointer transition-colors"
                       >
                         <span>{item.company} <span className="font-extrabold text-amber-600 dark:text-amber-400">{item.model}</span></span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">{item.company}</span>
+                        <span className="text-[10px] text-slate-500 dark:text-neutral-400 uppercase font-semibold">{item.company}</span>
                       </button>
                     ))
                   ) : (
-                    <div className="py-2.5 text-center text-xs text-slate-500 dark:text-slate-400">
+                    <div className="py-2.5 text-center text-xs text-slate-500 dark:text-neutral-400">
                       No matching models found
                     </div>
                   )}
@@ -702,7 +702,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
             <div className="grid grid-cols-2 gap-3 pt-0.5">
               {/* Company Selection */}
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-tight">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-neutral-300 uppercase tracking-tight">
                   Company <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -723,11 +723,11 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                         handleChange('vehicleName', '');
                       }
                     }}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1E293B] py-2.5 pl-3 pr-8 text-xs font-bold text-slate-900 dark:text-white appearance-none focus:border-slate-900 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 shadow-xs transition-all truncate cursor-pointer"
+                    className="w-full rounded-xl border border-slate-300 dark:border-neutral-800 bg-white dark:bg-[#121212] py-2.5 pl-3 pr-8 text-xs font-bold text-slate-900 dark:text-white appearance-none focus:border-slate-900 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 shadow-xs transition-all truncate cursor-pointer"
                   >
-                    <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">— Select Make —</option>
+                    <option value="" className="bg-white dark:bg-black text-slate-900 dark:text-white">— Select Make —</option>
                     {INDIAN_VEHICLE_BRANDS.map((b) => (
-                      <option key={b.company} value={b.company} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      <option key={b.company} value={b.company} className="bg-white dark:bg-black text-slate-900 dark:text-white">
                         {b.company}
                       </option>
                     ))}
@@ -740,7 +740,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
               {/* Model Selection */}
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-tight">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-neutral-300 uppercase tracking-tight">
                   Model <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -756,9 +756,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                         handleChange('vehicleName', selectedCompany);
                       }
                     }}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1E293B] py-2.5 pl-3 pr-8 text-xs font-bold text-slate-900 dark:text-white disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400 disabled:cursor-not-allowed appearance-none focus:border-slate-900 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 shadow-xs transition-all truncate cursor-pointer"
+                    className="w-full rounded-xl border border-slate-300 dark:border-neutral-800 bg-white dark:bg-[#121212] py-2.5 pl-3 pr-8 text-xs font-bold text-slate-900 dark:text-white disabled:bg-slate-100 dark:disabled:bg-neutral-900 disabled:text-slate-400 disabled:cursor-not-allowed appearance-none focus:border-slate-900 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 shadow-xs transition-all truncate cursor-pointer"
                   >
-                    <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                    <option value="" className="bg-white dark:bg-black text-slate-900 dark:text-white">
                       {!selectedCompany
                         ? '— Select Model —'
                         : selectedCompany === 'Other'
@@ -768,7 +768,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                     {selectedCompany &&
                       selectedCompany !== 'Other' &&
                       INDIAN_VEHICLE_BRANDS.find((b) => b.company === selectedCompany)?.models.map((mod) => (
-                        <option key={mod} value={mod} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                        <option key={mod} value={mod} className="bg-white dark:bg-black text-slate-900 dark:text-white">
                           {mod}
                         </option>
                       ))}
@@ -787,18 +787,18 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 value={formData.vehicleName}
                 onChange={(e) => handleChange('vehicleName', e.target.value)}
                 placeholder="Custom vehicle name (e.g. BMW X5)..."
-                className="w-full min-h-[40px] px-3 bg-white dark:bg-[#1E293B] border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-semibold placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-slate-900 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
+                className="w-full min-h-[40px] px-3 bg-white dark:bg-[#121212] border border-slate-300 dark:border-neutral-800 rounded-xl text-xs text-slate-900 dark:text-white font-semibold placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:outline-none focus:border-slate-900 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
                 autoFocus
               />
             )}
 
             {/* Location / Studio Bay Input */}
             <div className="space-y-1.5 pt-1">
-              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+              <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
                 Studio Location / Bay
               </label>
-              <div className="relative rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1E293B] shadow-xs focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 dark:text-slate-400">
+              <div className="relative rounded-xl border border-slate-300 dark:border-neutral-800 bg-white dark:bg-[#121212] shadow-xs focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 dark:text-neutral-400">
                   <MapPin size={15} />
                 </span>
                 <input
@@ -806,20 +806,20 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                   value={formData.location}
                   onChange={(e) => handleChange('location', e.target.value)}
                   placeholder="e.g. Wash Bay 02 / Detailing Booth A"
-                  className="w-full rounded-xl border-none pl-10 pr-3.5 py-2.5 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-0 focus:outline-none bg-transparent"
+                  className="w-full rounded-xl border-none pl-10 pr-3.5 py-2.5 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:ring-0 focus:outline-none bg-transparent"
                 />
               </div>
             </div>
           </section>
 
           {/* 3. SERVICE & COMMERCIALS SECTION */}
-          <section className="bg-white dark:bg-[#111827] rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+          <section className="bg-white dark:bg-[#0A0A0A] rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-neutral-850 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-850 pb-2.5">
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-400 flex items-center justify-center text-xs">
                   <Sparkles size={14} />
                 </span>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                   Service & Commercials
                 </span>
               </div>
@@ -830,15 +830,15 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
             {/* Primary Package / Service Selection */}
             <div className="space-y-1.5 relative">
-              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+              <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
                 Primary Package / Service <span className="text-rose-500">*</span>
               </label>
 
               <button
                 type="button"
                 onClick={() => setShowDropdownPicker(!showDropdownPicker)}
-                className={`w-full min-h-[42px] px-3.5 py-2.5 bg-white dark:bg-[#1E293B] border ${
-                  errors.services ? 'border-rose-500' : 'border-slate-300 dark:border-slate-700'
+                className={`w-full min-h-[42px] px-3.5 py-2.5 bg-white dark:bg-[#121212] border ${
+                  errors.services ? 'border-rose-500' : 'border-slate-300 dark:border-neutral-800'
                 } rounded-xl text-xs sm:text-sm font-bold text-left flex items-center justify-between cursor-pointer shadow-xs focus:ring-2 focus:ring-amber-400/20`}
               >
                 <span className="truncate text-slate-900 dark:text-white">
@@ -859,8 +859,8 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
               {/* SERVICES POPUP MENU */}
               {showDropdownPicker && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-white dark:bg-[#1E293B] border border-slate-300 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-64">
-                  <div className="p-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 flex items-center gap-2">
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-white dark:bg-[#0F0F0F] border border-slate-300 dark:border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-64">
+                  <div className="p-2 border-b border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-[#141414] flex items-center gap-2">
                     <div className="relative flex-1 flex items-center">
                       <Search size={14} className="absolute left-3 text-slate-400" />
                       <input
@@ -868,7 +868,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                         value={serviceSearchQuery}
                         onChange={(e) => setServiceSearchQuery(e.target.value)}
                         placeholder="Search services..."
-                        className="w-full min-h-[36px] pl-9 pr-7 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
+                        className="w-full min-h-[36px] pl-9 pr-7 bg-white dark:bg-[#1E1E1E] border border-slate-300 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
                       />
                       {serviceSearchQuery && (
                         <button
@@ -883,7 +883,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowDropdownPicker(false)}
-                      className="px-3 min-h-[36px] bg-slate-950 dark:bg-amber-400 text-white dark:text-slate-950 text-xs font-bold rounded-xl cursor-pointer shrink-0"
+                      className="px-3 min-h-[36px] bg-slate-950 dark:bg-amber-400 text-white dark:text-black text-xs font-bold rounded-xl cursor-pointer shrink-0"
                     >
                       Done
                     </button>
@@ -901,7 +901,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                             className={`w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between text-left transition-colors cursor-pointer ${
                               isSelected
                                 ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
-                                : 'text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                : 'text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-neutral-800'
                             }`}
                           >
                             <span className="truncate">{serviceName}</span>
@@ -910,7 +910,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                         );
                       })
                     ) : (
-                      <div className="py-2.5 text-center text-xs text-slate-500 dark:text-slate-400">
+                      <div className="py-2.5 text-center text-xs text-slate-500 dark:text-neutral-400">
                         No services found
                       </div>
                     )}
@@ -927,7 +927,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
             {/* Quick Service Chips (Fast Selection) */}
             <div className="space-y-1.5">
-              <span className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+              <span className="block text-[11px] font-bold text-slate-700 dark:text-neutral-300">
                 Quick Service Chips:
               </span>
               <div className="flex flex-wrap gap-1.5">
@@ -941,7 +941,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                       className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-amber-400 text-slate-950 border-amber-500 font-black shadow-xs'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700 font-bold'
+                          : 'bg-slate-100 dark:bg-[#141414] text-slate-800 dark:text-neutral-200 hover:bg-slate-200 dark:hover:bg-neutral-800 border-slate-300 dark:border-neutral-800 font-bold'
                       }`}
                     >
                       {isSelected ? `✓ ${quickName}` : `+ ${quickName}`}
@@ -975,11 +975,11 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
             {/* Price & Currency Input */}
             <div className="space-y-1.5 pt-1">
-              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+              <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
                 Total Amount (INR) <span className="text-rose-500">*</span>
               </label>
-              <div className="relative flex rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1E293B] shadow-xs focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all overflow-hidden">
-                <span className="inline-flex items-center px-4 bg-slate-100 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-700 text-slate-900 dark:text-amber-400 font-black text-base">
+              <div className="relative flex rounded-xl border border-slate-300 dark:border-neutral-800 bg-white dark:bg-[#121212] shadow-xs focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all overflow-hidden">
+                <span className="inline-flex items-center px-4 bg-slate-100 dark:bg-[#181818] border-r border-slate-300 dark:border-neutral-800 text-slate-900 dark:text-amber-400 font-black text-base">
                   ₹
                 </span>
                 <input
@@ -987,7 +987,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                   value={formData.price}
                   onChange={(e) => handleChange('price', e.target.value)}
                   placeholder="0.00"
-                  className="w-full border-none py-3 px-3.5 text-base font-black font-mono text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-0 focus:outline-none bg-transparent"
+                  className="w-full border-none py-3 px-3.5 text-base font-black font-mono text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:ring-0 focus:outline-none bg-transparent"
                   required
                 />
                 <div className="pr-3.5 flex items-center text-xs font-bold text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/15 my-1.5 mr-2 px-2 rounded-lg border border-emerald-200 dark:border-emerald-500/30">
@@ -1012,7 +1012,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 </span>
                 Quick Triggers & Instant Updates
               </span>
-              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tight bg-slate-200/80 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-300/80 dark:border-slate-700">
+              <span className="text-[10px] font-bold text-slate-600 dark:text-neutral-400 uppercase tracking-tight bg-slate-200/80 dark:bg-neutral-900 px-2 py-0.5 rounded-md border border-slate-300/80 dark:border-neutral-800">
                 1-Tap Actions
               </span>
             </div>
@@ -1107,7 +1107,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <button
                 type="button"
                 onClick={handleResetForm}
-                className="py-4 px-3.5 rounded-2xl bg-white dark:bg-[#1E293B] hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-bold text-xs uppercase tracking-wider shadow-sm active:scale-[0.98] transition-all border border-slate-300 dark:border-slate-700 hover:border-rose-300 flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                className="py-4 px-3.5 rounded-2xl bg-white dark:bg-[#121212] hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-bold text-xs uppercase tracking-wider shadow-sm active:scale-[0.98] transition-all border border-slate-300 dark:border-neutral-800 hover:border-rose-300 flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
                 title="Clear all form fields"
               >
                 <RotateCcw size={16} />
@@ -1116,9 +1116,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
             )}
             <button
               type="submit"
-              className="flex-1 flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-slate-950 hover:bg-black dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-slate-950 font-black text-sm tracking-wide shadow-lg active:scale-[0.99] transition-all border border-slate-800 dark:border-amber-300 cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-slate-950 hover:bg-black dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-black font-black text-sm tracking-wide shadow-lg active:scale-[0.99] transition-all border border-slate-800 dark:border-amber-300 cursor-pointer"
             >
-              <Save size={18} className="text-amber-400 dark:text-slate-950" />
+              <Save size={18} className="text-amber-400 dark:text-black" />
               <span>{isEditing ? 'UPDATE JOB SHEET' : 'SAVE DRAFT & CREATE JOB'}</span>
             </button>
           </div>

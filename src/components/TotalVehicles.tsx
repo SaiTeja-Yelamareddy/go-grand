@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, MoreVertical, X, Car, Search, ChevronDown, Download, CheckCircle2, User } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
-import { getAllJobRecords, syncJobsFromSupabase, type JobRecord } from '../utils/draftStorage';
+import { getAllJobRecords, syncJobsFromSupabase, formatNumericDateIST, type JobRecord } from '../utils/draftStorage';
 import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
@@ -142,16 +142,7 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
   }, [allRecords, searchQuery, selectedMonth, selectedYear]);
 
   const formatDate = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
-    } catch {
-      return dateStr;
-    }
+    return formatNumericDateIST(dateStr);
   };
 
   const formatServices = (val: string[] | string | undefined) => {

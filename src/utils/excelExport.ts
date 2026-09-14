@@ -1,5 +1,23 @@
 import * as XLSX from 'xlsx';
-import type { JobRecord } from './draftStorage';
+import { getAllJobRecords, formatNumericDateIST, type JobRecord } from './draftStorage';
+
+/**
+ * Normalizes vehicle registration number and customer phone to generate a unique customer+vehicle key.
+ */
+function getCustomerVehicleGroupKey(record: JobRecord): string {
+  const cleanReg = (record.vehicleNumber || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const cleanPhone = (record.phoneNumber || '').trim().replace(/\D/g, '');
+  const cleanName = (record.customerName || '').trim().toLowerCase();
+
+  // Primary key: Normalized Vehicle Number + Normalized Phone (or Name fallback if phone empty)
+  if (cleanReg && cleanPhone) {
+    return `${cleanReg}__${cleanPhone}`;
+  }
+  if (cleanReg) {
+    return `${cleanReg}__${cleanName}`;
+  }
+  return `${cleanPhone}__${cleanName}`;
+}
 
 export function exportJobsToExcel(records: JobRecord[], filename: string) {
   if (!records || records.length === 0) {
@@ -7,73 +25,86 @@ export function exportJobsToExcel(records: JobRecord[], filename: string) {
     return;
   }
 
-  const dataRows = records.map((record, index) => {
-    let formattedDate = '';
-    if (record.createdAt) {
-      try {
-        const d = new Date(record.createdAt);
-        formattedDate = d.toLocaleString('en-IN', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        });
-      } catch {
-        formattedDate = record.createdAt;
+  // 1. Calculate all-time historical visit counts for every customer+vehicle across the entire database
+  const allHistoricalJobs = getAllJobRecords();
+  const allTimeVisitCountMap = new Map<string, number>();
+
+  for (const job of allHistoricalJobs) {
+    const key = getCustomerVehicleGroupKey(job);
+    allTimeVisitCountMap.set(key, (allTimeVisitCountMap.get(key) || 0) + 1);
+  }
+
+  // 2. Group the records to export so that each unique customer+vehicle combination appears as ONE row
+  const groupedRecordsMap = new Map<
+    string,
+    {
+      latestRecord: JobRecord;
+      allVisitsInSelection: JobRecord[];
+      latestTimestamp: number;
+    }
+  >();
+
+  for (const record of records) {
+    const key = getCustomerVehicleGroupKey(record);
+    const timestamp = record.createdAt ? new Date(record.createdAt).getTime() : 0;
+
+    if (!groupedRecordsMap.has(key)) {
+      groupedRecordsMap.set(key, {
+        latestRecord: record,
+        allVisitsInSelection: [record],
+        latestTimestamp: isNaN(timestamp) ? 0 : timestamp,
+      });
+    } else {
+      const existing = groupedRecordsMap.get(key)!;
+      existing.allVisitsInSelection.push(record);
+      if (!isNaN(timestamp) && timestamp > existing.latestTimestamp) {
+        existing.latestTimestamp = timestamp;
+        existing.latestRecord = record;
       }
     }
+  }
 
-    let servicesStr = '';
-    if (Array.isArray(record.services)) {
-      servicesStr = record.services.length > 0 ? record.services.join(', ') : 'Standard Service';
-    } else if (record.services) {
-      servicesStr = String(record.services);
-    } else if (record.service) {
-      servicesStr = String(record.service);
-    } else {
-      servicesStr = 'Standard Service';
-    }
+  // 3. Sort unique rows by most recent visit date descending
+  const sortedGroups = Array.from(groupedRecordsMap.values()).sort(
+    (a, b) => b.latestTimestamp - a.latestTimestamp
+  );
 
-    let priceStr = record.price || '';
-    if (priceStr && !priceStr.startsWith('₹')) {
-      const clean = priceStr.replace(/[^0-9.]/g, '');
-      priceStr = clean ? `₹${clean}` : priceStr;
-    }
+  // 4. Map to exact standard reference columns
+  const dataRows = sortedGroups.map((group, index) => {
+    const r = group.latestRecord;
+    const key = getCustomerVehicleGroupKey(r);
+    const totalVisits = allTimeVisitCountMap.get(key) || group.allVisitsInSelection.length;
 
     return {
       'S.No': index + 1,
-      'Date & Time': formattedDate || '-',
-      'Vehicle Number': record.vehicleNumber || '-',
-      'Customer Name': record.customerName || '-',
-      'Phone Number': record.phoneNumber || '-',
-      'Vehicle Name': record.vehicleName || '-',
-      'Location': record.location || '-',
-      'Services': servicesStr,
-      'Price': priceStr || '-',
-      'Staff / Created By': record.createdBy || 'Staff',
+      'Customer Name': r.customerName || '-',
+      'Mobile': r.phoneNumber || '-',
+      'Email': r.email && r.email.trim() ? r.email.trim() : '-',
+      'Registration Number': (r.vehicleNumber || '-').toUpperCase(),
+      'Vehicle Model': r.vehicleName && r.vehicleName.trim() ? r.vehicleName.trim() : '-',
+      'Last Visit': formatNumericDateIST(r.createdAt),
+      'Place': (r.location && r.location.trim()) || (r.address && r.address.trim()) || '-',
+      'No. of Visits': totalVisits,
     };
   });
 
   const worksheet = XLSX.utils.json_to_sheet(dataRows);
 
-  // Set column widths for clean readability in Excel
+  // Set professional column widths
   worksheet['!cols'] = [
     { wch: 6 },  // S.No
-    { wch: 22 }, // Date & Time
-    { wch: 18 }, // Vehicle Number
     { wch: 22 }, // Customer Name
-    { wch: 16 }, // Phone Number
-    { wch: 16 }, // Vehicle Name
-    { wch: 16 }, // Location
-    { wch: 32 }, // Services
-    { wch: 12 }, // Price
-    { wch: 20 }, // Staff / Created By
+    { wch: 16 }, // Mobile
+    { wch: 24 }, // Email
+    { wch: 22 }, // Registration Number
+    { wch: 20 }, // Vehicle Model
+    { wch: 14 }, // Last Visit (DD/MM/YYYY)
+    { wch: 18 }, // Place
+    { wch: 14 }, // No. of Visits
   ];
 
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'GO GRAND Records');
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Vehicle Summary');
 
   XLSX.writeFile(workbook, `${filename}.xlsx`);
 }

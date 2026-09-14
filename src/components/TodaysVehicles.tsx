@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, MoreVertical, X, Car, Download, CheckCircle2, User } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
-import { getTodaysJobRecords, syncJobsFromSupabase, type JobRecord } from '../utils/draftStorage';
+import { getTodaysJobRecords, syncJobsFromSupabase, formatNumericDateIST, getISTDateKey, type JobRecord } from '../utils/draftStorage';
 import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
@@ -47,6 +47,24 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
     syncJobsFromSupabase().then(() => {
       reloadRecords();
     });
+
+    // Auto-refresh periodically (every 30s) and on tab visibility so midnight IST transitions clear automatically
+    const interval = setInterval(() => {
+      reloadRecords();
+    }, 30000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        reloadRecords();
+        syncJobsFromSupabase().then(() => reloadRecords());
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   // Close three-dot popup when clicking outside
@@ -77,16 +95,11 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
 
   const handleDownloadExcel = () => {
     if (records.length === 0) return;
-    exportJobsToExcel(records, `GO_GRAND_Todays_Vehicles_${new Date().toISOString().split('T')[0]}`);
+    exportJobsToExcel(records, `GO_GRAND_Todays_Vehicles_${getISTDateKey(new Date())}`);
   };
 
   const formatDate = (isoString: string) => {
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    } catch {
-      return isoString;
-    }
+    return formatNumericDateIST(isoString);
   };
 
   const formatServices = (services?: string[] | string) => {

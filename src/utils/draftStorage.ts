@@ -208,18 +208,47 @@ export async function deleteJobRecord(id: string): Promise<void> {
   }
 }
 
+/**
+ * Helper to get calendar date key in India timezone ("YYYY-MM-DD")
+ */
+export function getISTDateKey(dateInput?: string | number | Date): string {
+  try {
+    const d = dateInput ? new Date(dateInput) : new Date();
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Format a timestamp strictly as DD/MM/YYYY in India timezone (Asia/Kolkata)
+ */
+export function formatNumericDateIST(dateInput?: string | number | Date): string {
+  try {
+    if (!dateInput) return '-';
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return typeof dateInput === 'string' ? dateInput : '-';
+    return d.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata',
+    });
+  } catch {
+    return typeof dateInput === 'string' ? dateInput : '-';
+  }
+}
+
 export function getTodaysJobRecords(): JobRecord[] {
   const allJobs = getAllJobRecords();
-  const now = Date.now();
-  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+  const currentTodayIST = getISTDateKey(new Date());
 
   return allJobs.filter((job) => {
     if (!job.createdAt) return false;
-    const jobTime = new Date(job.createdAt).getTime();
-    if (isNaN(jobTime)) return false;
-
-    // Only include vehicles registered within the last 24 hours (clears automatically after 24h)
-    return now - jobTime >= 0 && now - jobTime < TWENTY_FOUR_HOURS_MS;
+    const jobIST = getISTDateKey(job.createdAt);
+    return jobIST === currentTodayIST;
   });
 }
+
 

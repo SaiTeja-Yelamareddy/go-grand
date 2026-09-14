@@ -1,13 +1,8 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { X, Printer, Send, CheckCircle2 } from 'lucide-react';
-import type { JobRecord } from '../utils/draftStorage';
-import {
-  generateBillNo,
-  numberToWordsRupees,
-  parsePriceNumber,
-  sendWhatsAppBillViaBackend,
-} from '../utils/invoiceUtils';
+import { formatNumericDateIST, type JobRecord } from '../utils/draftStorage';
+import { generateBillNo, parsePriceNumber, numberToWordsRupees, sendWhatsAppBillViaBackend } from '../utils/invoiceUtils';
 
 interface InvoiceModalProps {
   record: JobRecord;
@@ -19,13 +14,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ record, onClose }) =
   const [sentSuccess, setSentSuccess] = React.useState(false);
 
   const billNo = record.billNo || generateBillNo(record.id, record.createdAt);
-  const dateStr = record.createdAt
-    ? new Date(record.createdAt).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      })
-    : new Date().toLocaleDateString('en-GB');
+  const dateStr = formatNumericDateIST(record.createdAt || new Date());
 
   const priceNum = parsePriceNumber(record.price);
   const discountNum = record.discount ? parsePriceNumber(record.discount) : 0;

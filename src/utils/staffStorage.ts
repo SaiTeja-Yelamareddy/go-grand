@@ -79,6 +79,8 @@ export function saveLocalStaffProfiles(profiles: StaffProfile[]): void {
 
 // Fetch staff profiles (from Supabase if configured, otherwise localStorage)
 export async function getStaffProfiles(): Promise<StaffProfile[]> {
+  const localList = getLocalStaffProfiles();
+
   if (isSupabaseConfigured() && supabase) {
     try {
       const { data, error } = await supabase
@@ -86,16 +88,41 @@ export async function getStaffProfiles(): Promise<StaffProfile[]> {
         .select('*')
         .order('created_at', { ascending: true });
 
-      if (!error && data && data.length > 0) {
-        saveLocalStaffProfiles(data as StaffProfile[]);
-        return data as StaffProfile[];
+      if (!error && Array.isArray(data)) {
+        // Merge Supabase records with local records so no newly added staff is lost
+        const mergedMap = new Map<string, StaffProfile>();
+        
+        // Add local first
+        localList.forEach((s) => {
+          mergedMap.set(s.phone_number.toLowerCase().trim(), s);
+        });
+
+        // Overlay Supabase data
+        data.forEach((remote: any) => {
+          const profile: StaffProfile = {
+            id: String(remote.id || ''),
+            user_id: remote.user_id,
+            staff_name: String(remote.staff_name || ''),
+            phone_number: String(remote.phone_number || ''),
+            password_hash: String(remote.password_hash || ''),
+            role: remote.role || 'STAFF',
+            active: remote.active !== undefined ? Boolean(remote.active) : true,
+            created_at: remote.created_at || new Date().toISOString(),
+            updated_at: remote.updated_at || new Date().toISOString(),
+          };
+          mergedMap.set(profile.phone_number.toLowerCase().trim(), profile);
+        });
+
+        const mergedList = Array.from(mergedMap.values());
+        saveLocalStaffProfiles(mergedList);
+        return mergedList;
       }
     } catch (err) {
       console.warn('Supabase fetch failed, using local staff profiles:', err);
     }
   }
 
-  return getLocalStaffProfiles();
+  return localList;
 }
 
 // Synchronous getter for fast initial UI rendering
@@ -111,12 +138,44 @@ export async function addStaffProfile(data: {
   role?: 'OWNER' | 'STAFF';
   active?: boolean;
 }): Promise<StaffProfile> {
-  const password_hash = await hashPassword(data.password);
+  const cleanName = data.staff_name.trim();
+  const cleanPhone = data.phone_number.trim().replace(/\s+/g, '');
+  const cleanPassword = data.password.trim();
+
+  if (!cleanName) {
+    throw new Error('Staff name is required');
+  }
+  if (!cleanPhone) {
+    throw new Error('Phone number / username is required');
+  }
+  if (!cleanPassword) {
+    throw new Error('Password is required');
+  }
+
+  // Check for duplicates in local store
+  const current = getLocalStaffProfiles();
+  const duplicate = current.find(
+    (s) =>
+      s.phone_number.toLowerCase().trim() === cleanPhone.toLowerCase() ||
+      s.staff_name.toLowerCase().trim() === cleanName.toLowerCase()
+  );
+
+  if (duplicate) {
+    throw new Error(
+      `Staff member with this ${
+        duplicate.phone_number.toLowerCase().trim() === cleanPhone.toLowerCase()
+          ? 'phone number'
+          : 'name'
+      } already exists.`
+    );
+  }
+
+  const password_hash = await hashPassword(cleanPassword);
   const now = new Date().toISOString();
   const newStaff: StaffProfile = {
     id: `staff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    staff_name: data.staff_name.trim(),
-    phone_number: data.phone_number.trim(),
+    staff_name: cleanName,
+    phone_number: cleanPhone,
     password_hash,
     role: data.role || 'STAFF',
     active: data.active !== undefined ? data.active : true,
@@ -124,6 +183,11 @@ export async function addStaffProfile(data: {
     updated_at: now,
   };
 
+  // 1. Immediately save to local storage
+  const updated = [...current, newStaff];
+  saveLocalStaffProfiles(updated);
+
+  // 2. Synchronize to Supabase if available
   if (isSupabaseConfigured() && supabase) {
     try {
       const { data: inserted, error } = await supabase
@@ -142,15 +206,19 @@ export async function addStaffProfile(data: {
 
       if (!error && inserted) {
         newStaff.id = inserted.id;
+        // Update local with the real Supabase ID
+        const finalCurrent = getLocalStaffProfiles().map((s) =>
+          s.phone_number === cleanPhone ? { ...s, id: inserted.id } : s
+        );
+        saveLocalStaffProfiles(finalCurrent);
+      } else if (error) {
+        console.warn('Supabase insert warning:', error.message);
       }
     } catch (err) {
-      console.warn('Supabase insert failed, saving locally:', err);
+      console.warn('Supabase insert exception, saved locally:', err);
     }
   }
 
-  const current = getLocalStaffProfiles();
-  const updated = [...current, newStaff];
-  saveLocalStaffProfiles(updated);
   return newStaff;
 }
 
@@ -178,12 +246,15 @@ export async function updateStaffProfile(
   const updatedStaff: StaffProfile = {
     ...staff,
     staff_name: updates.staff_name !== undefined ? updates.staff_name.trim() : staff.staff_name,
-    phone_number: updates.phone_number !== undefined ? updates.phone_number.trim() : staff.phone_number,
+    phone_number: updates.phone_number !== undefined ? updates.phone_number.trim().replace(/\s+/g, '') : staff.phone_number,
     password_hash: newHash,
     active: updates.active !== undefined ? updates.active : staff.active,
     role: updates.role || staff.role,
     updated_at: new Date().toISOString(),
   };
+
+  current[index] = updatedStaff;
+  saveLocalStaffProfiles(current);
 
   if (isSupabaseConfigured() && supabase) {
     try {
@@ -203,8 +274,6 @@ export async function updateStaffProfile(
     }
   }
 
-  current[index] = updatedStaff;
-  saveLocalStaffProfiles(current);
   return updatedStaff;
 }
 
@@ -219,6 +288,10 @@ export async function toggleStaffStatus(id: string): Promise<StaffProfile | null
 
 // Delete staff profile
 export async function deleteStaffProfile(id: string): Promise<boolean> {
+  const current = getLocalStaffProfiles();
+  const filtered = current.filter((s) => s.id !== id);
+  saveLocalStaffProfiles(filtered);
+
   if (isSupabaseConfigured() && supabase) {
     try {
       await supabase.from('staff_profiles').delete().eq('id', id);
@@ -227,9 +300,6 @@ export async function deleteStaffProfile(id: string): Promise<boolean> {
     }
   }
 
-  const current = getLocalStaffProfiles();
-  const filtered = current.filter((s) => s.id !== id);
-  saveLocalStaffProfiles(filtered);
   return true;
 }
 
@@ -238,20 +308,22 @@ export async function authenticateStaff(
   phoneOrUsername: string,
   plainPassword: string
 ): Promise<{ success: boolean; staff?: StaffProfile; error?: string }> {
-  const trimmedInput = phoneOrUsername.trim().toLowerCase();
+  const rawInput = phoneOrUsername.trim();
+  const cleanDigits = rawInput.replace(/\D/g, '');
+  const trimmedInput = rawInput.toLowerCase();
   const hashedPassword = await hashPassword(plainPassword);
 
-  // First check Supabase if connected
+  // 1. Check Supabase if configured
   if (isSupabaseConfigured() && supabase) {
     try {
       const { data, error } = await supabase
         .from('staff_profiles')
         .select('*')
         .or(`phone_number.ilike.${trimmedInput},staff_name.ilike.${trimmedInput}`)
-        .single();
+        .limit(1);
 
-      if (!error && data) {
-        const staff = data as StaffProfile;
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const staff = data[0] as StaffProfile;
         if (!staff.active) {
           return { success: false, error: 'Your staff account has been disabled. Please contact the Owner.' };
         }
@@ -266,13 +338,20 @@ export async function authenticateStaff(
     }
   }
 
-  // Local storage fallback authentication
+  // 2. Local storage authentication
   const allStaff = getLocalStaffProfiles();
-  const found = allStaff.find(
-    (s) =>
-      s.phone_number.toLowerCase() === trimmedInput ||
-      s.staff_name.toLowerCase() === trimmedInput
-  );
+  const found = allStaff.find((s) => {
+    const sPhone = s.phone_number.toLowerCase().trim();
+    const sDigits = sPhone.replace(/\D/g, '');
+    const sName = s.staff_name.toLowerCase().trim();
+
+    return (
+      sPhone === trimmedInput ||
+      sName === trimmedInput ||
+      (cleanDigits && sDigits && sDigits === cleanDigits) ||
+      (cleanDigits.length === 10 && sDigits.endsWith(cleanDigits))
+    );
+  });
 
   if (!found) {
     return { success: false, error: 'Staff account not found. Please verify your phone/username.' };

@@ -163,8 +163,8 @@ export const OwnerStaff: React.FC<OwnerStaffProps> = ({
         <div className="flex items-center min-w-0">
           <button
             onClick={() => setDrawerOpen((prev) => !prev)}
-            className="flex items-center gap-2.5 min-w-0 p-1 -ml-1 rounded-xl hover:bg-slate-100 dark:hover:bg-[#1A1A1A] active:bg-slate-200 dark:active:bg-[#222222] transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-            aria-label="Toggle navigation menu"
+            className="flex items-center gap-2.5 min-w-0 min-h-[44px] p-1 -ml-1 rounded-xl hover:bg-slate-100 dark:hover:bg-[#1A1A1A] active:bg-slate-200 dark:active:bg-[#222222] transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+            aria-label={drawerOpen ? "Close navigation" : "Open navigation"}
             aria-expanded={drawerOpen}
             aria-controls="navigation-drawer"
           >

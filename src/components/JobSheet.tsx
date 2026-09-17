@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Menu,
   RotateCcw,
   CheckCircle2,
   X,
@@ -421,15 +420,14 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     <div className="w-full min-h-0 h-auto bg-slate-100 dark:bg-black text-slate-900 dark:text-white flex flex-col transition-colors">
       {/* HEADER */}
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-black/95 backdrop-blur-md border-b border-slate-200 dark:border-neutral-900 px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between shadow-2xs w-full max-w-full">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="flex items-center min-w-0">
           <button
-            onClick={() => setDrawerOpen(true)}
-            className="p-1.5 rounded-lg text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-neutral-900 active:bg-slate-200 dark:active:bg-neutral-800 min-w-[40px] min-h-[40px] flex items-center justify-center transition-colors cursor-pointer shrink-0"
-            aria-label="Open menu"
+            onClick={() => setDrawerOpen((prev) => !prev)}
+            className="flex items-center gap-2 sm:gap-2.5 min-w-0 p-1 -ml-1 rounded-xl hover:bg-slate-100 dark:hover:bg-neutral-900 active:bg-slate-200 dark:active:bg-neutral-800 transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+            aria-label="Toggle navigation menu"
+            aria-expanded={drawerOpen}
+            aria-controls="navigation-drawer"
           >
-            <Menu size={22} />
-          </button>
-          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             <img src="/logo.png" alt="GO GRAND" className="h-8 sm:h-9 object-contain rounded-lg shadow-2xs shrink-0" />
             <div className="flex flex-col justify-center min-w-0">
               <h1 className="font-extrabold text-sm sm:text-base leading-none tracking-tight text-slate-900 dark:text-white uppercase truncate">
@@ -439,7 +437,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 CAR WASH & DETAILING
               </p>
             </div>
-          </div>
+          </button>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">

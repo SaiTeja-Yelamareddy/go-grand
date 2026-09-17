@@ -1,19 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import {
-  X,
-  FileText,
-  Car,
-  Layers,
-  Wrench,
-  Users,
-  CreditCard,
-  Smartphone,
-  LogOut,
-} from 'lucide-react';
+import { X, Smartphone, Users, CreditCard } from 'lucide-react';
 import { logoutOwner, logoutStaff, getCurrentStaff } from '../config/authConfig';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { UpiSettingsModal } from './UpiSettingsModal';
+import { ThemeToggle } from './ThemeToggle';
 
 interface NavigationDrawerProps {
   isOpen: boolean;
@@ -26,9 +17,7 @@ interface NavigationDrawerProps {
 interface MenuItem {
   label: string;
   path?: string;
-  icon: React.ComponentType<{ className?: string; size?: number }>;
   action?: 'logout' | 'whatsapp' | 'upi';
-  isDestructive?: boolean;
 }
 
 export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
@@ -42,7 +31,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   const [isUpiModalOpen, setIsUpiModalOpen] = useState<boolean>(false);
   const currentStaff = getCurrentStaff();
 
-  // Handle Escape key to close
+  // Close on Escape key
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -76,19 +65,21 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   }, [isOpen]);
 
   const staffItems: MenuItem[] = [
-    { label: "Today's Job Sheet", path: '/staff', icon: FileText },
-    { label: "Today's Vehicles", path: '/staff/today', icon: Car },
-    { label: 'All Vehicles', path: '/staff/vehicles', icon: Layers },
+    { label: 'NEW JOB', path: '/staff' },
+    { label: "TODAY'S VEHICLES", path: '/staff/today' },
+    { label: 'TOTAL VEHICLES', path: '/staff/vehicles' },
+    { label: 'LOGOUT', action: 'logout' },
   ];
 
   const ownerItems: MenuItem[] = [
-    { label: "Today's Job Sheet", path: '/owner', icon: FileText },
-    { label: "Today's Vehicles", path: '/owner/today', icon: Car },
-    { label: 'All Vehicles', path: '/owner/vehicles', icon: Layers },
-    { label: 'Services', path: '/owner/services', icon: Wrench },
-    { label: 'Staff', path: '/owner/staff', icon: Users },
-    { label: 'UPI Settings', action: 'upi', icon: CreditCard },
-    { label: 'WhatsApp Linked Device', action: 'whatsapp', icon: Smartphone },
+    { label: 'NEW JOB', path: '/owner' },
+    { label: "TODAY'S VEHICLES", path: '/owner/today' },
+    { label: 'TOTAL VEHICLES', path: '/owner/vehicles' },
+    { label: 'MANAGE STAFF', path: '/owner/staff' },
+    { label: 'ADD / UPDATE SERVICES', path: '/owner/services' },
+    { label: 'UPI PAYMENT SETTINGS', action: 'upi' },
+    { label: 'WHATSAPP LINKED DEVICE', action: 'whatsapp' },
+    { label: 'LOGOUT', action: 'logout' },
   ];
 
   const currentItems = mode === 'owner' ? ownerItems : staffItems;
@@ -114,125 +105,99 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     }
   };
 
-  const isPathActive = (itemPath?: string) => {
-    if (!itemPath) return false;
-    if (location.pathname === itemPath) return true;
-    if (itemPath === '/staff' && location.pathname === '/staff/job') return true;
-    if (itemPath === '/owner' && location.pathname === '/owner/job') return true;
-    return false;
-  };
+  if (!isOpen && !isWaModalOpen && !isUpiModalOpen) return null;
 
   return (
     <>
-      {/* Drawer Overlay */}
-      <div
-        className={`fixed inset-0 z-50 transition-opacity duration-300 ${
-          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        }`}
-        aria-hidden={!isOpen}
-      >
-        {/* Backdrop */}
-        <div
-          className="fixed inset-0 bg-black/50 transition-opacity duration-300"
-          onClick={onClose}
-          aria-hidden="true"
-        />
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex" role="dialog" aria-modal="true" aria-label="Main Navigation">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity duration-300"
+            onClick={onClose}
+            aria-hidden="true"
+          />
 
-        {/* Drawer Panel */}
-        <aside
-          id="navigation-drawer"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Main Navigation"
-          className={`fixed inset-y-0 left-0 z-50 w-[290px] sm:w-[320px] max-w-[85vw] bg-white text-[#111111] h-full shadow-2xl flex flex-col justify-between border-r border-[#E5E7EB] transition-transform duration-300 ease-out transform ${
-            isOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
-        >
-          {/* Top Section */}
-          <div className="flex-1 overflow-y-auto flex flex-col">
-            {/* Drawer Header */}
-            <div className="p-4 sm:p-5 border-b border-[#E5E7EB] flex items-center justify-between bg-white shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <img
-                  src="/logo.png"
-                  alt="GO GRAND"
-                  className="h-10 w-10 object-contain rounded-lg shrink-0 border border-[#E5E7EB]"
-                />
-                <div className="flex flex-col justify-center min-w-0">
-                  <span className="font-black text-sm tracking-tight text-[#111111] uppercase truncate leading-none">
-                    GO GRAND
-                  </span>
-                  <span className="text-[10px] font-semibold text-[#6B7280] tracking-wider uppercase leading-none mt-1 truncate">
+          {/* Drawer Panel */}
+          <aside
+            id="navigation-drawer"
+            className="relative z-10 w-4/5 max-w-xs bg-white text-[#111111] h-full shadow-2xl flex flex-col justify-between border-r border-[#E5E5E5] transition-transform duration-300 ease-out animate-slide-in-left"
+          >
+            <div className="flex-1 overflow-y-auto">
+              {/* Header */}
+              <div className="p-4 border-b border-[#E5E5E5] flex items-center justify-between bg-white">
+                <div>
+                  <img src="/logo.png" alt="GO GRAND" className="h-8 object-contain rounded-md mb-0.5" />
+                  <p className="text-[10px] font-black text-[#111111] uppercase tracking-wider">
                     CAR WASH & DETAILING
-                  </span>
-                  <span className="text-[9px] font-bold text-[#9CA3AF] tracking-wide uppercase mt-1">
+                  </p>
+                  <p className="text-[10px] font-bold text-[#666666] tracking-wider uppercase mt-0.5">
                     {mode === 'owner'
-                      ? 'Owner Mode'
+                      ? 'Owner Menu'
                       : currentStaff?.staff_name
-                      ? `Staff: ${currentStaff.staff_name}`
-                      : 'Staff Mode'}
-                  </span>
+                      ? `STAFF: ${currentStaff.staff_name.toUpperCase()}`
+                      : 'Staff Menu'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <ThemeToggle />
+                  <button
+                    onClick={onClose}
+                    className="p-2 rounded-lg text-[#111111] hover:bg-[#F7F7F7] active:bg-[#E5E5E5] min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors cursor-pointer"
+                    aria-label="Close menu"
+                  >
+                    <X size={20} />
+                  </button>
                 </div>
               </div>
 
-              <button
-                onClick={onClose}
-                className="p-2 rounded-xl text-[#6B7280] hover:text-[#111111] hover:bg-[#F3F4F6] min-w-[36px] min-h-[36px] flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                aria-label="Close navigation"
-              >
-                <X size={20} />
-              </button>
+              {/* Button List */}
+              <div className="p-4 space-y-2">
+                {currentItems.map((item) => {
+                  const isActive =
+                    item.path &&
+                    (location.pathname === item.path ||
+                      (item.path === '/staff' && location.pathname === '/staff/job') ||
+                      (item.path === '/owner' && location.pathname === '/owner/job'));
+                  const isWhatsApp = item.action === 'whatsapp';
+                  const isUpi = item.action === 'upi';
+                  const isManageStaff = item.path === '/owner/staff';
+
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() => handleClick(item)}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`w-full min-h-[48px] px-4 rounded-xl text-sm font-bold tracking-wide uppercase transition-colors text-left flex items-center justify-between border cursor-pointer ${
+                        isUpi
+                          ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                          : isWhatsApp
+                          ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
+                          : isActive
+                          ? 'bg-[#111111] text-white border-[#111111] shadow-xs'
+                          : 'bg-white text-[#111111] border-[#E5E5E5] hover:bg-[#F7F7F7] active:bg-[#E5E5E5]'
+                      }`}
+                    >
+                      <span className="flex items-center space-x-2.5">
+                        {isUpi && <CreditCard className="w-4 h-4 text-amber-600 shrink-0" />}
+                        {isWhatsApp && <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />}
+                        {isManageStaff && <Users className="w-4 h-4 text-[#111111] shrink-0" />}
+                        <span>{item.label}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Navigation List */}
-            <nav className="p-3 sm:p-4 space-y-1.5 flex-1" aria-label="Main Menu">
-              {currentItems.map((item) => {
-                const active = isPathActive(item.path);
-                const IconComponent = item.icon;
-
-                return (
-                  <button
-                    key={item.label}
-                    onClick={() => handleClick(item)}
-                    aria-current={active ? 'page' : undefined}
-                    className={`w-full min-h-[46px] px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold tracking-wide transition-colors text-left flex items-center justify-between border cursor-pointer ${
-                      active
-                        ? 'bg-[#FFF4CC] text-[#111111] border-[#FDE047] font-extrabold shadow-2xs'
-                        : 'bg-white text-[#111111] border-transparent hover:bg-[#F9FAFB] hover:border-[#E5E7EB]'
-                    }`}
-                  >
-                    <span className="flex items-center gap-3 min-w-0 truncate">
-                      <IconComponent
-                        size={18}
-                        className={`shrink-0 ${
-                          active ? 'text-[#D97706]' : 'text-[#6B7280]'
-                        }`}
-                      />
-                      <span className="truncate">{item.label}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          {/* Drawer Footer & Logout */}
-          <div className="p-3 sm:p-4 border-t border-[#E5E7EB] bg-[#FAFAFA] shrink-0 space-y-2">
-            <button
-              onClick={() => handleClick({ label: 'Logout', action: 'logout', icon: LogOut })}
-              className="w-full min-h-[44px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold tracking-wide transition-colors text-left flex items-center gap-3 border border-[#E5E7EB] bg-white text-[#EF4444] hover:bg-[#FEF2F2] hover:border-[#FCA5A5] cursor-pointer"
-            >
-              <LogOut size={18} className="shrink-0 text-[#EF4444]" />
-              <span>Logout</span>
-            </button>
-            <div className="text-center pt-1">
-              <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">
-                GO GRAND Car Wash & Detailing
-              </p>
+            {/* Footer */}
+            <div className="p-3.5 border-t border-[#E5E5E5] bg-[#F7F7F7] text-center shrink-0">
+              <p className="text-xs font-extrabold text-[#111111] uppercase tracking-wider">GO GRAND</p>
+              <p className="text-[10px] font-semibold text-[#666666] uppercase">Car Wash & Detailing</p>
             </div>
-          </div>
-        </aside>
-      </div>
+          </aside>
+        </div>
+      )}
 
       {/* UPI Payment Settings Modal */}
       <UpiSettingsModal
@@ -248,3 +213,4 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     </>
   );
 };
+

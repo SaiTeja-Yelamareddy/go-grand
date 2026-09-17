@@ -41,9 +41,10 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
   const fetchStatus = async () => {
     setIsLoading(true);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     try {
+      console.log(`[WHATSAPP HEALTH] GET ${activeBackendUrl}/api/whatsapp/status`);
       const res = await fetch(`${activeBackendUrl}/api/whatsapp/status`, {
         method: 'GET',
         signal: controller.signal,
@@ -67,7 +68,8 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
       } else {
         setServerOnline(false);
       }
-    } catch {
+    } catch (err) {
+      console.warn('[WHATSAPP HEALTH] Check failed or timed out:', err);
       setServerOnline(false);
     } finally {
       setIsLoading(false);
@@ -77,6 +79,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
   const handleManualConnect = async () => {
     setIsLoading(true);
     try {
+      console.log(`[WHATSAPP HEALTH] POST ${activeBackendUrl}/api/whatsapp/connect`);
       const res = await fetch(`${activeBackendUrl}/api/whatsapp/connect`, {
         method: 'POST',
       });
@@ -101,26 +104,36 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
   useEffect(() => {
     if (!isOpen) return;
 
-    setCustomBackendUrl(localStorage.getItem('go-grand-whatsapp-server-url') || '');
+    // Sanitize any legacy stored value
+    const stored = localStorage.getItem('go-grand-whatsapp-server-url') || '';
+    if (stored === 'https://go-grand-whatsapp.onrender.com' || stored === 'http://localhost:5000') {
+      localStorage.removeItem('go-grand-whatsapp-server-url');
+      setCustomBackendUrl('');
+    } else {
+      setCustomBackendUrl(stored);
+    }
+
     let socket: Socket | null = null;
 
     fetchStatus();
 
     try {
+      console.log(`[WHATSAPP SOCKET] Connecting to ${activeBackendUrl}`);
       socket = io(activeBackendUrl, {
         reconnectionAttempts: 5,
         reconnectionDelay: 3000,
-        timeout: 8000,
+        timeout: 12000,
         transports: ['websocket', 'polling'],
       });
 
       socket.on('connect', () => {
+        console.log('[WHATSAPP SOCKET] Connected');
         setServerOnline(true);
         socket?.emit('request_qr');
       });
 
       socket.on('disconnect', () => {
-        // Socket disconnected
+        console.log('[WHATSAPP SOCKET] Disconnected');
       });
 
       socket.on('qr', (data: { qrCode: string }) => {
@@ -161,7 +174,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
 
   const handleSaveCustomServer = (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = customBackendUrl.trim();
+    const clean = customBackendUrl.trim().replace(/\/+$/, '');
     if (clean) {
       localStorage.setItem('go-grand-whatsapp-server-url', clean);
     } else {
@@ -350,7 +363,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
                   type="url"
                   value={customBackendUrl}
                   onChange={(e) => setCustomBackendUrl(e.target.value)}
-                  placeholder="https://go-grand-whatsapp.onrender.com"
+                  placeholder="https://go-grand.onrender.com"
                   className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono placeholder:font-sans focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
                 <button

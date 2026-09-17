@@ -137,6 +137,7 @@ export function openWhatsAppDirect(record: JobRecord) {
 export async function sendWhatsAppBillViaBackend(record: JobRecord): Promise<{ success: boolean; method: 'backend'; error?: string }> {
   const backendUrl = getWhatsAppBackendUrl();
   try {
+    console.log(`[WHATSAPP HEALTH] GET ${backendUrl}/api/whatsapp/status`);
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
     
     if (statusRes && statusRes.ok) {
@@ -198,6 +199,7 @@ export async function sendWhatsAppBillViaBackend(record: JobRecord): Promise<{ s
 export async function sendWhatsAppMessageViaBackend(phoneNumber: string, message: string): Promise<{ success: boolean; method: 'backend'; error?: string }> {
   const backendUrl = getWhatsAppBackendUrl();
   try {
+    console.log(`[WHATSAPP HEALTH] GET ${backendUrl}/api/whatsapp/status`);
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
     if (statusRes && statusRes.ok) {
       const statusData = await statusRes.json();
@@ -263,6 +265,7 @@ export function formatVehicleReadyMessage(
 export async function sendVehicleReadyWhatsAppViaBackend(record: JobRecord): Promise<{ success: boolean; method: 'backend'; error?: string }> {
   const backendUrl = getWhatsAppBackendUrl();
   try {
+    console.log(`[WHATSAPP HEALTH] GET ${backendUrl}/api/whatsapp/status`);
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
     if (statusRes && statusRes.ok) {
       const statusData = await statusRes.json();

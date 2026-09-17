@@ -7,7 +7,6 @@ import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend } from '../utils/invoiceUtils';
-import { ThemeToggle } from './ThemeToggle';
 import { getCurrentStaff } from '../config/authConfig';
 
 interface TodaysVehiclesProps {
@@ -138,7 +137,6 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <ThemeToggle />
           <div className="px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wide border uppercase bg-slate-100 dark:bg-[#141414] text-slate-800 dark:text-neutral-200 border-slate-200 dark:border-[#222222]">
             {mode === 'owner'
               ? 'Owner Mode'

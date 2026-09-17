@@ -12,7 +12,6 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { NavigationDrawer } from '../components/NavigationDrawer';
-import { ThemeToggle } from '../components/ThemeToggle';
 import {
   getStaffProfiles,
   addStaffProfile,
@@ -181,7 +180,6 @@ export const OwnerStaff: React.FC<OwnerStaffProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <ThemeToggle />
           <div className="px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide border uppercase bg-slate-100 dark:bg-[#141414] text-slate-800 dark:text-neutral-200 border-slate-200 dark:border-[#222222]">
             Owner Mode
           </div>

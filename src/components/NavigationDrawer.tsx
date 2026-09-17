@@ -121,17 +121,17 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
           {/* Drawer Panel */}
           <aside
             id="navigation-drawer"
-            className="relative z-10 w-4/5 max-w-xs bg-white text-[#111111] h-full shadow-2xl flex flex-col justify-between border-r border-[#E5E5E5] transition-transform duration-300 ease-out animate-slide-in-left"
+            className="relative z-10 w-4/5 max-w-xs bg-white dark:bg-[#0A0A0A] text-[#111111] dark:text-white h-full shadow-2xl flex flex-col justify-between border-r border-[#E5E5E5] dark:border-[#1F1F1F] transition-all duration-300 ease-out animate-slide-in-left"
           >
             <div className="flex-1 overflow-y-auto">
               {/* Header */}
-              <div className="p-4 border-b border-[#E5E5E5] flex items-center justify-between bg-white">
+              <div className="p-4 border-b border-[#E5E5E5] dark:border-[#1F1F1F] flex items-center justify-between bg-white dark:bg-[#0A0A0A]">
                 <div>
                   <img src="/logo.png" alt="GO GRAND" className="h-8 object-contain rounded-md mb-0.5" />
-                  <p className="text-[10px] font-black text-[#111111] uppercase tracking-wider">
+                  <p className="text-[10px] font-black text-[#111111] dark:text-white uppercase tracking-wider">
                     CAR WASH & DETAILING
                   </p>
-                  <p className="text-[10px] font-bold text-[#666666] tracking-wider uppercase mt-0.5">
+                  <p className="text-[10px] font-bold text-[#666666] dark:text-neutral-400 tracking-wider uppercase mt-0.5">
                     {mode === 'owner'
                       ? 'Owner Menu'
                       : currentStaff?.staff_name
@@ -143,7 +143,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                   <ThemeToggle />
                   <button
                     onClick={onClose}
-                    className="p-2 rounded-lg text-[#111111] hover:bg-[#F7F7F7] active:bg-[#E5E5E5] min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors cursor-pointer"
+                    className="p-2 rounded-lg text-[#111111] dark:text-white hover:bg-[#F7F7F7] dark:hover:bg-[#1A1A1A] active:bg-[#E5E5E5] dark:active:bg-[#222222] min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors cursor-pointer"
                     aria-label="Close menu"
                   >
                     <X size={20} />
@@ -170,18 +170,18 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                       aria-current={isActive ? 'page' : undefined}
                       className={`w-full min-h-[48px] px-4 rounded-xl text-sm font-bold tracking-wide uppercase transition-colors text-left flex items-center justify-between border cursor-pointer ${
                         isUpi
-                          ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 hover:bg-amber-100 dark:hover:bg-amber-900/50'
                           : isWhatsApp
-                          ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
                           : isActive
-                          ? 'bg-[#111111] text-white border-[#111111] shadow-xs'
-                          : 'bg-white text-[#111111] border-[#E5E5E5] hover:bg-[#F7F7F7] active:bg-[#E5E5E5]'
+                          ? 'bg-[#111111] dark:bg-white text-white dark:text-black border-[#111111] dark:border-white shadow-xs'
+                          : 'bg-white dark:bg-[#121212] text-[#111111] dark:text-neutral-200 border-[#E5E5E5] dark:border-[#262626] hover:bg-[#F7F7F7] dark:hover:bg-[#1A1A1A] active:bg-[#E5E5E5] dark:active:bg-[#222222]'
                       }`}
                     >
                       <span className="flex items-center space-x-2.5">
-                        {isUpi && <CreditCard className="w-4 h-4 text-amber-600 shrink-0" />}
-                        {isWhatsApp && <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />}
-                        {isManageStaff && <Users className="w-4 h-4 text-[#111111] shrink-0" />}
+                        {isUpi && <CreditCard className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />}
+                        {isWhatsApp && <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+                        {isManageStaff && <Users className="w-4 h-4 text-current shrink-0" />}
                         <span>{item.label}</span>
                       </span>
                     </button>
@@ -191,9 +191,9 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="p-3.5 border-t border-[#E5E5E5] bg-[#F7F7F7] text-center shrink-0">
-              <p className="text-xs font-extrabold text-[#111111] uppercase tracking-wider">GO GRAND</p>
-              <p className="text-[10px] font-semibold text-[#666666] uppercase">Car Wash & Detailing</p>
+            <div className="p-3.5 border-t border-[#E5E5E5] dark:border-[#1F1F1F] bg-[#F7F7F7] dark:bg-[#050505] text-center shrink-0">
+              <p className="text-xs font-extrabold text-[#111111] dark:text-white uppercase tracking-wider">GO GRAND</p>
+              <p className="text-[10px] font-semibold text-[#666666] dark:text-neutral-400 uppercase">Car Wash & Detailing</p>
             </div>
           </aside>
         </div>

@@ -368,14 +368,14 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#111111] hover:bg-neutral-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shrink-0"
+                  className="px-4 py-2 bg-[#111111] hover:bg-neutral-800 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black font-bold text-xs rounded-xl transition-colors cursor-pointer shrink-0"
                 >
                   Save URL
                 </button>
               </form>
               {urlSaveSuccess && (
-                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center gap-1.5 border border-emerald-200">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5 border border-emerald-200 dark:border-emerald-800/60">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>Backend URL updated! Reconnecting...</span>
                 </div>
               )}

@@ -187,13 +187,14 @@ export async function addStaffProfile(data: {
   const updated = [...current, newStaff];
   saveLocalStaffProfiles(updated);
 
-  // 2. Synchronize to Supabase if available
+  // 2. Synchronize to Supabase Cloud DB so any device/phone can authenticate
   if (isSupabaseConfigured() && supabase) {
     try {
       const { data: inserted, error } = await supabase
         .from('staff_profiles')
         .insert([
           {
+            id: newStaff.id,
             staff_name: newStaff.staff_name,
             phone_number: newStaff.phone_number,
             password_hash: newStaff.password_hash,
@@ -204,18 +205,24 @@ export async function addStaffProfile(data: {
         .select()
         .single();
 
-      if (!error && inserted) {
+      if (error) {
+        console.error('❌ Supabase staff insert error:', error.message);
+        if (error.code === '23505') {
+          throw new Error('A staff member with this phone number already exists in the cloud database.');
+        }
+      } else if (inserted) {
         newStaff.id = inserted.id;
         // Update local with the real Supabase ID
         const finalCurrent = getLocalStaffProfiles().map((s) =>
           s.phone_number === cleanPhone ? { ...s, id: inserted.id } : s
         );
         saveLocalStaffProfiles(finalCurrent);
-      } else if (error) {
-        console.warn('Supabase insert warning:', error.message);
       }
-    } catch (err) {
-      console.warn('Supabase insert exception, saved locally:', err);
+    } catch (err: any) {
+      if (err?.message?.includes('already exists')) {
+        throw err;
+      }
+      console.warn('Supabase insert warning:', err);
     }
   }
 
@@ -303,7 +310,7 @@ export async function deleteStaffProfile(id: string): Promise<boolean> {
   return true;
 }
 
-// Authenticate staff member
+// Authenticate staff member across ANY phone / device via Cloud DB
 export async function authenticateStaff(
   phoneOrUsername: string,
   plainPassword: string
@@ -313,21 +320,58 @@ export async function authenticateStaff(
   const trimmedInput = rawInput.toLowerCase();
   const hashedPassword = await hashPassword(plainPassword);
 
-  // 1. Check Supabase if configured
+  // 1. Direct Cloud DB authentication (guarantees cross-phone access)
   if (isSupabaseConfigured() && supabase) {
     try {
+      const conditions: string[] = [
+        `phone_number.ilike.%${trimmedInput}%`,
+        `staff_name.ilike.%${trimmedInput}%`,
+      ];
+      if (cleanDigits && cleanDigits.length >= 4) {
+        conditions.push(`phone_number.ilike.%${cleanDigits}%`);
+      }
+
       const { data, error } = await supabase
         .from('staff_profiles')
         .select('*')
-        .or(`phone_number.ilike.${trimmedInput},staff_name.ilike.${trimmedInput}`)
-        .limit(1);
+        .or(conditions.join(','))
+        .limit(10);
 
       if (!error && Array.isArray(data) && data.length > 0) {
-        const staff = data[0] as StaffProfile;
+        // Find best match among returned rows
+        const matched = data.find((row: any) => {
+          const rPhone = String(row.phone_number || '').toLowerCase().trim();
+          const rDigits = rPhone.replace(/\D/g, '');
+          const rName = String(row.staff_name || '').toLowerCase().trim();
+          return (
+            rPhone === trimmedInput ||
+            rName === trimmedInput ||
+            (cleanDigits && rDigits && rDigits === cleanDigits) ||
+            (cleanDigits.length === 10 && rDigits.endsWith(cleanDigits))
+          );
+        }) || data[0];
+
+        const staff: StaffProfile = {
+          id: String(matched.id || ''),
+          user_id: matched.user_id,
+          staff_name: String(matched.staff_name || ''),
+          phone_number: String(matched.phone_number || ''),
+          password_hash: String(matched.password_hash || ''),
+          role: matched.role || 'STAFF',
+          active: matched.active !== undefined ? Boolean(matched.active) : true,
+          created_at: matched.created_at || new Date().toISOString(),
+          updated_at: matched.updated_at || new Date().toISOString(),
+        };
+
         if (!staff.active) {
           return { success: false, error: 'Your staff account has been disabled. Please contact the Owner.' };
         }
         if (staff.password_hash === hashedPassword) {
+          // Cache verified profile locally on this phone
+          const localList = getLocalStaffProfiles();
+          if (!localList.some((s) => s.id === staff.id)) {
+            saveLocalStaffProfiles([...localList, staff]);
+          }
           return { success: true, staff };
         } else {
           return { success: false, error: 'Incorrect Password. Please check your credentials.' };
@@ -338,7 +382,7 @@ export async function authenticateStaff(
     }
   }
 
-  // 2. Local storage authentication
+  // 2. Local storage authentication (offline fallback)
   const allStaff = getLocalStaffProfiles();
   const found = allStaff.find((s) => {
     const sPhone = s.phone_number.toLowerCase().trim();
@@ -354,7 +398,7 @@ export async function authenticateStaff(
   });
 
   if (!found) {
-    return { success: false, error: 'Staff account not found. Please verify your phone/username.' };
+    return { success: false, error: 'Staff account not found. Please verify your phone number / username.' };
   }
 
   if (!found.active) {

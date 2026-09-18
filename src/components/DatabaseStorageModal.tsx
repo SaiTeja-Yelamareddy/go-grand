@@ -54,9 +54,11 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
   const [error, setError] = useState<string | null>(null);
   const [jobsCount, setJobsCount] = useState<number | null>(null);
   const [jobsCountLoading, setJobsCountLoading] = useState<boolean>(false);
+  const [jobsCountError, setJobsCountError] = useState<boolean>(false);
 
   const fetchJobsCount = async () => {
     setJobsCountLoading(true);
+    setJobsCountError(false);
     try {
       if (!isSupabaseConfigured()) {
         throw new Error('Supabase database connection is not configured.');
@@ -70,11 +72,15 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
         throw jobsError;
       }
 
-      setJobsCount(count ?? 0);
+      if (count === null) {
+        throw new Error('Supabase did not return an exact jobs count.');
+      }
+
+      setJobsCount(count);
     } catch (err: any) {
       console.warn('Live jobs count fetch error:', err.message);
       setJobsCount(null);
-      setError('Live jobs count is currently unavailable.');
+      setJobsCountError(true);
     } finally {
       setJobsCountLoading(false);
     }
@@ -267,7 +273,7 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
               <div className="p-3 rounded-xl border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#181818]">
                 <p className="text-[11px] font-bold text-[#666666] dark:text-neutral-400 uppercase">Jobs / Visits</p>
                 <p className="text-lg font-black text-[#111111] dark:text-white">
-                  {jobsCountLoading ? 'Loading...' : jobsCount === null ? 'Unavailable' : `${jobsCount.toLocaleString()} ${jobsCount === 1 ? 'record' : 'records'}`}
+                  {jobsCountLoading ? 'Loading...' : jobsCountError || jobsCount === null ? 'Unable to load record count' : `${jobsCount.toLocaleString()} ${jobsCount === 1 ? 'record' : 'records'}`}
                 </p>
               </div>
               <div className="p-3 rounded-xl border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#181818]">

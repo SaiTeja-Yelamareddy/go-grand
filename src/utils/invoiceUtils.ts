@@ -133,6 +133,7 @@ export async function sendWhatsAppBillViaBackend(record: JobRecord): Promise<{ s
 
       const fullTextMessage = formatWhatsAppBillText(record);
       const pdfCaptionMessage = formatWhatsAppPdfCaption(record);
+      const idempotencyKey = record.id ? `bill_${record.id}` : undefined;
       
       // Try sending PDF invoice document with clean short caption
       const pdfSendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice-pdf`, {
@@ -142,6 +143,7 @@ export async function sendWhatsAppBillViaBackend(record: JobRecord): Promise<{ s
           job: record,
           phoneNumber: record.phoneNumber,
           textMessage: pdfCaptionMessage,
+          idempotencyKey,
         }),
       });
 
@@ -159,6 +161,7 @@ export async function sendWhatsAppBillViaBackend(record: JobRecord): Promise<{ s
         body: JSON.stringify({
           phoneNumber: record.phoneNumber,
           message: fullTextMessage,
+          idempotencyKey,
         }),
       });
 
@@ -177,7 +180,7 @@ export async function sendWhatsAppBillViaBackend(record: JobRecord): Promise<{ s
   return { success: false, method: 'backend', error: 'WhatsApp server is offline or unreachable' };
 }
 
-export async function sendWhatsAppMessageViaBackend(phoneNumber: string, message: string): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+export async function sendWhatsAppMessageViaBackend(phoneNumber: string, message: string, idempotencyKey?: string): Promise<{ success: boolean; method: 'backend'; error?: string }> {
   const backendUrl = getWhatsAppBackendUrl();
   try {
     console.log(`[WHATSAPP HEALTH] GET ${backendUrl}/api/whatsapp/status`);
@@ -198,6 +201,7 @@ export async function sendWhatsAppMessageViaBackend(phoneNumber: string, message
         body: JSON.stringify({
           phoneNumber,
           message,
+          idempotencyKey,
         }),
       });
       if (sendRes.ok) {
@@ -270,6 +274,8 @@ export async function sendVehicleReadyWhatsAppViaBackend(record: JobRecord): Pro
         billNo
       );
 
+      const idempotencyKey = record.id ? `ready_${record.id}` : undefined;
+
       // Call dedicated Vehicle Ready endpoint with UPI QR image generation
       const sendRes = await fetch(`${backendUrl}/api/whatsapp/send-vehicle-ready-qr`, {
         method: 'POST',
@@ -279,6 +285,7 @@ export async function sendVehicleReadyWhatsAppViaBackend(record: JobRecord): Pro
           phoneNumber: record.phoneNumber,
           upiId: upiId,
           textMessage: msg,
+          idempotencyKey,
         }),
       });
 
@@ -335,5 +342,6 @@ export async function sendVehicleReceivedWhatsAppViaBackend(record: JobRecord): 
     finalAmount,
     billNo
   );
-  return sendWhatsAppMessageViaBackend(record.phoneNumber, msg);
+  const idempotencyKey = record.id ? `recv_${record.id}` : undefined;
+  return sendWhatsAppMessageViaBackend(record.phoneNumber, msg, idempotencyKey);
 }

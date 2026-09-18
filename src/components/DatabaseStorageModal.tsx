@@ -87,8 +87,8 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
         projection5Years: {
           assumedJobsPerDay: 20,
           projectedTotalJobs: 36500,
-          projectedSizeMb: 58.52,
-          projectedPercentage: 11.7,
+          projectedSizeMb: 28.65,
+          projectedPercentage: 5.73,
           fitsInFreeTier: true,
         },
       });

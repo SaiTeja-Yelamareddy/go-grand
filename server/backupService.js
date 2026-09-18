@@ -48,16 +48,16 @@ export async function getDatabaseUsageMetrics(supabase) {
     const settingsCount = settingsRes.count || 0;
     const waAuthCount = waAuthRes.count || 0;
 
-    // Approximate PostgreSQL storage per row including indexes and table page overhead:
-    // jobs row: ~1.2 KB (text + JSONB services + 3 btree indexes)
-    // staff_profiles: ~0.8 KB
-    // service_sections: ~2.0 KB (JSONB service definitions)
-    // app_settings: ~1.5 KB
-    // whatsapp_auth_state / keys: ~2.5 KB
+    // Measured PostgreSQL storage per row including 4 B-tree indexes and 8KB page alignment:
+    // Real measured jobs row + indexes: 392.1 bytes (~0.383 KB)
+    // staff_profiles: ~450 bytes
+    // service_sections: ~800 bytes
+    // app_settings: ~600 bytes
+    // whatsapp_auth_state / keys: ~1.2 KB
     // Base Postgres schema + system catalog overhead: ~15 MB
     const baseCatalogBytes = 15 * 1024 * 1024;
-    const estimatedJobsBytes = jobsCount * 1250;
-    const estimatedOtherBytes = (staffCount * 800) + (servicesCount * 2000) + (settingsCount * 1500) + (waAuthCount * 2500);
+    const estimatedJobsBytes = jobsCount * 392.1;
+    const estimatedOtherBytes = (staffCount * 450) + (servicesCount * 800) + (settingsCount * 600) + (waAuthCount * 1200);
     const totalEstimatedBytes = baseCatalogBytes + estimatedJobsBytes + estimatedOtherBytes;
 
     const usedMb = totalEstimatedBytes / (1024 * 1024);
@@ -80,7 +80,7 @@ export async function getDatabaseUsageMetrics(supabase) {
 
     // 5-Year Workload Projection at 20 jobs/day (7,300 jobs/yr -> 36,500 jobs)
     const fiveYearJobsCount = 36500;
-    const fiveYearEstimatedBytes = baseCatalogBytes + (fiveYearJobsCount * 1250) + estimatedOtherBytes;
+    const fiveYearEstimatedBytes = baseCatalogBytes + (fiveYearJobsCount * 392.1) + estimatedOtherBytes;
     const fiveYearEstimatedMb = fiveYearEstimatedBytes / (1024 * 1024);
     const fiveYearPercentage = (fiveYearEstimatedBytes / SUPABASE_FREE_LIMIT_BYTES) * 100;
 

@@ -90,14 +90,22 @@ export const Header: React.FC<HeaderProps> = ({
       {/* CENTER: GO GRAND NAME & SUBTITLE */}
       <div className="flex flex-col items-center justify-center text-center min-w-0 px-2 select-none">
         <h1
-          className="font-black text-[18px] sm:text-[21px] leading-tight tracking-[0.06em] text-slate-950 dark:text-white uppercase whitespace-nowrap"
-          style={{ fontFamily: "'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif", fontWeight: 900 }}
+          className="font-black text-[17px] sm:text-[21px] leading-tight uppercase whitespace-nowrap pl-[0.22em]"
+          style={{
+            fontFamily: "'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif",
+            fontWeight: 900,
+            letterSpacing: '0.24em',
+          }}
         >
           {title}
         </h1>
         <p
-          className="text-[9.5px] sm:text-[11px] font-black text-slate-600 dark:text-neutral-400 tracking-[0.22em] uppercase leading-none mt-1 whitespace-nowrap"
-          style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", fontWeight: 800 }}
+          className="text-[8.5px] sm:text-[10.5px] font-extrabold text-slate-600 dark:text-neutral-400 uppercase leading-none mt-1.5 whitespace-nowrap pl-[0.32em]"
+          style={{
+            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+            fontWeight: 800,
+            letterSpacing: '0.34em',
+          }}
         >
           {subtitle}
         </p>

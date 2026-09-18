@@ -44,7 +44,7 @@ const SmsIcon: React.FC<{ className?: string }> = ({ className = 'w-[22px] h-[22
     <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h10v2H7zm0-3h10v2H7z" />
   </svg>
 );
-import { getServiceSections } from '../utils/serviceStorage';
+import { getServiceSections, syncServiceSectionsFromSupabase, type ServiceSection } from '../utils/serviceStorage';
 import { getCurrentStaff } from '../config/authConfig';
 
 interface JobSheetProps {
@@ -127,11 +127,15 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [currentInvoiceRecord, setCurrentInvoiceRecord] = useState<JobRecord | null>(null);
 
-  // Load ONLY the service sections & services created/managed in Add / Update Services
-  const [sections, setSections] = useState(() => getServiceSections());
+  // Load ONLY the service sections & services created/managed in Add / Update Services from Supabase
+  const [sections, setSections] = useState<ServiceSection[]>(() => getServiceSections());
 
   useEffect(() => {
-    setSections(getServiceSections());
+    syncServiceSectionsFromSupabase()
+      .then((data) => {
+        setSections(data);
+      })
+      .catch(() => {});
   }, [showDropdownPicker]);
 
   const availableServices = useMemo(() => {
@@ -860,31 +864,33 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               )}
             </div>
 
-            {/* Quick Service Chips (Fast Selection) */}
-            <div className="space-y-1.5">
-              <span className="block text-[11px] font-bold text-slate-700 dark:text-neutral-300">
-                Quick Service Chips:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {['Full Foam Wash', 'Interior Deep Clean', 'Engine Bay Cleaning', 'Wax Polish', 'Underbody Wash'].map((quickName) => {
-                  const isSelected = formData.selectedServices.includes(quickName);
-                  return (
-                    <button
-                      key={quickName}
-                      type="button"
-                      onClick={() => handleToggleService(quickName)}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-amber-400 text-slate-950 border-amber-500 font-black shadow-xs'
-                          : 'bg-slate-100 dark:bg-[#141414] text-slate-800 dark:text-neutral-200 hover:bg-slate-200 dark:hover:bg-neutral-800 border-slate-300 dark:border-neutral-800 font-bold'
-                      }`}
-                    >
-                      {isSelected ? `✓ ${quickName}` : `+ ${quickName}`}
-                    </button>
-                  );
-                })}
+            {/* Quick Service Chips (Fast Selection from Supabase) */}
+            {availableServices.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="block text-[11px] font-bold text-slate-700 dark:text-neutral-300">
+                  Quick Service Chips:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {availableServices.map((quickName) => {
+                    const isSelected = formData.selectedServices.includes(quickName);
+                    return (
+                      <button
+                        key={quickName}
+                        type="button"
+                        onClick={() => handleToggleService(quickName)}
+                        className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-amber-400 text-slate-950 border-amber-500 font-black shadow-xs'
+                            : 'bg-slate-100 dark:bg-[#141414] text-slate-800 dark:text-neutral-200 hover:bg-slate-200 dark:hover:bg-neutral-800 border-slate-300 dark:border-neutral-800 font-bold'
+                        }`}
+                      >
+                        {isSelected ? `✓ ${quickName}` : `+ ${quickName}`}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Selected Service Pills */}
             {formData.selectedServices.length > 0 && (

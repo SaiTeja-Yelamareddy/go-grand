@@ -21,26 +21,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ record, onClose }) =
   const grandTotal = Math.max(0, priceNum - discountNum);
   const amountInWords = numberToWordsRupees(grandTotal);
 
-  let servicesText = 'SUV / MUV CAR FULL WASH';
-  let bulletPoints = [
-    'Foam Wash',
-    'Hydraulic Lift',
-    'Dashboard Polishing',
-    'Vacuum Clean',
-    'Mat Clean',
-    '2 Mat Papers',
-  ];
-
+  let servicesList: string[] = [];
   if (Array.isArray(record.services) && record.services.length > 0) {
-    servicesText = record.services[0];
-    if (record.services.length > 1) {
-      bulletPoints = record.services;
-    }
+    servicesList = record.services;
   } else if (typeof record.services === 'string' && record.services.trim()) {
-    servicesText = record.services;
+    servicesList = [record.services.trim()];
   } else if (record.service) {
-    servicesText = record.service;
+    servicesList = [record.service];
   }
+  const servicesText = servicesList.length > 0 ? servicesList.join(', ') : 'Car Wash & Detailing';
 
   const handlePrint = () => {
     window.print();
@@ -198,12 +187,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ record, onClose }) =
                   <td className="py-2.5 px-2 text-center">Rs. {priceNum.toFixed(2)}</td>
                   <td className="py-2.5 px-2 text-center">1</td>
                   <td className="py-2.5 pl-2 text-right font-bold">Rs. {priceNum.toFixed(2)}</td>
-                </tr>
-                {/* SUB-BULLETS */}
-                <tr>
-                  <td colSpan={4} className="py-1.5 text-[11px] text-[#555555]">
-                    {bulletPoints.join(' • ')}
-                  </td>
                 </tr>
               </tbody>
             </table>

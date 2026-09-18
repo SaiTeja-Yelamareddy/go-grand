@@ -415,7 +415,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const targetTodayPath = mode === 'owner' ? '/owner/today' : '/staff/today';
 
   return (
-    <div className="w-full min-h-0 h-auto bg-slate-100 dark:bg-black text-slate-900 dark:text-white flex flex-col transition-colors">
+    <div className="w-full min-h-screen bg-[#F8FAFC] dark:bg-black text-slate-900 dark:text-white flex flex-col transition-colors">
       {/* HEADER */}
       <Header
         mode={mode}
@@ -432,20 +432,20 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       />
 
       {/* MAIN JOB SHEET FORM - RESPONSIVE NATURAL VERTICAL SCROLL */}
-      <main className="flex-1 px-3.5 py-3 sm:px-6 sm:py-5 max-w-lg mx-auto w-full pb-8 space-y-4">
+      <main className="flex-1 px-3.5 py-3 sm:px-6 sm:py-4 max-w-lg mx-auto w-full pb-8 space-y-3.5">
         {/* PAGE TITLE & STATUS HEADER */}
-        <section className="flex items-center justify-between gap-2 flex-wrap">
+        <section className="flex items-center justify-between gap-3 pt-0.5 pb-0.5">
           <div className="flex items-center gap-2 min-w-0">
             {isEditing && (
               <button
                 onClick={() => navigate(targetTodayPath)}
-                className="p-1 rounded-lg text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-neutral-900 flex items-center justify-center cursor-pointer"
+                className="p-1 rounded-lg text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-neutral-900 flex items-center justify-center cursor-pointer transition-colors"
                 aria-label="Back to today's vehicles"
               >
                 <ArrowLeft size={18} />
               </button>
             )}
-            <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900 dark:text-white">
+            <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900 dark:text-white leading-none">
               {isEditing ? 'Edit Vehicle Job' : "Today's Job Sheet"}
             </h2>
           </div>
@@ -455,7 +455,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <button
                 type="button"
                 onClick={handleResetForm}
-                className="text-xs font-bold text-slate-700 dark:text-neutral-200 hover:text-rose-600 dark:hover:text-rose-400 bg-white dark:bg-[#121212] border border-slate-300 dark:border-neutral-800 hover:border-rose-300 dark:hover:border-rose-800 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                className="text-xs font-bold text-slate-700 dark:text-neutral-200 hover:text-rose-600 dark:hover:text-rose-400 bg-white dark:bg-[#121212] border border-slate-300 dark:border-neutral-800 hover:border-rose-300 dark:hover:border-rose-800 px-2.5 py-1 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs leading-none"
                 title="Clear all input fields"
               >
                 <RotateCcw size={13} className="text-slate-500 dark:text-neutral-400" />
@@ -464,7 +464,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
             )}
 
             {/* MODE BADGE ON RIGHT */}
-            <div className="px-3 py-1 rounded-full text-[10.5px] sm:text-[11px] font-black uppercase tracking-wider border bg-white dark:bg-[#121212] text-slate-800 dark:text-neutral-200 border-slate-200 dark:border-neutral-800 shadow-2xs whitespace-nowrap">
+            <div className="px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wide uppercase border bg-slate-200/80 dark:bg-neutral-900 text-slate-800 dark:text-neutral-200 border-slate-300 dark:border-neutral-800 shadow-2xs leading-none select-none">
               {mode === 'owner'
                 ? 'Owner Mode'
                 : currentStaff?.staff_name

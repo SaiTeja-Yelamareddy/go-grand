@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, MoreVertical, Edit3, Trash2, Check, X, Shield, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, MoreVertical, Edit3, Trash2, Check, X, Shield } from 'lucide-react';
 import { NavigationDrawer } from '../components/NavigationDrawer';
 import { Header } from '../components/Header';
+import { useNotifications } from '../components/NotificationSystem';
 import {
   syncServiceSectionsFromSupabase,
   addServiceSection,
@@ -25,7 +26,7 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sections, setSections] = useState<ServiceSection[]>([]);
   const [loading, setLoading] = useState(false);
-  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { notify } = useNotifications();
 
   // Add Section state
   const [showAddSection, setShowAddSection] = useState(false);
@@ -45,13 +46,6 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
 
   // Three-dot active menu
   const [activeMenuKey, setActiveMenuKey] = useState<string | null>(null);
-
-  const showToast = (type: 'success' | 'error', text: string) => {
-    setToastMessage({ type, text });
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3500);
-  };
 
   const reloadSections = async () => {
     try {
@@ -78,9 +72,9 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
       setNewSectionName('');
       setShowAddSection(false);
       await reloadSections();
-      showToast('success', `Section "${name}" created successfully.`);
+      notify({ type: 'success', title: 'Section Created', message: `Section "${name}" created successfully.` });
     } catch (err: any) {
-      showToast('error', err?.message || 'Failed to create section in Supabase.');
+      notify({ type: 'error', title: 'Section Creation Failed', message: 'The section could not be created.' });
     } finally {
       setLoading(false);
     }
@@ -96,9 +90,9 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
       setEditingSectionId(null);
       setEditingSectionName('');
       await reloadSections();
-      showToast('success', 'Section name updated.');
+      notify({ type: 'success', title: 'Section Updated', message: 'Section name updated.' });
     } catch (err: any) {
-      showToast('error', err?.message || 'Failed to update section name.');
+      notify({ type: 'error', title: 'Section Update Failed', message: 'The section name could not be updated.' });
     } finally {
       setLoading(false);
     }
@@ -124,9 +118,9 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
     try {
       await deleteServiceSection(section.id);
       await reloadSections();
-      showToast('success', `Section "${section.name}" deleted.`);
+      notify({ type: 'success', title: 'Section Deleted', message: `Section "${section.name}" deleted.` });
     } catch (err: any) {
-      showToast('error', err?.message || 'Failed to delete section from Supabase.');
+      notify({ type: 'error', title: 'Delete Failed', message: 'The section could not be deleted.' });
     } finally {
       setLoading(false);
     }
@@ -144,9 +138,9 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
       setNewServiceName('');
       setAddingServiceSectionId(null);
       await reloadSections();
-      showToast('success', `Service "${name}" added.`);
+      notify({ type: 'success', title: 'Service Added', message: `Service "${name}" added.` });
     } catch (err: any) {
-      showToast('error', err?.message || 'Failed to add service in Supabase.');
+      notify({ type: 'error', title: 'Service Add Failed', message: 'The service could not be added.' });
     } finally {
       setLoading(false);
     }
@@ -162,9 +156,9 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
       setEditingServiceId(null);
       setEditingServiceName('');
       await reloadSections();
-      showToast('success', 'Service updated.');
+      notify({ type: 'success', title: 'Service Updated', message: 'Service updated.' });
     } catch (err: any) {
-      showToast('error', err?.message || 'Failed to update service in Supabase.');
+      notify({ type: 'error', title: 'Service Update Failed', message: 'The service could not be updated.' });
     } finally {
       setLoading(false);
     }
@@ -180,9 +174,9 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
     try {
       await deleteServiceFromSection(sectionId, serviceId);
       await reloadSections();
-      showToast('success', `Service "${name}" deleted.`);
+      notify({ type: 'success', title: 'Service Deleted', message: `Service "${name}" deleted.` });
     } catch (err: any) {
-      showToast('error', err?.message || 'Failed to delete service from Supabase.');
+      notify({ type: 'error', title: 'Delete Failed', message: 'The service could not be deleted.' });
     } finally {
       setLoading(false);
     }
@@ -207,20 +201,6 @@ export const OwnerServices: React.FC<OwnerServicesProps> = ({
 
       {/* MAIN CONTENT */}
       <main className="flex-1 px-4 py-6 max-w-2xl mx-auto w-full pb-20">
-        {/* TOAST NOTIFICATION */}
-        {toastMessage && (
-          <div
-            className={`fixed top-18 right-4 z-50 flex items-center gap-2 px-3.5 py-2 rounded-xl shadow-2xl text-xs font-bold transition-all animate-bounce ${
-              toastMessage.type === 'success'
-                ? 'bg-emerald-600 text-white border border-emerald-400'
-                : 'bg-red-600 text-white border border-red-400'
-            }`}
-          >
-            {toastMessage.type === 'success' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-            <span>{toastMessage.text}</span>
-          </div>
-        )}
-
         {/* PAGE TITLE */}
         <div className="mb-6 flex items-center justify-between">
           <div>

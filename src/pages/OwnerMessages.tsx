@@ -3,8 +3,6 @@ import {
   ArrowLeft,
   ChevronRight,
   Plus,
-  CheckCircle2,
-  AlertCircle,
   Car,
   Sparkles,
   FileText,
@@ -12,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { NavigationDrawer } from '../components/NavigationDrawer';
+import { useNotifications } from '../components/NotificationSystem';
 import { isOwnerAuthenticated } from '../config/authConfig';
 import {
   DEFAULT_MESSAGE_TEMPLATES,
@@ -88,7 +87,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
   const [activeKey, setActiveKey] = useState<keyof MessageTemplates | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showDetailMenu, setShowDetailMenu] = useState(false);
-  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { notify } = useNotifications();
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const detailMenuRef = useRef<HTMLDivElement | null>(null);
@@ -120,13 +119,6 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showDetailMenu]);
-
-  const showToast = (type: 'success' | 'error', text: string) => {
-    setToastMessage({ type, text });
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3000);
-  };
 
   const handleTextChange = (value: string) => {
     if (!activeKey) return;
@@ -172,22 +164,22 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
     if (!activeKey) return;
 
     if (!isOwnerAuthenticated()) {
-      showToast('error', 'Unauthorized: Owner access required.');
+      notify({ type: 'error', title: 'Access Denied', message: 'Owner access is required.' });
       return;
     }
 
     const value = templates[activeKey]?.trim();
     if (!value) {
-      showToast('error', 'Message cannot be empty.');
+      notify({ type: 'warning', title: 'Missing Message', message: 'Message cannot be empty.' });
       return;
     }
 
     setIsSaving(true);
     try {
       await saveMessageTemplates({ [activeKey]: templates[activeKey] });
-      showToast('success', 'Message saved');
+      notify({ type: 'success', title: 'Message Saved', message: 'The message template was saved successfully.' });
     } catch (err: any) {
-      showToast('error', err?.message || 'Failed to save message.');
+      notify({ type: 'error', title: 'Message Save Failed', message: 'The message template could not be saved.' });
     } finally {
       setIsSaving(false);
     }
@@ -214,24 +206,6 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
 
       {/* MAIN CONTAINER */}
       <main className="flex-1 px-4 py-5 max-w-lg mx-auto w-full pb-16">
-        {/* TOAST CONFIRMATION */}
-        {toastMessage && (
-          <div
-            className={`fixed top-18 right-4 z-50 flex items-center gap-2 px-3.5 py-2 rounded-lg shadow-lg text-xs font-semibold transition-all animate-fade-in ${
-              toastMessage.type === 'success'
-                ? 'bg-slate-900 text-white dark:bg-white dark:text-black'
-                : 'bg-red-600 text-white'
-            }`}
-          >
-            {toastMessage.type === 'success' ? (
-              <CheckCircle2 size={14} className="text-emerald-400 dark:text-emerald-600" />
-            ) : (
-              <AlertCircle size={14} />
-            )}
-            <span>{toastMessage.text}</span>
-          </div>
-        )}
-
         {/* 1. MAIN LIST VIEW */}
         {!activeKey && (
           <div>

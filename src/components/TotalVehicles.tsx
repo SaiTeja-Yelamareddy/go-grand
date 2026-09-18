@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MoreVertical, X, Car, Search, ChevronDown, Download, CheckCircle2, User } from 'lucide-react';
+import { MoreVertical, X, Car, Search, ChevronDown, Download, User } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { Header } from './Header';
 import { getAllJobRecords, syncJobsFromSupabase, formatNumericDateIST, type JobRecord } from '../utils/draftStorage';
 import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
+import { useNotifications } from './NotificationSystem';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend } from '../utils/invoiceUtils';
 
 interface TotalVehiclesProps {
@@ -36,6 +37,7 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
   onInstallApp,
 }) => {
   const navigate = useNavigate();
+  const { notify } = useNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [allRecords, setAllRecords] = useState<JobRecord[]>([]);
@@ -46,15 +48,9 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [selectedVehicleDetails, setSelectedVehicleDetails] = useState<JobRecord | null>(null);
   const [selectedInvoiceRecord, setSelectedInvoiceRecord] = useState<JobRecord | null>(null);
-  const [toastData, setToastData] = useState<{ title: string; detail: string } | null>(null);
   const [showWhatsAppSettingsModal, setShowWhatsAppSettingsModal] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
-
-  const showToast = (title: string, detail: string) => {
-    setToastData({ title, detail });
-    setTimeout(() => setToastData(null), 4000);
-  };
 
   const reloadRecords = () => {
     setAllRecords(getAllJobRecords());
@@ -439,9 +435,9 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
                                     setActiveMenuId(null);
                                     const res = await sendWhatsAppBillViaBackend(item);
                                     if (res.success) {
-                                      showToast('BILL SENT THROUGH LINKED WHATSAPP', `PDF Tax Invoice sent to ${item.phoneNumber}`);
+                                      notify({ type: 'success', title: 'Bill Sent', message: 'Invoice has been sent via WhatsApp.' });
                                     } else {
-                                      showToast('⚠️ WHATSAPP NOT CONNECTED', res.error || 'Please link your WhatsApp device in Settings.');
+                                      notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
                                       setShowWhatsAppSettingsModal(true);
                                     }
                                   }}
@@ -465,9 +461,9 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
                                     setActiveMenuId(null);
                                     const res = await sendVehicleReadyWhatsAppViaBackend(item);
                                     if (res.success) {
-                                      showToast('MESSAGE SENT THROUGH LINKED WHATSAPP', `Vehicle Ready alert sent to ${item.phoneNumber}`);
+                                      notify({ type: 'success', title: 'Vehicle Ready', message: 'Customer has been notified successfully.' });
                                     } else {
-                                      showToast('⚠️ WHATSAPP NOT CONNECTED', res.error || 'Please link your WhatsApp device in Settings.');
+                                      notify({ type: 'error', title: 'Vehicle Ready Notification Failed', message: 'The vehicle status was updated, but the notification could not be sent.' });
                                       setShowWhatsAppSettingsModal(true);
                                     }
                                   }}
@@ -626,24 +622,6 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
         />
       )}
 
-      {/* LINKED WHATSAPP SENT FLOATING TOAST */}
-      {toastData && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="fixed top-4 sm:top-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[100] w-auto sm:min-w-[360px] max-w-[calc(100vw-2rem)] bg-[#111111] text-white border border-white/20 border-l-4 border-l-[#25D366] px-4 py-3.5 rounded-xl shadow-2xl flex items-start gap-3 animate-fade-in"
-        >
-          <div className="w-9 h-9 rounded-full bg-[#25D366]/20 flex items-center justify-center shrink-0">
-            <CheckCircle2 size={20} className="text-[#25D366]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-extrabold text-sm tracking-wide uppercase text-[#25D366] leading-tight">
-              {toastData.title}
-            </p>
-            <p className="text-xs text-white/80 font-medium mt-1 leading-relaxed break-words">{toastData.detail}</p>
-          </div>
-        </div>
-      )}
       {/* LINKED WHATSAPP DEVICE MODAL */}
       <WhatsAppSettingsModal
         isOpen={showWhatsAppSettingsModal}

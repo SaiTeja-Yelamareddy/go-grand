@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { NavigationDrawer } from '../components/NavigationDrawer';
 import { Header } from '../components/Header';
+import { useNotifications } from '../components/NotificationSystem';
 import {
   getStaffProfiles,
   addStaffProfile,
@@ -31,6 +32,7 @@ export const OwnerStaff: React.FC<OwnerStaffProps> = ({
   deferredPrompt,
   onInstallApp,
 }) => {
+  const { notify } = useNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [staffList, setStaffList] = useState<StaffProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,12 +48,6 @@ export const OwnerStaff: React.FC<OwnerStaffProps> = ({
   const [formPassword, setFormPassword] = useState('');
   const [formActive, setFormActive] = useState(true);
   const [formError, setFormError] = useState('');
-  const [toastData, setToastData] = useState<{ title: string; detail: string } | null>(null);
-
-  const showToast = (title: string, detail: string) => {
-    setToastData({ title, detail });
-    setTimeout(() => setToastData(null), 3500);
-  };
 
   const loadStaff = async () => {
     try {
@@ -100,14 +96,14 @@ export const OwnerStaff: React.FC<OwnerStaffProps> = ({
     }
 
     try {
-      const created = await addStaffProfile({
+      await addStaffProfile({
         staff_name: formName,
         phone_number: formPhone,
         password: formPassword,
         active: formActive,
       });
       setIsAddModalOpen(false);
-      showToast('STAFF ACCOUNT CREATED', `${created.staff_name} (${created.phone_number}) is ready to log in.`);
+      notify({ type: 'success', title: 'Staff Account Created', message: 'The staff account is ready to log in.' });
       await loadStaff();
     } catch (err: any) {
       setFormError(err?.message || 'Failed to add staff member');
@@ -134,7 +130,7 @@ export const OwnerStaff: React.FC<OwnerStaffProps> = ({
         active: formActive,
       });
       setEditingStaff(null);
-      showToast('STAFF UPDATED', `${formName} credentials updated successfully.`);
+      notify({ type: 'success', title: 'Staff Updated', message: 'Staff credentials updated successfully.' });
       await loadStaff();
     } catch (err: any) {
       setFormError(err?.message || 'Failed to update staff member');
@@ -148,10 +144,9 @@ export const OwnerStaff: React.FC<OwnerStaffProps> = ({
 
   const handleDeleteStaff = async () => {
     if (!deleteConfirmStaff) return;
-    const deletedName = deleteConfirmStaff.staff_name;
     await deleteStaffProfile(deleteConfirmStaff.id);
     setDeleteConfirmStaff(null);
-    showToast('STAFF DELETED', `${deletedName} account has been removed.`);
+    notify({ type: 'success', title: 'Staff Deleted', message: 'The staff account has been removed.' });
     await loadStaff();
   };
 
@@ -577,20 +572,6 @@ export const OwnerStaff: React.FC<OwnerStaffProps> = ({
         </div>
       )}
 
-      {/* FLOATING ACTION TOAST */}
-      {toastData && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#111111] text-white border-l-4 border-emerald-500 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in max-w-[90vw]">
-          <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
-            <CheckCircle2 size={18} className="text-emerald-400" />
-          </div>
-          <div>
-            <p className="font-extrabold text-xs tracking-wider uppercase text-emerald-400">
-              {toastData.title}
-            </p>
-            <p className="text-[11px] text-neutral-300 font-medium mt-0.5">{toastData.detail}</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -16,6 +16,7 @@ import { syncJobsFromSupabase } from './utils/draftStorage';
 import { getStaffProfiles } from './utils/staffStorage';
 import { syncServiceSectionsFromSupabase } from './utils/serviceStorage';
 import { syncMessageTemplatesFromSupabase } from './utils/templateStorage';
+import { NotificationProvider } from './components/NotificationSystem';
 
 export function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -141,7 +142,8 @@ export function App() {
   );
 
   return (
-    <BrowserRouter>
+    <NotificationProvider>
+      <BrowserRouter>
       <Routes>
         {/* Mode Selection */}
         <Route path="/" element={<ModeSelection />} />
@@ -166,7 +168,8 @@ export function App() {
         {/* Catch-all redirect to / */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+      </BrowserRouter>
+    </NotificationProvider>
   );
 }
 

@@ -19,6 +19,7 @@ import { Header } from './Header';
 import { saveJobRecord, updateJobRecord, getJobRecordById, type JobRecord } from '../utils/draftStorage';
 import { INDIAN_VEHICLE_BRANDS } from '../data/indianVehicles';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
+import { useNotifications } from './NotificationSystem';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend, sendVehicleReceivedWhatsAppViaBackend, parsePriceNumber, generateBillNo } from '../utils/invoiceUtils';
 import { getMessageTemplates, renderTemplate, SHOP_NAME } from '../utils/templateStorage';
 
@@ -70,6 +71,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { notify } = useNotifications();
 
   const editId = searchParams.get('editId') || searchParams.get('edit');
   const isEditing = Boolean(editId);
@@ -282,6 +284,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     if (e) e.preventDefault();
 
     if (!validateForm()) {
+      notify({ type: 'warning', title: 'Missing Information', message: 'Please complete the required fields.' });
       return null;
     }
 
@@ -300,23 +303,34 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       createdById: staffId,
     };
 
-    let savedRecord: JobRecord;
-    if (isEditing && editId) {
-      const updated = await updateJobRecord(editId, payload);
-      savedRecord = updated || {
-        ...payload,
-        id: editId,
-        createdAt: new Date().toISOString(),
-      };
-    } else {
-      savedRecord = await saveJobRecord(payload);
-    }
+    notify({ type: 'loading', title: isEditing ? 'Updating Vehicle...' : 'Saving Job Sheet...', message: 'Please wait while the record is saved.', duration: 2500 });
+    try {
+      let savedRecord: JobRecord;
+      if (isEditing && editId) {
+        const updated = await updateJobRecord(editId, payload);
+        savedRecord = updated || {
+          ...payload,
+          id: editId,
+          createdAt: new Date().toISOString(),
+        };
+      } else {
+        savedRecord = await saveJobRecord(payload);
+      }
 
-    setSavedVehNum(formData.vehicleNumber.toUpperCase());
-    setShowSuccessPopup(true);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 4000);
-    return savedRecord;
+      notify({
+        type: 'success',
+        title: isEditing ? 'Record Updated' : 'Job Sheet Saved',
+        message: isEditing ? 'Vehicle record has been updated successfully.' : 'Vehicle record has been added successfully.',
+      });
+      setSavedVehNum(formData.vehicleNumber.toUpperCase());
+      setShowSuccessPopup(true);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 4000);
+      return savedRecord;
+    } catch {
+      notify({ type: 'error', title: isEditing ? 'Unable to Update Job' : 'Unable to Save Job', message: 'Vehicle record could not be saved. Please try again.' });
+      return null;
+    }
   };
 
   const handleResetForm = () => {
@@ -337,13 +351,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     setSaveSuccess(false);
   };
 
-  const [toastData, setToastData] = useState<{ title: string; detail: string } | null>(null);
   const [showWhatsAppSettingsModal, setShowWhatsAppSettingsModal] = useState(false);
-
-  const showToast = (title: string, detail: string) => {
-    setToastData({ title, detail });
-    setTimeout(() => setToastData(null), 4000);
-  };
 
   const handleVehicleReceived = async () => {
     if (!validateForm()) return;
@@ -352,9 +360,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     if (saved) {
       const res = await sendVehicleReceivedWhatsAppViaBackend(saved);
       if (res.success) {
-        showToast('MESSAGE SENT THROUGH LINKED WHATSAPP', `Vehicle Received alert sent to ${saved.phoneNumber}`);
+        notify({ type: 'success', title: 'Vehicle Received', message: 'Customer notification sent successfully.' });
       } else {
-        showToast('⚠️ WHATSAPP NOT CONNECTED', res.error || 'Please link your WhatsApp device in Settings.');
+        notify({ type: 'error', title: 'Vehicle Notification Failed', message: 'Vehicle was saved, but the notification could not be sent.' });
         setShowWhatsAppSettingsModal(true);
       }
     }
@@ -367,9 +375,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     if (saved) {
       const res = await sendVehicleReadyWhatsAppViaBackend(saved);
       if (res.success) {
-        showToast('MESSAGE SENT THROUGH LINKED WHATSAPP', `Vehicle Ready alert sent to ${saved.phoneNumber}`);
+        notify({ type: 'success', title: 'Vehicle Ready', message: 'Customer has been notified successfully.' });
       } else {
-        showToast('⚠️ WHATSAPP NOT CONNECTED', res.error || 'Please link your WhatsApp device in Settings.');
+        notify({ type: 'error', title: 'Vehicle Ready Notification Failed', message: 'The vehicle status was updated, but the notification could not be sent.' });
         setShowWhatsAppSettingsModal(true);
       }
     }
@@ -400,7 +408,12 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     });
 
     const smsUrl = `sms:+91${cleanPhone}?body=${encodeURIComponent(msg)}`;
-    window.open(smsUrl, '_blank');
+    try {
+      window.open(smsUrl, '_blank');
+      notify({ type: 'success', title: 'SMS Sent', message: 'Message has been sent successfully.' });
+    } catch {
+      notify({ type: 'error', title: 'SMS Not Sent', message: 'The message could not be sent. Please try again.' });
+    }
   };
 
   const handleBillWhatsApp = async () => {
@@ -410,9 +423,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     if (saved) {
       const res = await sendWhatsAppBillViaBackend(saved);
       if (res.success) {
-        showToast('BILL SENT THROUGH LINKED WHATSAPP', `PDF Tax Invoice sent to ${saved.phoneNumber}`);
+        notify({ type: 'success', title: 'Bill Sent', message: 'Invoice has been sent via WhatsApp.' });
       } else {
-        showToast('⚠️ WHATSAPP NOT CONNECTED', res.error || 'Please link your WhatsApp device in Settings.');
+        notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
         setShowWhatsAppSettingsModal(true);
       }
     }
@@ -1104,24 +1117,6 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         </div>
       )}
 
-      {/* LINKED WHATSAPP SENT FLOATING TOAST */}
-      {toastData && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="fixed top-4 sm:top-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[100] w-auto sm:min-w-[360px] max-w-[calc(100vw-2rem)] bg-[#111111] text-white border border-white/20 border-l-4 border-l-[#25D366] px-4 py-3.5 rounded-xl shadow-2xl flex items-start gap-3 animate-fade-in"
-        >
-          <div className="w-9 h-9 rounded-full bg-[#25D366]/20 flex items-center justify-center shrink-0">
-            <CheckCircle2 size={20} className="text-[#25D366]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-extrabold text-sm tracking-wide uppercase text-[#25D366] leading-tight">
-              {toastData.title}
-            </p>
-            <p className="text-xs text-white/80 font-medium mt-1 leading-relaxed break-words">{toastData.detail}</p>
-          </div>
-        </div>
-      )}
       {/* LINKED WHATSAPP DEVICE MODAL */}
       <WhatsAppSettingsModal
         isOpen={showWhatsAppSettingsModal}

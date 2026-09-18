@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MoreVertical, X, Car, Download, CheckCircle2, User, Trash2 } from 'lucide-react';
+import { MoreVertical, X, Car, Download, User, Trash2 } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { Header } from './Header';
 import { deleteJobRecord, getTodaysJobRecords, restoreJobRecord, syncJobsFromSupabase, formatNumericDateIST, getISTDateKey, type JobRecord } from '../utils/draftStorage';
 import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
+import { useNotifications } from './NotificationSystem';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend } from '../utils/invoiceUtils';
 
 interface TodaysVehiclesProps {
@@ -21,6 +22,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
   onInstallApp,
 }) => {
   const navigate = useNavigate();
+  const { notify } = useNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [records, setRecords] = useState<JobRecord[]>([]);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -29,15 +31,9 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
   const [selectedDeleteRecord, setSelectedDeleteRecord] = useState<JobRecord | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [toastData, setToastData] = useState<{ title: string; detail: string; undoRecord?: JobRecord } | null>(null);
   const [showWhatsAppSettingsModal, setShowWhatsAppSettingsModal] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
-
-  const showToast = (title: string, detail: string, undoRecord?: JobRecord) => {
-    setToastData({ title, detail, undoRecord });
-    setTimeout(() => setToastData((current) => current?.title === title ? null : current), 6000);
-  };
 
   const reloadRecords = () => {
     setRecords(getTodaysJobRecords());
@@ -102,28 +98,31 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
     try {
       await deleteJobRecord(selectedDeleteRecord.id);
       const deletedRecord = selectedDeleteRecord;
-      const deletedVehicleNumber = deletedRecord.vehicleNumber;
       setSelectedDeleteRecord(null);
       reloadRecords();
-      showToast('VEHICLE RECORD DELETED', `${deletedVehicleNumber} was removed.`, deletedRecord);
+      notify({
+        type: 'success',
+        title: 'Vehicle Record Deleted',
+        message: 'The vehicle record has been permanently deleted.',
+        duration: 6000,
+        actionLabel: 'Undo',
+        onAction: () => { void handleUndoDelete(deletedRecord); },
+      });
     } catch (err: any) {
-      setDeleteError(err instanceof Error ? err.message : 'Unable to delete vehicle record.');
+      setDeleteError('The vehicle record could not be deleted.');
+      notify({ type: 'error', title: 'Delete Failed', message: 'The vehicle record could not be deleted.' });
     } finally {
       setDeleteLoading(false);
     }
   };
 
-  const handleUndoDelete = async () => {
-    const deletedRecord = toastData?.undoRecord;
-    if (!deletedRecord) return;
-
-    setToastData({ title: 'RESTORING VEHICLE RECORD', detail: 'Please wait...' });
+  const handleUndoDelete = async (deletedRecord: JobRecord) => {
     try {
       await restoreJobRecord(deletedRecord);
       reloadRecords();
-      showToast('VEHICLE RECORD RESTORED', `${deletedRecord.vehicleNumber} is back in Today's Vehicles.`);
-    } catch (err: any) {
-      showToast('RESTORE FAILED', err instanceof Error ? err.message : 'Unable to restore vehicle record.');
+      notify({ type: 'success', title: 'Vehicle Record Restored', message: 'The vehicle record is back in Today\'s Vehicles.' });
+    } catch {
+      notify({ type: 'error', title: 'Restore Failed', message: 'The vehicle record could not be restored.' });
     }
   };
 
@@ -303,9 +302,9 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                     setActiveMenuId(null);
                                     const res = await sendWhatsAppBillViaBackend(item);
                                     if (res.success) {
-                                      showToast('BILL SENT THROUGH LINKED WHATSAPP', `PDF Tax Invoice sent to ${item.phoneNumber}`);
+                                      notify({ type: 'success', title: 'Bill Sent', message: 'Invoice has been sent via WhatsApp.' });
                                     } else {
-                                      showToast('⚠️ WHATSAPP NOT CONNECTED', res.error || 'Please link your WhatsApp device in Settings.');
+                                      notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
                                       setShowWhatsAppSettingsModal(true);
                                     }
                                   }}
@@ -329,9 +328,9 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                     setActiveMenuId(null);
                                     const res = await sendVehicleReadyWhatsAppViaBackend(item);
                                     if (res.success) {
-                                      showToast('MESSAGE SENT THROUGH LINKED WHATSAPP', `Vehicle Ready alert sent to ${item.phoneNumber}`);
+                                      notify({ type: 'success', title: 'Vehicle Ready', message: 'Customer has been notified successfully.' });
                                     } else {
-                                      showToast('⚠️ WHATSAPP NOT CONNECTED', res.error || 'Please link your WhatsApp device in Settings.');
+                                      notify({ type: 'error', title: 'Vehicle Ready Notification Failed', message: 'The vehicle status was updated, but the notification could not be sent.' });
                                       setShowWhatsAppSettingsModal(true);
                                     }
                                   }}
@@ -537,33 +536,6 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
         </div>
       )}
 
-      {/* LINKED WHATSAPP SENT FLOATING TOAST */}
-      {toastData && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="fixed top-4 sm:top-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[100] w-auto sm:min-w-[360px] max-w-[calc(100vw-2rem)] bg-[#111111] text-white border border-white/20 border-l-4 border-l-[#25D366] px-4 py-3.5 rounded-xl shadow-2xl flex items-start gap-3 animate-fade-in"
-        >
-          <div className="w-9 h-9 rounded-full bg-[#25D366]/20 flex items-center justify-center shrink-0">
-            <CheckCircle2 size={20} className="text-[#25D366]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-extrabold text-sm tracking-wide uppercase text-[#25D366] leading-tight">
-              {toastData.title}
-            </p>
-            <p className="text-xs text-white/80 font-medium mt-1 leading-relaxed break-words">{toastData.detail}</p>
-            {toastData.undoRecord && (
-              <button
-                type="button"
-                onClick={handleUndoDelete}
-                className="mt-2 text-[11px] font-extrabold uppercase tracking-wider text-white underline underline-offset-2 hover:text-red-200 cursor-pointer"
-              >
-                UNDO
-              </button>
-            )}
-          </div>
-        </div>
-      )}
       {/* LINKED WHATSAPP DEVICE MODAL */}
       <WhatsAppSettingsModal
         isOpen={showWhatsAppSettingsModal}

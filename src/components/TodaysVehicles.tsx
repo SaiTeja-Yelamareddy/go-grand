@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MoreVertical, X, Car, Download, CheckCircle2, User } from 'lucide-react';
+import { MoreVertical, X, Car, Download, CheckCircle2, User, Trash2 } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { Header } from './Header';
-import { getTodaysJobRecords, syncJobsFromSupabase, formatNumericDateIST, getISTDateKey, type JobRecord } from '../utils/draftStorage';
+import { deleteJobRecord, getTodaysJobRecords, syncJobsFromSupabase, formatNumericDateIST, getISTDateKey, type JobRecord } from '../utils/draftStorage';
 import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
@@ -26,6 +26,9 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [selectedVehicleDetails, setSelectedVehicleDetails] = useState<JobRecord | null>(null);
   const [selectedInvoiceRecord, setSelectedInvoiceRecord] = useState<JobRecord | null>(null);
+  const [selectedDeleteRecord, setSelectedDeleteRecord] = useState<JobRecord | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [toastData, setToastData] = useState<{ title: string; detail: string } | null>(null);
   const [showWhatsAppSettingsModal, setShowWhatsAppSettingsModal] = useState(false);
 
@@ -89,6 +92,24 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
   const handleVehicleReady = (record: JobRecord) => {
     setActiveMenuId(null);
     setSelectedVehicleDetails(record);
+  };
+
+  const handleDeleteRecord = async () => {
+    if (!selectedDeleteRecord || mode !== 'owner') return;
+
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      await deleteJobRecord(selectedDeleteRecord.id);
+      const deletedVehicleNumber = selectedDeleteRecord.vehicleNumber;
+      setSelectedDeleteRecord(null);
+      reloadRecords();
+      showToast('VEHICLE RECORD DELETED', `${deletedVehicleNumber} was permanently removed.`);
+    } catch (err: any) {
+      setDeleteError(err instanceof Error ? err.message : 'Unable to delete vehicle record.');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleDownloadExcel = () => {
@@ -330,6 +351,20 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                 >
                                   CLOSE
                                 </button>
+
+                                {mode === 'owner' && (
+                                  <button
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      setDeleteError(null);
+                                      setSelectedDeleteRecord(item);
+                                    }}
+                                    className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center justify-start gap-2 tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
+                                  >
+                                    <Trash2 size={13} />
+                                    DELETE
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -430,6 +465,61 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
           record={selectedInvoiceRecord}
           onClose={() => setSelectedInvoiceRecord(null)}
         />
+      )}
+
+      {selectedDeleteRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="delete-vehicle-title">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+            onClick={() => {
+              if (!deleteLoading) setSelectedDeleteRecord(null);
+            }}
+          />
+          <div className="relative z-10 w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-2xl border border-red-200 dark:border-red-900/60 shadow-2xl p-6 text-left">
+            <h3 id="delete-vehicle-title" className="font-extrabold text-base text-red-600 dark:text-red-400 uppercase tracking-wide">
+              Delete Vehicle Record?
+            </h3>
+            <p className="mt-3 text-sm text-slate-700 dark:text-neutral-200">
+              Are you sure you want to delete this vehicle record?
+            </p>
+            <p className="mt-1 text-xs font-bold text-red-600 dark:text-red-400">
+              This action cannot be undone.
+            </p>
+
+            <div className="my-5 space-y-2 rounded-xl border border-slate-200 dark:border-[#262626] bg-slate-50 dark:bg-[#121212] p-4 text-sm">
+              <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-neutral-400">Vehicle Number</span><span className="font-bold text-right">{selectedDeleteRecord.vehicleNumber}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-neutral-400">Customer Name</span><span className="font-bold text-right">{selectedDeleteRecord.customerName}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-neutral-400">Date</span><span className="font-bold text-right">{formatDate(selectedDeleteRecord.createdAt)}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-neutral-400">Service</span><span className="font-bold text-right">{formatServices(selectedDeleteRecord.services || selectedDeleteRecord.service)}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-neutral-400">Amount</span><span className="font-bold text-right">{formatPrice(selectedDeleteRecord.price)}</span></div>
+            </div>
+
+            {deleteError && (
+              <p className="mb-4 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 p-3 text-xs font-semibold text-red-700 dark:text-red-300">
+                {deleteError}
+              </p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={() => setSelectedDeleteRecord(null)}
+                className="flex-1 min-h-[44px] rounded-xl border border-slate-300 dark:border-[#333333] text-slate-700 dark:text-neutral-200 font-bold text-xs uppercase tracking-wider hover:bg-slate-100 dark:hover:bg-[#1A1A1A] disabled:opacity-50 cursor-pointer"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={handleDeleteRecord}
+                className="flex-1 min-h-[44px] rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider disabled:opacity-50 cursor-pointer"
+              >
+                {deleteLoading ? 'DELETING...' : 'DELETE'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* LINKED WHATSAPP SENT FLOATING TOAST */}

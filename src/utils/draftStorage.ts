@@ -228,35 +228,34 @@ export async function updateJobRecord(
 }
 
 export async function deleteJobRecord(id: string): Promise<void> {
-  const isOwner = isOwnerAuthenticated();
-  const currentStaff = getCurrentStaff();
-
-  if (!isOwner && (!currentStaff || !currentStaff.active)) {
-    throw new Error('Unauthorized: An active authenticated session is required to delete job records.');
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only an authenticated Owner can delete job records.');
   }
 
   const allJobs = getAllJobRecords();
   const target = allJobs.find((j) => j.id === id);
-  if (!target) return;
+  if (!target) {
+    throw new Error('Record not found.');
+  }
 
-  // Ownership Check: Owner or the Staff member who created the job can delete it
-  if (!isOwner && target.createdById && target.createdById !== currentStaff?.id) {
-    throw new Error('Forbidden: You do not have permission to delete this record. Only the creator or owner may delete.');
+  const { data, error } = await supabase
+    .from('jobs')
+    .delete()
+    .eq('id', id)
+    .select('id');
+
+  if (error) {
+    console.error('❌ Supabase delete job error:', error.message);
+    throw new Error(`Unable to delete vehicle record: ${error.message}`);
+  }
+
+  if (!data || data.length !== 1) {
+    throw new Error('Unable to delete vehicle record: the selected record was not found or could not be deleted.');
   }
 
   const jobs = allJobs.filter((j) => j.id !== id);
   localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(jobs));
   localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(jobs));
-
-  // Delete from Supabase
-  try {
-    const { error } = await supabase.from('jobs').delete().eq('id', id);
-    if (error) {
-      console.error('❌ Supabase delete job error:', error.message);
-    }
-  } catch (err) {
-    console.error('❌ Supabase delete job exception:', err);
-  }
 }
 
 /**
@@ -301,5 +300,4 @@ export function getTodaysJobRecords(): JobRecord[] {
     return jobIST === currentTodayIST;
   });
 }
-
 

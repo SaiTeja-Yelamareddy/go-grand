@@ -93,20 +93,12 @@ function updateJobRecord(id, updatedData) {
 }
 
 function deleteJobRecord(id) {
-  const isOwner = isOwnerAuthenticated();
-  const currentStaff = getCurrentStaff();
-
-  if (!isOwner && (!currentStaff || !currentStaff.active)) {
-    throw new Error('Unauthorized: An active authenticated session is required to delete job records.');
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only an authenticated Owner can delete job records.');
   }
 
   const target = mockSession.jobs.find((j) => j.id === id);
-  if (!target) return;
-
-  // Ownership Check
-  if (!isOwner && target.createdById && target.createdById !== currentStaff?.id) {
-    throw new Error("Forbidden: You do not have permission to delete this record. Only the creator or owner may delete.");
-  }
+  if (!target) throw new Error('Record not found.');
 
   mockSession.jobs = mockSession.jobs.filter((j) => j.id !== id);
 }
@@ -228,7 +220,7 @@ runTest("Route: updateJobRecord -> User B CANNOT update User A's record (Ownersh
 });
 
 // 4. User B cannot delete User A's job record
-runTest("Route: deleteJobRecord -> User B CANNOT delete User A's record (Ownership Check)", () => {
+runTest("Route: deleteJobRecord -> Staff cannot delete User A's record", () => {
   // User A creates job
   mockSession.staffSession = {
     token: 'token_user_a',
@@ -246,8 +238,24 @@ runTest("Route: deleteJobRecord -> User B CANNOT delete User A's record (Ownersh
 
   assert.throws(
     () => deleteJobRecord(jobA.id),
-    /Forbidden: You do not have permission to delete this record/
+    /Only an authenticated Owner can delete/
   );
+});
+
+runTest('Route: deleteJobRecord -> Staff cannot delete any job record', () => {
+  resetMockState();
+  mockSession.staffSession = {
+    token: 'token_staff',
+    staff: { id: 'staff_1', staff_name: 'Staff User', active: true },
+    expiresAt: Date.now() + 3600000,
+  };
+  const job = saveJobRecord({ vehicleNumber: 'STAFF-1', customerName: 'Customer' }, mockSession.staffSession);
+
+  assert.throws(
+    () => deleteJobRecord(job.id),
+    /Only an authenticated Owner can delete/
+  );
+  assert.equal(mockSession.jobs.length, 1);
 });
 
 // 5. Staff User cannot create or delete other Staff Accounts (Admin-only RBAC)

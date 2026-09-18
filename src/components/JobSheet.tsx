@@ -469,18 +469,6 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 <span className="hidden sm:inline">Reset</span>
               </button>
             )}
-
-            <div className="bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-neutral-850 shadow-sm rounded-xl px-3 py-2 text-right flex flex-col items-end">
-              <span className="block text-[9px] font-bold text-slate-500 dark:text-neutral-400 uppercase tracking-widest">
-                Job Token
-              </span>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                <span className="text-xs font-mono font-bold text-slate-950 dark:text-white tracking-tight">
-                  {isEditing ? `#EDIT-${editId?.slice(-4).toUpperCase()}` : `#GG-${Math.floor(1000 + (Date.now() % 9000))}`}
-                </span>
-              </div>
-            </div>
           </div>
         </section>
 

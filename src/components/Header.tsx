@@ -43,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   showLogo = true,
   onBack,
   rightSlot,
-  showRoleBadge = true,
+  showRoleBadge = false,
   showThemeToggle = false,
   className = '',
 }) => {

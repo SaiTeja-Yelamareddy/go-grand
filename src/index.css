@@ -58,6 +58,18 @@
     font-size: 16px;
   }
 
+  /* Remove number input spinners / arrows across all browsers */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none !important;
+    margin: 0 !important;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield !important;
+    appearance: textfield !important;
+  }
+
   input::placeholder, select::placeholder, textarea::placeholder {
     color: #94A3B8;
     opacity: 1;

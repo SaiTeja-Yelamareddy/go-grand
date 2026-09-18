@@ -955,8 +955,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                   type="number"
                   value={formData.price}
                   onChange={(e) => handleChange('price', e.target.value)}
+                  onWheel={(e) => (e.target as HTMLElement).blur()}
                   placeholder="0.00"
-                  className="w-full border-none py-3 px-3.5 text-base font-black font-mono text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:ring-0 focus:outline-none bg-transparent"
+                  className="w-full border-none py-3 px-3.5 text-base font-black font-mono text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus:ring-0 focus:outline-none bg-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   required
                 />
                 <div className="pr-3.5 flex items-center text-xs font-bold text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/15 my-1.5 mr-2 px-2 rounded-lg border border-emerald-200 dark:border-emerald-500/30">

@@ -138,7 +138,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       .catch(() => {});
   }, [showDropdownPicker]);
 
-  // PRIMARY PACKAGE / SERVICE: Shows ONLY service section names (Supabase single source of truth)
+  // PRIMARY PACKAGE / SERVICE & QUICK CHIPS: Shows ONLY service section names (Supabase single source of truth)
   const packageSections = useMemo(() => {
     const list: string[] = [];
     sections.forEach((sec) => {
@@ -155,24 +155,6 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const filteredPackageSections = packageSections.filter((secName) =>
     secName.toLowerCase().includes(serviceSearchQuery.toLowerCase().trim())
   );
-
-  // Quick Service Chips: Individual services belonging to sections
-  const quickServices = useMemo(() => {
-    const list: string[] = [];
-    sections.forEach((sec) => {
-      if (Array.isArray(sec.services)) {
-        sec.services.forEach((srv) => {
-          if (srv.name && srv.name.trim()) {
-            const subName = srv.name.trim();
-            if (!list.includes(subName)) {
-              list.push(subName);
-            }
-          }
-        });
-      }
-    });
-    return list;
-  }, [sections]);
 
   // Pre-fill form if editing an existing job
   useEffect(() => {
@@ -887,27 +869,27 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               )}
             </div>
 
-            {/* Quick Service Chips (Fast Selection of Sub-Services from Supabase) */}
-            {quickServices.length > 0 && (
+            {/* Quick Service Chips (Fast Selection of Sections from Supabase) */}
+            {packageSections.length > 0 && (
               <div className="space-y-1.5">
                 <span className="block text-[11px] font-bold text-slate-700 dark:text-neutral-300">
                   Quick Service Chips:
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {quickServices.map((quickName) => {
-                    const isSelected = formData.selectedServices.includes(quickName);
+                  {packageSections.map((secName) => {
+                    const isSelected = formData.selectedServices.includes(secName);
                     return (
                       <button
-                        key={quickName}
+                        key={secName}
                         type="button"
-                        onClick={() => handleToggleService(quickName)}
+                        onClick={() => handleToggleService(secName)}
                         className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
                           isSelected
                             ? 'bg-amber-400 text-slate-950 border-amber-500 font-black shadow-xs'
                             : 'bg-slate-100 dark:bg-[#141414] text-slate-800 dark:text-neutral-200 hover:bg-slate-200 dark:hover:bg-neutral-800 border-slate-300 dark:border-neutral-800 font-bold'
                         }`}
                       >
-                        {isSelected ? `✓ ${quickName}` : `+ ${quickName}`}
+                        {isSelected ? `✓ ${secName}` : `+ ${secName}`}
                       </button>
                     );
                   })}

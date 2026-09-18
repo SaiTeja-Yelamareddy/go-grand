@@ -100,10 +100,10 @@ export const Header: React.FC<HeaderProps> = ({
           {title}
         </h1>
         <p
-          className="text-[8.5px] sm:text-[10.5px] font-extrabold text-slate-600 dark:text-neutral-400 uppercase leading-none mt-1.5 whitespace-nowrap pl-[0.32em]"
+          className="text-[9.5px] sm:text-[11.5px] font-black text-slate-900 dark:text-neutral-100 uppercase leading-none mt-1.5 whitespace-nowrap pl-[0.32em]"
           style={{
             fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-            fontWeight: 800,
+            fontWeight: 900,
             letterSpacing: '0.34em',
           }}
         >

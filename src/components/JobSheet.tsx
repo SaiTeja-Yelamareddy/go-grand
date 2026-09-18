@@ -413,6 +413,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       formData.price
   );
 
+  const currentStaff = getCurrentStaff();
   const targetTodayPath = mode === 'owner' ? '/owner/today' : '/staff/today';
 
   return (
@@ -437,7 +438,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         {/* PAGE TITLE & TOKEN HEADER */}
         <section className="flex items-start justify-between gap-2">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {isEditing && (
                 <button
                   onClick={() => navigate(targetTodayPath)}
@@ -450,6 +451,13 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900 dark:text-white">
                 {isEditing ? 'Edit Vehicle Job' : "Today's Job Sheet"}
               </h2>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wide border uppercase bg-slate-100 dark:bg-neutral-900 text-slate-800 dark:text-neutral-200 border-slate-200 dark:border-neutral-800 shadow-2xs whitespace-nowrap">
+                {mode === 'owner'
+                  ? 'Owner Mode'
+                  : currentStaff?.staff_name
+                    ? `STAFF: ${currentStaff.staff_name.toUpperCase()}`
+                    : 'Staff Mode'}
+              </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 Live Intake

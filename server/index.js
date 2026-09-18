@@ -16,8 +16,9 @@ import { generateInvoicePDF } from './pdfGenerator.js';
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
+  Browsers,
 } from '@whiskeysockets/baileys';
-import { useSupabaseAuthState } from './supabaseAuth.js';
+import { useSupabaseAuthState, getAuthStateDiagnostics } from './supabaseAuth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -119,9 +120,16 @@ let connectedUser = null;
 let isConnecting = false;
 let reconnectTimer = null;
 let socketInstanceId = 0;
+let reconnectAttempts = 0;
+let lastConnectedAt = null;
+let lastDisconnectAt = null;
+let lastDisconnectReason = null;
+let lastDisconnectCode = null;
+let lastReconnectAt = null;
+let hasPersistedCreds = false;
 let authHandle = null;
 
-const logger = pino({ level: 'debug' });
+const logger = pino({ level: 'silent' }); // Silent pino to prevent noisy internal logs
 const httpsAgent = new https.Agent({ keepAlive: true });
 
 async function connectToWhatsApp(force = false) {
@@ -131,35 +139,36 @@ async function connectToWhatsApp(force = false) {
   }
 
   if (isConnected && !force) {
-    console.log(`[BAILEYS] ℹ️ Already connected as ${connectedUser}. Skipping duplicate connection.`);
+    console.log(`[BAILEYS] ℹ️ Already connected as ${connectedUser}. Reusing existing socket.`);
     return;
   }
 
   if (isConnecting && !force) {
-    console.log('[BAILEYS] ⏳ Connection already in progress. Skipping duplicate connect call.');
+    console.log('[BAILEYS] ⏳ Connection already in progress. Reusing in-flight connection.');
     return;
   }
 
   isConnecting = true;
   const currentInstance = ++socketInstanceId;
-  console.log(`[BAILEYS] 🔌 Initializing WhatsApp Baileys socket (Instance #${currentInstance})...`);
+  console.log(`[BAILEYS] 🔌 Initializing WhatsApp Baileys socket (Generation #${currentInstance})...`);
   io.emit('status', { status: 'connecting', connected: false });
 
-  // If previous socket exists, safely remove listeners and close
+  // Safely clean up previous socket listeners
   if (sock) {
     try {
-      console.log('[BAILEYS] 🧹 Cleaning up previous socket listeners...');
+      console.log('[BAILEYS] 🧹 Cleaning up prior socket listeners...');
       sock.ev.removeAllListeners();
       sock.end();
     } catch (err) {
-      console.warn('[BAILEYS] Warning cleaning old socket:', err.message);
+      console.warn('[BAILEYS] Cleanup warning:', err.message);
     }
     sock = null;
   }
 
   try {
-    const { state, saveCreds, clearAuthState } = await useSupabaseAuthState(supabase, WHATSAPP_SESSION_ID);
+    const { state, saveCreds, hasValidCreds, clearAuthState } = await useSupabaseAuthState(supabase, WHATSAPP_SESSION_ID);
     authHandle = { clearAuthState, saveCreds };
+    hasPersistedCreds = hasValidCreds;
 
     const { version } = await fetchLatestBaileysVersion();
 
@@ -168,7 +177,13 @@ async function connectToWhatsApp(force = false) {
       auth: state,
       printQRInTerminal: true,
       logger,
-      browser: ['Go Grand Car Wash', 'Chrome', '1.0.0'],
+      browser: Browsers.ubuntu('Chrome'), // Standard Ubuntu Chrome tuple prevents 4-hour token invalidation
+      keepAliveIntervalMs: 25000,         // Keep-alive ping every 25s prevents proxy/cloud idle drop
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
+      markOnlineOnConnect: true,
+      syncFullHistory: false,             // Fast lightweight connect without heavy sync
+      generateHighQualityLinkPreview: false,
       fetchAgent: httpsAgent,
       customUploadHosts: [
         { hostname: 'mmg.whatsapp.net' },
@@ -177,20 +192,21 @@ async function connectToWhatsApp(force = false) {
     });
 
     sock = newSock;
-    console.log(`[BAILEYS] 🚀 Socket #${currentInstance} created successfully.`);
+    console.log(`[BAILEYS] 🚀 Socket #${currentInstance} created. Awaiting handshake...`);
 
     newSock.ev.on('creds.update', async () => {
       if (currentInstance !== socketInstanceId) return;
       try {
         await saveCreds();
+        hasPersistedCreds = true;
       } catch (err) {
-        console.warn('[BAILEYS] Creds update warning:', err.message);
+        console.error('[BAILEYS] Creds update persistence error:', err.message);
       }
     });
 
     newSock.ev.on('connection.update', async (update) => {
       if (currentInstance !== socketInstanceId) {
-        console.log(`[BAILEYS] 🛑 Ignoring event from obsolete socket #${currentInstance}`);
+        console.log(`[BAILEYS] 🛑 Ignoring event from obsolete socket generation #${currentInstance}`);
         return;
       }
 
@@ -201,7 +217,7 @@ async function connectToWhatsApp(force = false) {
           currentQrCode = await QRCode.toDataURL(qr);
           isConnected = false;
           connectedUser = null;
-          console.log(`[BAILEYS] 📱 QR Code generated for socket #${currentInstance}`);
+          console.log(`[BAILEYS] 📱 QR Code generated for socket generation #${currentInstance}`);
           io.emit('qr', { qrCode: currentQrCode });
           io.emit('status', { status: 'qr_ready', connected: false, qrCode: currentQrCode });
         } catch (err) {
@@ -212,9 +228,11 @@ async function connectToWhatsApp(force = false) {
       if (connection === 'open') {
         isConnected = true;
         isConnecting = false;
+        reconnectAttempts = 0;
         currentQrCode = null;
-        connectedUser = newSock.user ? newSock.user.id.split(':')[0] : 'Go Grand Owner';
-        console.log(`[BAILEYS] ✅ Connection OPENED successfully! Connected user: ${connectedUser}`);
+        lastConnectedAt = new Date().toISOString();
+        connectedUser = newSock.user ? newSock.user.id.split(':')[0] : 'Go Grand Detailing';
+        console.log(`[BAILEYS] ✅ Connection OPENED successfully! User: ${connectedUser} | Time: ${lastConnectedAt}`);
         io.emit('status', { status: 'connected', connected: true, user: connectedUser });
       }
 
@@ -222,38 +240,43 @@ async function connectToWhatsApp(force = false) {
         isConnected = false;
         isConnecting = false;
         connectedUser = null;
+        lastDisconnectAt = new Date().toISOString();
 
-        const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const closeReason = lastDisconnect?.error?.message || lastDisconnect?.error || 'Unknown error';
-        const isLoggedOut = statusCode === DisconnectReason.loggedOut;
-        const shouldReconnect = !isLoggedOut;
+        const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.statusCode;
+        const closeReason = lastDisconnect?.error?.message || (typeof lastDisconnect?.error === 'string' ? lastDisconnect.error : 'Connection closed');
+        lastDisconnectReason = String(closeReason);
+        lastDisconnectCode = statusCode || null;
 
-        console.log(`[BAILEYS] ⚠️ Connection CLOSED for socket #${currentInstance}. StatusCode: ${statusCode}, Reason: ${closeReason}, ShouldReconnect: ${shouldReconnect}`);
+        const isExplicitLoggedOut = statusCode === DisconnectReason.loggedOut;
+        const shouldReconnect = !isExplicitLoggedOut;
 
-        if (isLoggedOut) {
+        // Diagnostic log without secrets
+        console.log(`[BAILEYS] ⚠️ Connection CLOSED (Generation #${currentInstance}) | StatusCode: ${statusCode} | Reason: ${closeReason} | ShouldReconnect: ${shouldReconnect} | Time: ${lastDisconnectAt}`);
+
+        if (isExplicitLoggedOut) {
           currentQrCode = null;
-          console.log('[BAILEYS] 🚪 Logged out. Clearing Supabase authentication session records.');
-          if (authHandle && authHandle.clearAuthState) {
-            try {
-              await authHandle.clearAuthState();
-            } catch (authErr) {
-              console.warn('[BAILEYS] Error clearing auth state on logout:', authErr.message);
-            }
-          }
+          console.log('[BAILEYS] 🚪 Logged out notification received from WhatsApp. Re-authentication required.');
           io.emit('status', { status: 'logged_out', connected: false });
+          // Note: Do NOT automatically delete Supabase records; user can scan fresh QR to re-authenticate
         } else if (shouldReconnect) {
+          reconnectAttempts++;
+          // Exponential backoff: 3s, 5s, 8s, 12s, 18s, max 30s
+          const backoffDelay = Math.min(30000, Math.round(3000 * Math.pow(1.5, Math.min(reconnectAttempts - 1, 5))));
+          lastReconnectAt = new Date(Date.now() + backoffDelay).toISOString();
+
+          console.log(`[BAILEYS] 🔄 Scheduling automatic reconnect in ${backoffDelay}ms (Attempt #${reconnectAttempts}) using persisted Supabase auth state...`);
           io.emit('status', { status: 'reconnecting', connected: false });
-          console.log('[BAILEYS] 🔄 Scheduling reconnect in 5000ms...');
+
           if (reconnectTimer) clearTimeout(reconnectTimer);
           reconnectTimer = setTimeout(() => {
-            console.log('[BAILEYS] 🔄 Executing scheduled reconnect...');
+            console.log(`[BAILEYS] 🔄 Executing scheduled reconnect #${reconnectAttempts}...`);
             connectToWhatsApp();
-          }, 5000);
+          }, backoffDelay);
         }
       }
     });
   } catch (error) {
-    console.error(`[BAILEYS] ❌ Failed to initialize WhatsApp connection #${currentInstance}:`, error);
+    console.error(`[BAILEYS] ❌ Failed initializing WhatsApp socket #${currentInstance}:`, error.message);
     isConnecting = false;
     isConnected = false;
     io.emit('status', { status: 'error', connected: false, error: error.message });
@@ -263,6 +286,7 @@ async function connectToWhatsApp(force = false) {
 // REST API Endpoints
 
 app.get('/health', (req, res) => {
+  const authDiag = getAuthStateDiagnostics();
   res.json({
     status: 'ok',
     service: 'go-grand-whatsapp-server',
@@ -272,10 +296,24 @@ app.get('/health', (req, res) => {
     user: connectedUser,
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
+    diagnostics: {
+      whatsapp_connected: isConnected,
+      whatsapp_authenticated: isConnected || (connectedUser !== null),
+      has_persisted_creds: hasPersistedCreds,
+      last_connected_at: lastConnectedAt,
+      last_disconnect_at: lastDisconnectAt,
+      last_disconnect_reason: lastDisconnectReason,
+      last_disconnect_code: lastDisconnectCode,
+      last_reconnect_at: lastReconnectAt,
+      reconnect_attempts: reconnectAttempts,
+      connection_generation: socketInstanceId,
+      ...authDiag,
+    },
   });
 });
 
 app.get('/api/whatsapp/health', (req, res) => {
+  const authDiag = getAuthStateDiagnostics();
   res.json({
     status: 'ok',
     service: 'go-grand-whatsapp-server',
@@ -285,16 +323,44 @@ app.get('/api/whatsapp/health', (req, res) => {
     user: connectedUser,
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
+    diagnostics: {
+      whatsapp_connected: isConnected,
+      whatsapp_authenticated: isConnected || (connectedUser !== null),
+      has_persisted_creds: hasPersistedCreds,
+      last_connected_at: lastConnectedAt,
+      last_disconnect_at: lastDisconnectAt,
+      last_disconnect_reason: lastDisconnectReason,
+      last_disconnect_code: lastDisconnectCode,
+      last_reconnect_at: lastReconnectAt,
+      reconnect_attempts: reconnectAttempts,
+      connection_generation: socketInstanceId,
+      ...authDiag,
+    },
   });
 });
 
 app.get('/api/whatsapp/status', (req, res) => {
+  const authDiag = getAuthStateDiagnostics();
   res.json({
     connected: isConnected,
     user: connectedUser,
     qrCode: currentQrCode,
     isConnecting,
     sessionPersistence: 'supabase',
+    diagnostics: {
+      whatsapp_connected: isConnected,
+      whatsapp_authenticated: isConnected || (connectedUser !== null),
+      has_persisted_creds: hasPersistedCreds,
+      last_connected_at: lastConnectedAt,
+      last_disconnect_at: lastDisconnectAt,
+      last_disconnect_reason: lastDisconnectReason,
+      last_disconnect_code: lastDisconnectCode,
+      last_reconnect_at: lastReconnectAt,
+      reconnect_attempts: reconnectAttempts,
+      connection_generation: socketInstanceId,
+      ...authDiag,
+      uptime: Math.floor(process.uptime()),
+    },
   });
 });
 
@@ -303,7 +369,7 @@ app.post('/api/whatsapp/connect', requireApiAuth, (req, res) => {
     console.log('📡 [/api/whatsapp/connect] Initiating connection...');
     connectToWhatsApp();
   } else {
-    console.log(`📡 [/api/whatsapp/connect] Connection already active (connected: ${isConnected}, isConnecting: ${isConnecting})`);
+    console.log(`📡 [/api/whatsapp/connect] Connection already active/in-progress (connected: ${isConnected}, isConnecting: ${isConnecting})`);
   }
   res.json({
     connected: isConnected,
@@ -332,12 +398,13 @@ app.post('/api/whatsapp/logout', requireApiAuth, async (req, res) => {
     isConnecting = false;
     connectedUser = null;
     currentQrCode = null;
+    hasPersistedCreds = false;
 
     if (authHandle && authHandle.clearAuthState) {
       try {
         await authHandle.clearAuthState();
       } catch (authErr) {
-        console.warn('[BAILEYS] Warning clearing Supabase auth state on logout:', authErr.message);
+        console.warn('[BAILEYS] Warning clearing Supabase auth state on manual logout:', authErr.message);
       }
     }
 

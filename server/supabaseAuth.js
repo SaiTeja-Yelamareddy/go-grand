@@ -1,6 +1,17 @@
 import { Mutex } from 'async-mutex';
 import { proto, initAuthCreds, BufferJSON } from '@whiskeysockets/baileys';
 
+// Diagnostics state for monitoring
+let lastSaveTimestamp = null;
+let lastSaveError = null;
+let saveOperationsCount = 0;
+
+export const getAuthStateDiagnostics = () => ({
+  last_auth_state_save_at: lastSaveTimestamp,
+  auth_state_save_error: lastSaveError,
+  save_operations_count: saveOperationsCount,
+});
+
 /**
  * Custom Supabase-backed authentication state adapter for Baileys WhatsApp Web API.
  * Stores credentials (`creds`) and Signal cryptographic keys (`pre-key`, `session`, `sender-key`, etc.)
@@ -25,7 +36,7 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
   try {
     const { error } = await supabase.from(targetTable).select('key_id').limit(1);
     if (error && (error.code === 'PGRST205' || error.message?.includes('not find the table') || error.message?.includes('does not exist'))) {
-      console.log(`[SUPABASE AUTH] Notice: Table '${targetTable}' not found. Falling back to 'app_settings' table for session storage.`);
+      console.log(`[SUPABASE AUTH] Table '${targetTable}' not found. Using 'app_settings' table for session storage.`);
       targetTable = 'app_settings';
       useFallbackAppSettings = true;
     } else if (error) {
@@ -98,91 +109,105 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
     const dbKey = formatKeyId(keyId);
     memoryCache.set(dbKey, data);
 
-    return mutex.acquire().then(async (release) => {
-      try {
-        const serialized = JSON.stringify(data, BufferJSON.replacer);
+    const release = await mutex.acquire();
+    try {
+      const serialized = JSON.stringify(data, BufferJSON.replacer);
 
-        if (useFallbackAppSettings) {
-          const { error } = await supabase.from(targetTable).upsert(
-            {
-              key: dbKey,
-              value: JSON.parse(serialized),
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'key' }
-          );
-          if (error) {
-            console.error(`[SUPABASE AUTH] Upsert error for key '${dbKey}':`, error.message);
-          }
+      if (useFallbackAppSettings) {
+        const { error } = await supabase.from(targetTable).upsert(
+          {
+            key: dbKey,
+            value: JSON.parse(serialized),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'key' }
+        );
+        if (error) {
+          lastSaveError = error.message;
+          console.error(`[SUPABASE AUTH ERROR] Upsert failed for key '${dbKey}':`, error.message);
+          throw error;
         } else {
-          const { error } = await supabase.from(targetTable).upsert(
-            {
-              session_id: sessionId,
-              key_id: keyId,
-              value: JSON.parse(serialized),
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'session_id,key_id' }
-          );
-          if (error) {
-            console.error(`[SUPABASE AUTH] Upsert error for key '${keyId}':`, error.message);
-          }
+          lastSaveTimestamp = new Date().toISOString();
+          lastSaveError = null;
+          saveOperationsCount++;
         }
-      } catch (err) {
-        console.error(`[SUPABASE AUTH] Exception writing key '${keyId}':`, err.message);
-      } finally {
-        release();
+      } else {
+        const { error } = await supabase.from(targetTable).upsert(
+          {
+            session_id: sessionId,
+            key_id: keyId,
+            value: JSON.parse(serialized),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'session_id,key_id' }
+        );
+        if (error) {
+          lastSaveError = error.message;
+          console.error(`[SUPABASE AUTH ERROR] Upsert failed for key '${keyId}':`, error.message);
+          throw error;
+        } else {
+          lastSaveTimestamp = new Date().toISOString();
+          lastSaveError = null;
+          saveOperationsCount++;
+        }
       }
-    });
+    } catch (err) {
+      lastSaveError = err.message;
+      console.error(`[SUPABASE AUTH EXCEPTION] Failed writing key '${keyId}':`, err.message);
+    } finally {
+      release();
+    }
   };
 
   /**
-   * Clears the entire session (used on logout or session reset)
+   * Clears the entire session (used on explicit user logout only)
    */
   const clearAuthState = async () => {
     memoryCache.clear();
-    return mutex.acquire().then(async (release) => {
-      try {
-        if (useFallbackAppSettings) {
-          const prefix = `wa_auth:${sessionId}:`;
-          const { error } = await supabase
-            .from(targetTable)
-            .delete()
-            .gte('key', prefix)
-            .lt('key', `${prefix}\uffff`);
-          if (error) {
-            console.warn('[SUPABASE AUTH] Error clearing session from app_settings:', error.message);
-          } else {
-            console.log(`[SUPABASE AUTH] 🧹 Successfully cleared all auth keys for session '${sessionId}'`);
-          }
+    const release = await mutex.acquire();
+    try {
+      if (useFallbackAppSettings) {
+        const prefix = `wa_auth:${sessionId}:`;
+        const { error } = await supabase
+          .from(targetTable)
+          .delete()
+          .gte('key', prefix)
+          .lt('key', `${prefix}\uffff`);
+        if (error) {
+          console.warn('[SUPABASE AUTH] Error clearing session from app_settings:', error.message);
         } else {
-          const { error } = await supabase
-            .from(targetTable)
-            .delete()
-            .eq('session_id', sessionId);
-          if (error) {
-            console.warn('[SUPABASE AUTH] Error clearing session from whatsapp_auth_state:', error.message);
-          } else {
-            console.log(`[SUPABASE AUTH] 🧹 Successfully cleared all auth keys for session '${sessionId}'`);
-          }
+          console.log(`[SUPABASE AUTH] 🧹 Successfully cleared all auth keys for session '${sessionId}'`);
         }
-      } catch (err) {
-        console.warn('[SUPABASE AUTH] Exception clearing session:', err.message);
-      } finally {
-        release();
+      } else {
+        const { error } = await supabase
+          .from(targetTable)
+          .delete()
+          .eq('session_id', sessionId);
+        if (error) {
+          console.warn('[SUPABASE AUTH] Error clearing session from whatsapp_auth_state:', error.message);
+        } else {
+          console.log(`[SUPABASE AUTH] 🧹 Successfully cleared all auth keys for session '${sessionId}'`);
+        }
       }
-    });
+    } catch (err) {
+      console.warn('[SUPABASE AUTH] Exception clearing session:', err.message);
+    } finally {
+      release();
+    }
   };
 
   // 1. Initialize or load stored credentials
   console.log(`[SUPABASE AUTH] 🔍 Fetching WhatsApp credentials for session '${sessionId}'...`);
   const existingCreds = await readData('creds');
   const creds = existingCreds || initAuthCreds();
+  const hasValidCreds = !!(existingCreds && existingCreds.me && existingCreds.me.id);
 
-  if (existingCreds) {
-    console.log(`[SUPABASE AUTH] ✅ Existing session credentials loaded successfully (Me ID: ${creds.me?.id || 'pairing initiated'}).`);
+  if (hasValidCreds) {
+    console.log(`[SUPABASE AUTH] ✅ Existing authenticated credentials loaded (Me ID: ${creds.me.id}).`);
+  } else if (existingCreds) {
+    console.log('[SUPABASE AUTH] ℹ️ Found uncompleted pairing credentials. Ready to connect.');
   } else {
-    console.log('[SUPABASE AUTH] ℹ️ No existing credentials found. Initialized fresh authentication credentials.');
+    console.log('[SUPABASE AUTH] ℹ️ No existing credentials found in Supabase. Fresh credentials initialized.');
   }
 
   return {
@@ -326,51 +351,63 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
             }
           }
 
-          return mutex.acquire().then(async (release) => {
-            try {
-              if (upserts.length > 0) {
-                const onConflict = useFallbackAppSettings ? 'key' : 'session_id,key_id';
+          const release = await mutex.acquire();
+          try {
+            if (upserts.length > 0) {
+              const onConflict = useFallbackAppSettings ? 'key' : 'session_id,key_id';
+              
+              // Chunk upserts in batches of 50 to prevent large payload network drops
+              const chunkSize = 50;
+              for (let i = 0; i < upserts.length; i += chunkSize) {
+                const chunk = upserts.slice(i, i + chunkSize);
                 const { error } = await supabase
                   .from(targetTable)
-                  .upsert(upserts, { onConflict });
+                  .upsert(chunk, { onConflict });
 
                 if (error) {
-                  console.error('[SUPABASE AUTH] Batch upsert error:', error.message);
-                }
-              }
-
-              if (deletes.length > 0) {
-                if (useFallbackAppSettings) {
-                  const { error } = await supabase
-                    .from(targetTable)
-                    .delete()
-                    .in('key', deletes);
-                  if (error) {
-                    console.warn('[SUPABASE AUTH] Batch delete error (app_settings):', error.message);
-                  }
+                  lastSaveError = error.message;
+                  console.error('[SUPABASE AUTH ERROR] Batch upsert error:', error.message);
                 } else {
-                  const { error } = await supabase
-                    .from(targetTable)
-                    .delete()
-                    .eq('session_id', sessionId)
-                    .in('key_id', deletes);
-                  if (error) {
-                    console.warn('[SUPABASE AUTH] Batch delete error (whatsapp_auth_state):', error.message);
-                  }
+                  lastSaveTimestamp = new Date().toISOString();
+                  lastSaveError = null;
+                  saveOperationsCount += chunk.length;
                 }
               }
-            } catch (err) {
-              console.error('[SUPABASE AUTH] Exception during batch keys update:', err.message);
-            } finally {
-              release();
             }
-          });
+
+            if (deletes.length > 0) {
+              if (useFallbackAppSettings) {
+                const { error } = await supabase
+                  .from(targetTable)
+                  .delete()
+                  .in('key', deletes);
+                if (error) {
+                  console.warn('[SUPABASE AUTH] Batch delete error (app_settings):', error.message);
+                }
+              } else {
+                const { error } = await supabase
+                  .from(targetTable)
+                  .delete()
+                  .eq('session_id', sessionId)
+                  .in('key_id', deletes);
+                if (error) {
+                  console.warn('[SUPABASE AUTH] Batch delete error (whatsapp_auth_state):', error.message);
+                }
+              }
+            }
+          } catch (err) {
+            lastSaveError = err.message;
+            console.error('[SUPABASE AUTH EXCEPTION] Batch keys update failed:', err.message);
+          } finally {
+            release();
+          }
         },
       },
     },
     saveCreds: async () => {
       return writeData(creds, 'creds');
     },
+    hasValidCreds,
     clearAuthState,
   };
 };

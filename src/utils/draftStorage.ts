@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabaseClient';
+import { isOwnerAuthenticated, getCurrentStaff } from '../config/authConfig';
 
 export interface JobRecord {
   id: string;
@@ -127,10 +128,23 @@ export async function syncJobsFromSupabase(): Promise<JobRecord[]> {
 export async function saveJobRecord(
   jobData: Omit<JobRecord, 'id' | 'createdAt'>
 ): Promise<JobRecord> {
+  const isOwner = isOwnerAuthenticated();
+  const currentStaff = getCurrentStaff();
+
+  if (!isOwner && (!currentStaff || !currentStaff.active)) {
+    throw new Error('Unauthorized: An active authenticated session is required to create job records.');
+  }
+
+  // Derive creator strictly from verified session, never trust arbitrary caller parameter
+  const sessionCreatorName = isOwner ? 'Owner' : (currentStaff?.staff_name || 'Staff');
+  const sessionCreatorId = isOwner ? 'owner' : (currentStaff?.id || 'staff');
+
   const existingJobs = getAllJobRecords();
   const newJob: JobRecord = {
     ...jobData,
     id: `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    createdBy: sessionCreatorName,
+    createdById: sessionCreatorId,
     createdAt: new Date().toISOString(),
   };
 
@@ -156,7 +170,24 @@ export async function updateJobRecord(
   id: string,
   updatedData: Partial<Omit<JobRecord, 'id' | 'createdAt'>>
 ): Promise<JobRecord | undefined> {
+  const isOwner = isOwnerAuthenticated();
+  const currentStaff = getCurrentStaff();
+
+  if (!isOwner && (!currentStaff || !currentStaff.active)) {
+    throw new Error('Unauthorized: An active authenticated session is required to update job records.');
+  }
+
   const allJobs = getAllJobRecords();
+  const target = allJobs.find((j) => j.id === id);
+  if (!target) {
+    throw new Error('Record not found.');
+  }
+
+  // Ownership Check: Only Owner or the Staff member who created the job can modify it
+  if (!isOwner && target.createdById && target.createdById !== currentStaff?.id) {
+    throw new Error('Forbidden: You do not have permission to modify this record. Only the creator or owner may edit.');
+  }
+
   let targetJob: JobRecord | undefined;
 
   const updatedJobs = allJobs.map((j) => {
@@ -164,6 +195,10 @@ export async function updateJobRecord(
       targetJob = {
         ...j,
         ...updatedData,
+        // Preserve immutable creator metadata
+        createdBy: j.createdBy,
+        createdById: j.createdById,
+        createdAt: j.createdAt,
       };
       return targetJob;
     }
@@ -193,7 +228,23 @@ export async function updateJobRecord(
 }
 
 export async function deleteJobRecord(id: string): Promise<void> {
-  const jobs = getAllJobRecords().filter((j) => j.id !== id);
+  const isOwner = isOwnerAuthenticated();
+  const currentStaff = getCurrentStaff();
+
+  if (!isOwner && (!currentStaff || !currentStaff.active)) {
+    throw new Error('Unauthorized: An active authenticated session is required to delete job records.');
+  }
+
+  const allJobs = getAllJobRecords();
+  const target = allJobs.find((j) => j.id === id);
+  if (!target) return;
+
+  // Ownership Check: Owner or the Staff member who created the job can delete it
+  if (!isOwner && target.createdById && target.createdById !== currentStaff?.id) {
+    throw new Error('Forbidden: You do not have permission to delete this record. Only the creator or owner may delete.');
+  }
+
+  const jobs = allJobs.filter((j) => j.id !== id);
   localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(jobs));
   localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(jobs));
 

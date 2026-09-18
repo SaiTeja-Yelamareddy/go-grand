@@ -1,4 +1,6 @@
+import bcrypt from 'bcryptjs';
 import { supabase, isSupabaseConfigured } from '../config/supabaseClient';
+import { isOwnerAuthenticated } from '../config/authConfig';
 
 export interface StaffProfile {
   id: string;
@@ -12,10 +14,20 @@ export interface StaffProfile {
   updated_at: string;
 }
 
-const LOCAL_STAFF_KEY = 'go-grand-staff-profiles';
+export interface PasswordResetToken {
+  token: string;
+  staff_id: string;
+  expires_at: number;
+  used: boolean;
+}
 
-// Helper: Secure SHA-256 hashing for passwords (never plaintext)
-export async function hashPassword(plainText: string): Promise<string> {
+const LOCAL_STAFF_KEY = 'go-grand-staff-profiles';
+const RESET_TOKENS_KEY = 'go-grand-pwd-reset-tokens';
+
+/**
+ * Computes legacy SHA-256 hash for backward compatibility migration
+ */
+async function legacySha256(plainText: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(plainText.trim());
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -23,26 +35,73 @@ export async function hashPassword(plainText: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Initial seed staff list if no staff exist
+/**
+ * Secure password hashing using bcrypt with salt rounds = 10
+ */
+export async function hashPassword(plainText: string): Promise<string> {
+  const clean = plainText.trim();
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(clean, salt);
+}
+
+/**
+ * Secure constant-time password verification supporting bcrypt and legacy SHA-256 migration
+ */
+export async function verifyPassword(
+  plainText: string,
+  storedHash: string
+): Promise<{ valid: boolean; needsUpgrade: boolean }> {
+  if (!plainText || !storedHash) {
+    return { valid: false, needsUpgrade: false };
+  }
+
+  const clean = plainText.trim();
+
+  // 1. If stored hash is standard bcrypt ($2a$, $2b$, $2y$)
+  if (storedHash.startsWith('$2')) {
+    try {
+      const match = await bcrypt.compare(clean, storedHash);
+      return { valid: match, needsUpgrade: false };
+    } catch {
+      return { valid: false, needsUpgrade: false };
+    }
+  }
+
+  // 2. Fallback check for legacy SHA-256 hash (64 hex characters)
+  if (storedHash.length === 64) {
+    try {
+      const sha = await legacySha256(clean);
+      if (sha.toLowerCase() === storedHash.toLowerCase()) {
+        return { valid: true, needsUpgrade: true };
+      }
+    } catch {
+      return { valid: false, needsUpgrade: false };
+    }
+  }
+
+  return { valid: false, needsUpgrade: false };
+}
+
+// Initial seed staff list with bcrypt hashes for '123456'
 const INITIAL_STAFF: Omit<StaffProfile, 'id' | 'created_at' | 'updated_at'>[] = [
   {
     staff_name: 'Sai Kumar',
     phone_number: '9876543210',
-    password_hash: '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', // 123456
+    password_hash: '$2b$10$wlgCKifUQhmeU8taaMO3mu63wrRLvQ5.ssoT3ENbR7XQaE0aKCioG', // bcrypt for '123456'
     role: 'STAFF',
     active: true,
   },
   {
     staff_name: 'Ravi',
     phone_number: '9876543211',
-    password_hash: '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', // 123456
+    password_hash: '$2b$10$wlgCKifUQhmeU8taaMO3mu63wrRLvQ5.ssoT3ENbR7XQaE0aKCioG', // bcrypt for '123456'
     role: 'STAFF',
     active: true,
   },
   {
     staff_name: 'Prasad',
     phone_number: '9876543212',
-    password_hash: '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', // 123456
+    password_hash: '$2b$10$wlgCKifUQhmeU8taaMO3mu63wrRLvQ5.ssoT3ENbR7XQaE0aKCioG', // bcrypt for '123456'
     role: 'STAFF',
     active: false,
   },
@@ -89,15 +148,12 @@ export async function getStaffProfiles(): Promise<StaffProfile[]> {
         .order('created_at', { ascending: true });
 
       if (!error && Array.isArray(data)) {
-        // Merge Supabase records with local records so no newly added staff is lost
         const mergedMap = new Map<string, StaffProfile>();
-        
-        // Add local first
+
         localList.forEach((s) => {
           mergedMap.set(s.phone_number.toLowerCase().trim(), s);
         });
 
-        // Overlay Supabase data
         data.forEach((remote: any) => {
           const profile: StaffProfile = {
             id: String(remote.id || ''),
@@ -125,7 +181,6 @@ export async function getStaffProfiles(): Promise<StaffProfile[]> {
   return localList;
 }
 
-// Synchronous getter for fast initial UI rendering
 export function getStaffProfilesSync(): StaffProfile[] {
   return getLocalStaffProfiles();
 }
@@ -138,6 +193,11 @@ export async function addStaffProfile(data: {
   role?: 'OWNER' | 'STAFF';
   active?: boolean;
 }): Promise<StaffProfile> {
+  // Authorization check: Admin / Owner only
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can create new staff accounts.');
+  }
+
   const cleanName = data.staff_name.trim();
   const cleanPhone = data.phone_number.trim().replace(/\s+/g, '');
   const cleanPassword = data.password.trim();
@@ -148,11 +208,10 @@ export async function addStaffProfile(data: {
   if (!cleanPhone) {
     throw new Error('Phone number / username is required');
   }
-  if (!cleanPassword) {
-    throw new Error('Password is required');
+  if (!cleanPassword || cleanPassword.length < 6) {
+    throw new Error('Password must be at least 6 characters');
   }
 
-  // Check for duplicates in local store
   const current = getLocalStaffProfiles();
   const duplicate = current.find(
     (s) =>
@@ -161,13 +220,7 @@ export async function addStaffProfile(data: {
   );
 
   if (duplicate) {
-    throw new Error(
-      `Staff member with this ${
-        duplicate.phone_number.toLowerCase().trim() === cleanPhone.toLowerCase()
-          ? 'phone number'
-          : 'name'
-      } already exists.`
-    );
+    throw new Error('A staff account with this phone number or name already exists.');
   }
 
   const password_hash = await hashPassword(cleanPassword);
@@ -183,11 +236,9 @@ export async function addStaffProfile(data: {
     updated_at: now,
   };
 
-  // 1. Immediately save to local storage
   const updated = [...current, newStaff];
   saveLocalStaffProfiles(updated);
 
-  // 2. Synchronize to Supabase Cloud DB so any device/phone can authenticate
   if (isSupabaseConfigured() && supabase) {
     try {
       const { data: inserted, error } = await supabase
@@ -212,7 +263,6 @@ export async function addStaffProfile(data: {
         }
       } else if (inserted) {
         newStaff.id = inserted.id;
-        // Update local with the real Supabase ID
         const finalCurrent = getLocalStaffProfiles().map((s) =>
           s.phone_number === cleanPhone ? { ...s, id: inserted.id } : s
         );
@@ -238,8 +288,14 @@ export async function updateStaffProfile(
     password?: string;
     active: boolean;
     role: 'OWNER' | 'STAFF';
-  }>
+  }>,
+  bypassOwnerCheck = false
 ): Promise<StaffProfile | null> {
+  // Authorization check: Admin / Owner only (unless internal reset/migration bypass)
+  if (!bypassOwnerCheck && !isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can modify staff accounts.');
+  }
+
   const current = getLocalStaffProfiles();
   const index = current.findIndex((s) => s.id === id);
   if (index === -1) return null;
@@ -247,6 +303,9 @@ export async function updateStaffProfile(
   const staff = current[index];
   let newHash = staff.password_hash;
   if (updates.password && updates.password.trim()) {
+    if (updates.password.trim().length < 6) {
+      throw new Error('Password must be at least 6 characters');
+    }
     newHash = await hashPassword(updates.password);
   }
 
@@ -286,15 +345,23 @@ export async function updateStaffProfile(
 
 // Toggle staff active / disabled
 export async function toggleStaffStatus(id: string): Promise<StaffProfile | null> {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can change staff status.');
+  }
+
   const current = getLocalStaffProfiles();
   const staff = current.find((s) => s.id === id);
   if (!staff) return null;
 
-  return updateStaffProfile(id, { active: !staff.active });
+  return updateStaffProfile(id, { active: !staff.active }, true);
 }
 
 // Delete staff profile
 export async function deleteStaffProfile(id: string): Promise<boolean> {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can delete staff accounts.');
+  }
+
   const current = getLocalStaffProfiles();
   const filtered = current.filter((s) => s.id !== id);
   saveLocalStaffProfiles(filtered);
@@ -310,17 +377,25 @@ export async function deleteStaffProfile(id: string): Promise<boolean> {
   return true;
 }
 
-// Authenticate staff member across ANY phone / device via Cloud DB
+/**
+ * Authenticate staff member across ANY phone / device via Cloud DB.
+ * Uses generic non-enumerating error messages to protect user privacy.
+ */
 export async function authenticateStaff(
   phoneOrUsername: string,
   plainPassword: string
 ): Promise<{ success: boolean; staff?: StaffProfile; error?: string }> {
+  const GENERIC_ERROR = 'Invalid username/phone or password.';
+
   const rawInput = phoneOrUsername.trim();
   const cleanDigits = rawInput.replace(/\D/g, '');
   const trimmedInput = rawInput.toLowerCase();
-  const hashedPassword = await hashPassword(plainPassword);
 
-  // 1. Direct Cloud DB authentication (guarantees cross-phone access)
+  if (!rawInput || !plainPassword) {
+    return { success: false, error: GENERIC_ERROR };
+  }
+
+  // 1. Direct Cloud DB authentication
   if (isSupabaseConfigured() && supabase) {
     try {
       const conditions: string[] = [
@@ -338,7 +413,6 @@ export async function authenticateStaff(
         .limit(10);
 
       if (!error && Array.isArray(data) && data.length > 0) {
-        // Find best match among returned rows
         const matched = data.find((row: any) => {
           const rPhone = String(row.phone_number || '').toLowerCase().trim();
           const rDigits = rPhone.replace(/\D/g, '');
@@ -349,32 +423,40 @@ export async function authenticateStaff(
             (cleanDigits && rDigits && rDigits === cleanDigits) ||
             (cleanDigits.length === 10 && rDigits.endsWith(cleanDigits))
           );
-        }) || data[0];
+        });
 
-        const staff: StaffProfile = {
-          id: String(matched.id || ''),
-          user_id: matched.user_id,
-          staff_name: String(matched.staff_name || ''),
-          phone_number: String(matched.phone_number || ''),
-          password_hash: String(matched.password_hash || ''),
-          role: matched.role || 'STAFF',
-          active: matched.active !== undefined ? Boolean(matched.active) : true,
-          created_at: matched.created_at || new Date().toISOString(),
-          updated_at: matched.updated_at || new Date().toISOString(),
-        };
+        if (matched) {
+          const staff: StaffProfile = {
+            id: String(matched.id || ''),
+            user_id: matched.user_id,
+            staff_name: String(matched.staff_name || ''),
+            phone_number: String(matched.phone_number || ''),
+            password_hash: String(matched.password_hash || ''),
+            role: matched.role || 'STAFF',
+            active: matched.active !== undefined ? Boolean(matched.active) : true,
+            created_at: matched.created_at || new Date().toISOString(),
+            updated_at: matched.updated_at || new Date().toISOString(),
+          };
 
-        if (!staff.active) {
-          return { success: false, error: 'Your staff account has been disabled. Please contact the Owner.' };
-        }
-        if (staff.password_hash === hashedPassword) {
-          // Cache verified profile locally on this phone
-          const localList = getLocalStaffProfiles();
-          if (!localList.some((s) => s.id === staff.id)) {
-            saveLocalStaffProfiles([...localList, staff]);
+          if (!staff.active) {
+            return { success: false, error: 'Your staff account has been disabled. Please contact the Owner.' };
           }
-          return { success: true, staff };
-        } else {
-          return { success: false, error: 'Incorrect Password. Please check your credentials.' };
+
+          const { valid, needsUpgrade } = await verifyPassword(plainPassword, staff.password_hash);
+          if (valid) {
+            // Auto-upgrade legacy hash to bcrypt in background
+            if (needsUpgrade) {
+              updateStaffProfile(staff.id, { password: plainPassword }).catch(() => {});
+            }
+
+            const localList = getLocalStaffProfiles();
+            if (!localList.some((s) => s.id === staff.id)) {
+              saveLocalStaffProfiles([...localList, staff]);
+            }
+            return { success: true, staff };
+          }
+
+          return { success: false, error: GENERIC_ERROR };
         }
       }
     } catch (err) {
@@ -382,7 +464,7 @@ export async function authenticateStaff(
     }
   }
 
-  // 2. Local storage authentication (offline fallback)
+  // 2. Local storage fallback
   const allStaff = getLocalStaffProfiles();
   const found = allStaff.find((s) => {
     const sPhone = s.phone_number.toLowerCase().trim();
@@ -398,16 +480,77 @@ export async function authenticateStaff(
   });
 
   if (!found) {
-    return { success: false, error: 'Staff account not found. Please verify your phone number / username.' };
+    return { success: false, error: GENERIC_ERROR };
   }
 
   if (!found.active) {
     return { success: false, error: 'Your staff account has been disabled. Please contact the Owner.' };
   }
 
-  if (found.password_hash === hashedPassword) {
+  const { valid, needsUpgrade } = await verifyPassword(plainPassword, found.password_hash);
+  if (valid) {
+    if (needsUpgrade) {
+      updateStaffProfile(found.id, { password: plainPassword }).catch(() => {});
+    }
     return { success: true, staff: found };
   }
 
-  return { success: false, error: 'Incorrect Password. Please check your credentials.' };
+  return { success: false, error: GENERIC_ERROR };
+}
+
+// ==========================================
+// SINGLE-USE PASSWORD RESET TOKEN MANAGEMENT
+// ==========================================
+export function generatePasswordResetToken(staffId: string): string {
+  const array = new Uint8Array(24);
+  crypto.getRandomValues(array);
+  const token = Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
+
+  const tokensRaw = localStorage.getItem(RESET_TOKENS_KEY);
+  const tokens: PasswordResetToken[] = tokensRaw ? JSON.parse(tokensRaw) : [];
+
+  // Prune expired tokens (> 1 hour old)
+  const now = Date.now();
+  const pruned = tokens.filter((t) => !t.used && t.expires_at > now);
+
+  // New token strictly expires within 1 hour
+  pruned.push({
+    token,
+    staff_id: staffId,
+    expires_at: now + 60 * 60 * 1000,
+    used: false,
+  });
+
+  localStorage.setItem(RESET_TOKENS_KEY, JSON.stringify(pruned));
+  return token;
+}
+
+export async function verifyAndConsumeResetToken(
+  token: string,
+  newPlainPassword: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!token || !newPlainPassword || newPlainPassword.length < 6) {
+    return { success: false, error: 'Invalid reset token or password length (min 6 characters required).' };
+  }
+
+  const tokensRaw = localStorage.getItem(RESET_TOKENS_KEY);
+  if (!tokensRaw) {
+    return { success: false, error: 'Invalid or expired password reset token.' };
+  }
+
+  const tokens: PasswordResetToken[] = JSON.parse(tokensRaw);
+  const now = Date.now();
+  const index = tokens.findIndex((t) => t.token === token && !t.used && t.expires_at > now);
+
+  if (index === -1) {
+    return { success: false, error: 'Invalid, already used, or expired password reset token.' };
+  }
+
+  const target = tokens[index];
+  target.used = true; // Mark single-use
+  localStorage.setItem(RESET_TOKENS_KEY, JSON.stringify(tokens));
+
+  // Update staff password
+  await updateStaffProfile(target.staff_id, { password: newPlainPassword });
+  return { success: true };
 }

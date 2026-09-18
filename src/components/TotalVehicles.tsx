@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MoreVertical, X, Car, Search, ChevronDown, Download, CheckCircle2, User } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
+import { Header } from './Header';
 import { getAllJobRecords, syncJobsFromSupabase, formatNumericDateIST, type JobRecord } from '../utils/draftStorage';
 import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend } from '../utils/invoiceUtils';
-import { getCurrentStaff } from '../config/authConfig';
 
 interface TotalVehiclesProps {
   mode: 'staff' | 'owner';
@@ -36,7 +36,6 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
   onInstallApp,
 }) => {
   const navigate = useNavigate();
-  const currentStaff = getCurrentStaff();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [allRecords, setAllRecords] = useState<JobRecord[]>([]);
@@ -187,37 +186,10 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-black text-slate-900 dark:text-white flex flex-col transition-colors">
       {/* HEADER */}
-      <header className="sticky top-0 z-40 bg-white dark:bg-[#0A0A0A] border-b border-slate-200 dark:border-[#1F1F1F] px-4 py-3 flex items-center justify-between shadow-2xs transition-colors">
-        <div className="flex items-center min-w-0">
-          <button
-            onClick={() => setDrawerOpen((prev) => !prev)}
-            className="flex items-center gap-2.5 min-w-0 min-h-[44px] p-1 -ml-1 rounded-xl hover:bg-slate-100 dark:hover:bg-[#1A1A1A] active:bg-slate-200 dark:active:bg-[#222222] transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-            aria-label={drawerOpen ? "Close navigation" : "Open navigation"}
-            aria-expanded={drawerOpen}
-            aria-controls="navigation-drawer"
-          >
-            <img src="/logo.png" alt="GO GRAND" className="h-9 sm:h-10 object-contain rounded-lg shadow-2xs shrink-0" />
-            <div className="flex flex-col justify-center min-w-0">
-              <h1 className="font-extrabold text-sm sm:text-base leading-tight tracking-tight text-slate-900 dark:text-white uppercase truncate">
-                GO GRAND
-              </h1>
-              <p className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-neutral-400 tracking-wider uppercase leading-none mt-0.5 truncate">
-                CAR WASH & DETAILING
-              </p>
-            </div>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide border uppercase bg-slate-100 dark:bg-[#141414] text-slate-800 dark:text-neutral-200 border-slate-200 dark:border-[#222222]">
-            {mode === 'owner'
-              ? 'Owner Mode'
-              : currentStaff?.staff_name
-              ? `STAFF: ${currentStaff.staff_name.toUpperCase()}`
-              : 'Staff Mode'}
-          </div>
-        </div>
-      </header>
+      <Header
+        mode={mode}
+        onToggleDrawer={() => setDrawerOpen((prev) => !prev)}
+      />
 
       {/* NAVIGATION DRAWER */}
       <NavigationDrawer

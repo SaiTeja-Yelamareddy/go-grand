@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft, AlertCircle, UserCheck } from 'lucide-react';
 import { authenticateStaff } from '../utils/staffStorage';
 import { setCurrentStaff } from '../config/authConfig';
+import { checkRateLimit, recordFailedAttempt, resetRateLimit } from '../utils/rateLimiter';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 export const StaffLogin: React.FC = () => {
@@ -18,8 +19,15 @@ export const StaffLogin: React.FC = () => {
     e.preventDefault();
     setErrorMsg('');
 
+    // Check rate limit threshold before processing
+    const limit = checkRateLimit('staff_login', 5);
+    if (!limit.allowed) {
+      setErrorMsg(`Too many failed login attempts. Please wait ${limit.retryAfterSeconds} seconds before trying again.`);
+      return;
+    }
+
     if (!usernameOrPhone.trim() || !password) {
-      setErrorMsg('Please enter your Phone / Username and Password');
+      setErrorMsg('Invalid username/phone or password.');
       return;
     }
 
@@ -27,12 +35,18 @@ export const StaffLogin: React.FC = () => {
     try {
       const res = await authenticateStaff(usernameOrPhone, password);
       if (res.success && res.staff) {
+        resetRateLimit('staff_login');
         setCurrentStaff(res.staff);
         navigate('/staff');
       } else {
-        setErrorMsg(res.error || 'Invalid credentials. Please try again.');
+        const afterFail = recordFailedAttempt('staff_login', 5, 60);
+        if (!afterFail.allowed) {
+          setErrorMsg(`Too many failed login attempts. Account temporarily locked for ${afterFail.retryAfterSeconds} seconds.`);
+        } else {
+          setErrorMsg(res.error || 'Invalid username/phone or password.');
+        }
       }
-    } catch (err) {
+    } catch {
       setErrorMsg('Login failed. Please check your connection.');
     } finally {
       setLoading(false);

@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabaseClient';
+import { isOwnerAuthenticated } from '../config/authConfig';
 
 export interface ServiceItem {
   id: string;
@@ -73,6 +74,10 @@ export async function syncServiceSectionsFromSupabase(): Promise<ServiceSection[
 }
 
 export async function addServiceSection(name: string): Promise<ServiceSection> {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can add service sections.');
+  }
+
   const cleanName = name.trim();
   const newSection: ServiceSection = {
     id: `sec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -103,6 +108,10 @@ export async function addServiceSection(name: string): Promise<ServiceSection> {
 }
 
 export async function updateServiceSectionName(sectionId: string, newName: string): Promise<void> {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can update service section names.');
+  }
+
   const cleanName = newName.trim();
   const sections = getServiceSections();
   const updated = sections.map((sec) => (sec.id === sectionId ? { ...sec, name: cleanName } : sec));
@@ -122,6 +131,10 @@ export async function updateServiceSectionName(sectionId: string, newName: strin
 }
 
 export async function deleteServiceSection(sectionId: string): Promise<void> {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can delete service sections.');
+  }
+
   const sections = getServiceSections().filter((sec) => sec.id !== sectionId);
   saveServiceSections(sections);
 
@@ -136,6 +149,10 @@ export async function deleteServiceSection(sectionId: string): Promise<void> {
 }
 
 export async function addServiceToSection(sectionId: string, serviceName: string): Promise<ServiceSection[]> {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can add services.');
+  }
+
   const cleanServiceName = serviceName.trim();
   const newServiceItem: ServiceItem = {
     id: `srv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -174,6 +191,10 @@ export async function addServiceToSection(sectionId: string, serviceName: string
 }
 
 export async function updateServiceName(sectionId: string, serviceId: string, newName: string): Promise<ServiceSection[]> {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can update services.');
+  }
+
   const cleanName = newName.trim();
   const sections = getServiceSections();
   let targetServices: ServiceItem[] = [];
@@ -207,6 +228,10 @@ export async function updateServiceName(sectionId: string, serviceId: string, ne
 }
 
 export async function deleteServiceFromSection(sectionId: string, serviceId: string): Promise<ServiceSection[]> {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can delete services.');
+  }
+
   const sections = getServiceSections();
   let targetServices: ServiceItem[] = [];
 

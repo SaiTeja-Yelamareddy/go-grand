@@ -7,6 +7,24 @@ import QRCode from 'qrcode';
 import pino from 'pino';
 import fs from 'fs';
 import os from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import https from 'https';
+import dotenv from 'dotenv';
+import { createClient } from '@supabase/supabase-js';
+import { generateInvoicePDF } from './pdfGenerator.js';
+import makeWASocket, {
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+} from '@whiskeysockets/baileys';
+import { useSupabaseAuthState } from './supabaseAuth.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from server or root .env
+dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 function getLocalIpAddress() {
   const interfaces = os.networkInterfaces();
@@ -19,14 +37,6 @@ function getLocalIpAddress() {
   }
   return 'localhost';
 }
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { generateInvoicePDF } from './pdfGenerator.js';
-import makeWASocket, {
-  useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-} from '@whiskeysockets/baileys';
 
 process.on('uncaughtException', (err) => {
   console.warn('⚠️ Uncaught exception caught:', err.message);
@@ -36,10 +46,7 @@ process.on('unhandledRejection', (reason) => {
   console.warn('⚠️ Unhandled rejection caught:', reason);
 });
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Fix invalid system TMPDIR pointing to MongoDB directory
+// Fix invalid system TMPDIR
 const projectTmpDir = path.join(__dirname, 'temp_uploads');
 if (!fs.existsSync(projectTmpDir)) {
   fs.mkdirSync(projectTmpDir, { recursive: true });
@@ -50,17 +57,30 @@ process.env.TEMP = projectTmpDir;
 os.tmpdir = () => projectTmpDir;
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 5000;
-const AUTH_DIR = process.env.SESSION_DATA_PATH
-  ? path.resolve(process.env.SESSION_DATA_PATH)
-  : path.join(__dirname, 'auth_info');
 
-if (!fs.existsSync(AUTH_DIR)) {
-  fs.mkdirSync(AUTH_DIR, { recursive: true });
-}
+// Supabase Configuration for WhatsApp Session State
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://bpsnequgqdqofpsrcvne.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwc25lcXVncWRxb2Zwc3Jjdm5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNjU3NjMsImV4cCI6MjEwMzg0MTc2M30.3blNafEzTPMNgzBtDg7k2dJLa91_gpI3h1kpbKkDCQ8';
+const WHATSAPP_SESSION_ID = process.env.WHATSAPP_SESSION_ID || 'go-grand-session';
 
-console.log(`📁 [WHATSAPP SESSION DIR]: ${AUTH_DIR}`);
+console.log(`🌐 [WHATSAPP SUPABASE PERSISTENCE] Initializing Supabase client (${SUPABASE_URL}) for session: '${WHATSAPP_SESSION_ID}'`);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: false,
+  },
+});
 
 const app = express();
+
+// Security Headers Middleware
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
 app.use(
   cors({
     origin: '*',
@@ -69,7 +89,7 @@ app.use(
   })
 );
 app.options('*', cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 const server = http.createServer(app);
 const io = new SocketIOServer(server, {
@@ -79,6 +99,19 @@ const io = new SocketIOServer(server, {
   },
 });
 
+// Authorization Middleware for Sensitive WhatsApp Control Endpoints
+const API_SECRET = process.env.WHATSAPP_API_SECRET;
+function requireApiAuth(req, res, next) {
+  if (API_SECRET) {
+    const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+    const token = authHeader ? authHeader.replace(/^Bearer\s+/i, '').trim() : '';
+    if (token !== API_SECRET) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid API secret token.' });
+    }
+  }
+  next();
+}
+
 let sock = null;
 let currentQrCode = null;
 let isConnected = false;
@@ -86,11 +119,9 @@ let connectedUser = null;
 let isConnecting = false;
 let reconnectTimer = null;
 let socketInstanceId = 0;
+let authHandle = null;
 
 const logger = pino({ level: 'debug' });
-
-import https from 'https';
-
 const httpsAgent = new https.Agent({ keepAlive: true });
 
 async function connectToWhatsApp(force = false) {
@@ -127,7 +158,9 @@ async function connectToWhatsApp(force = false) {
   }
 
   try {
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+    const { state, saveCreds, clearAuthState } = await useSupabaseAuthState(supabase, WHATSAPP_SESSION_ID);
+    authHandle = { clearAuthState, saveCreds };
+
     const { version } = await fetchLatestBaileysVersion();
 
     const newSock = makeWASocket({
@@ -199,13 +232,12 @@ async function connectToWhatsApp(force = false) {
 
         if (isLoggedOut) {
           currentQrCode = null;
-          console.log('[BAILEYS] 🚪 Logged out. Clearing session files.');
-          if (fs.existsSync(AUTH_DIR)) {
+          console.log('[BAILEYS] 🚪 Logged out. Clearing Supabase authentication session records.');
+          if (authHandle && authHandle.clearAuthState) {
             try {
-              fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-              fs.mkdirSync(AUTH_DIR, { recursive: true });
-            } catch (fsErr) {
-              console.warn('[BAILEYS] Error clearing auth files:', fsErr.message);
+              await authHandle.clearAuthState();
+            } catch (authErr) {
+              console.warn('[BAILEYS] Error clearing auth state on logout:', authErr.message);
             }
           }
           io.emit('status', { status: 'logged_out', connected: false });
@@ -234,6 +266,8 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'go-grand-whatsapp-server',
+    sessionPersistence: 'supabase',
+    sessionId: WHATSAPP_SESSION_ID,
     whatsappConnected: isConnected,
     user: connectedUser,
     uptime: Math.floor(process.uptime()),
@@ -245,6 +279,8 @@ app.get('/api/whatsapp/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'go-grand-whatsapp-server',
+    sessionPersistence: 'supabase',
+    sessionId: WHATSAPP_SESSION_ID,
     whatsappConnected: isConnected,
     user: connectedUser,
     uptime: Math.floor(process.uptime()),
@@ -258,10 +294,11 @@ app.get('/api/whatsapp/status', (req, res) => {
     user: connectedUser,
     qrCode: currentQrCode,
     isConnecting,
+    sessionPersistence: 'supabase',
   });
 });
 
-app.post('/api/whatsapp/connect', (req, res) => {
+app.post('/api/whatsapp/connect', requireApiAuth, (req, res) => {
   if (!isConnected && !isConnecting) {
     console.log('📡 [/api/whatsapp/connect] Initiating connection...');
     connectToWhatsApp();
@@ -273,10 +310,11 @@ app.post('/api/whatsapp/connect', (req, res) => {
     user: connectedUser,
     qrCode: currentQrCode,
     isConnecting,
+    sessionPersistence: 'supabase',
   });
 });
 
-app.post('/api/whatsapp/logout', async (req, res) => {
+app.post('/api/whatsapp/logout', requireApiAuth, async (req, res) => {
   try {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
@@ -295,11 +333,12 @@ app.post('/api/whatsapp/logout', async (req, res) => {
     connectedUser = null;
     currentQrCode = null;
 
-    if (fs.existsSync(AUTH_DIR)) {
+    if (authHandle && authHandle.clearAuthState) {
       try {
-        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-        fs.mkdirSync(AUTH_DIR, { recursive: true });
-      } catch (e) {}
+        await authHandle.clearAuthState();
+      } catch (authErr) {
+        console.warn('[BAILEYS] Warning clearing Supabase auth state on logout:', authErr.message);
+      }
     }
 
     io.emit('status', { status: 'logged_out', connected: false });
@@ -310,7 +349,7 @@ app.post('/api/whatsapp/logout', async (req, res) => {
   }
 });
 
-app.post('/api/whatsapp/send-invoice', async (req, res) => {
+app.post('/api/whatsapp/send-invoice', requireApiAuth, async (req, res) => {
   if (!isConnected || !sock) {
     return res.status(400).json({
       success: false,
@@ -357,7 +396,7 @@ app.post('/api/whatsapp/send-invoice', async (req, res) => {
   }
 });
 
-app.post('/api/whatsapp/send-vehicle-ready-qr', async (req, res) => {
+app.post('/api/whatsapp/send-vehicle-ready-qr', requireApiAuth, async (req, res) => {
   if (!isConnected || !sock) {
     return res.status(400).json({
       success: false,
@@ -468,7 +507,7 @@ app.get('/api/whatsapp/invoice-pdf', async (req, res) => {
   }
 });
 
-app.post('/api/whatsapp/send-invoice-pdf', async (req, res) => {
+app.post('/api/whatsapp/send-invoice-pdf', requireApiAuth, async (req, res) => {
   if (!isConnected || !sock) {
     return res.status(400).json({
       success: false,
@@ -579,7 +618,7 @@ app.post('/api/whatsapp/send-invoice-pdf', async (req, res) => {
   }
 });
 
-app.post('/api/whatsapp/test-pdf', async (req, res) => {
+app.post('/api/whatsapp/test-pdf', requireApiAuth, async (req, res) => {
   try {
     const { phoneNumber } = req.body;
     let cleanPhone = (phoneNumber || '').replace(/\D/g, '');

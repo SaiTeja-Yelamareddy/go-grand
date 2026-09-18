@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft, AlertCircle } from 'lucide-react';
 import { loginOwner } from '../config/authConfig';
+import { checkRateLimit, recordFailedAttempt, resetRateLimit } from '../utils/rateLimiter';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 export const OwnerLogin: React.FC = () => {
@@ -11,21 +12,42 @@ export const OwnerLogin: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+
+    // Check rate limit threshold before processing
+    const limit = checkRateLimit('owner_login', 5);
+    if (!limit.allowed) {
+      setErrorMsg(`Too many failed login attempts. Please wait ${limit.retryAfterSeconds} seconds before trying again.`);
+      return;
+    }
 
     if (!loginId.trim() || !password) {
       setErrorMsg('Invalid Login ID or Password');
       return;
     }
 
-    const success = loginOwner(loginId, password);
-    if (success) {
-      navigate('/owner');
-    } else {
-      setErrorMsg('Invalid Login ID or Password');
+    setLoading(true);
+    try {
+      const success = await loginOwner(loginId, password);
+      if (success) {
+        resetRateLimit('owner_login');
+        navigate('/owner');
+      } else {
+        const afterFail = recordFailedAttempt('owner_login', 5, 60);
+        if (!afterFail.allowed) {
+          setErrorMsg(`Too many failed login attempts. Account temporarily locked for ${afterFail.retryAfterSeconds} seconds.`);
+        } else {
+          setErrorMsg('Invalid Login ID or Password');
+        }
+      }
+    } catch {
+      setErrorMsg('An error occurred during authentication. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -36,7 +58,6 @@ export const OwnerLogin: React.FC = () => {
       </div>
 
       <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-2xl border border-slate-200 dark:border-[#1F1F1F] shadow-sm p-6 md:p-8 flex flex-col items-center transition-colors">
-        
         {/* HEADER BRANDING */}
         <img src="/logo.png" alt="GO GRAND" className="h-16 object-contain rounded-xl mb-2" />
         <p className="text-xs font-bold text-slate-600 dark:text-neutral-400 tracking-wider uppercase">
@@ -55,7 +76,6 @@ export const OwnerLogin: React.FC = () => {
 
         {/* LOGIN FORM */}
         <form onSubmit={handleSubmit} className="w-full space-y-4">
-          
           {/* LOGIN ID */}
           <div>
             <label className="block text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-2">
@@ -104,9 +124,10 @@ export const OwnerLogin: React.FC = () => {
           <div className="pt-3 space-y-3">
             <button
               type="submit"
-              className="w-full min-h-[50px] bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-neutral-200 active:scale-[0.99] text-white dark:text-black font-extrabold text-sm tracking-wider uppercase rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              disabled={loading}
+              className="w-full min-h-[50px] bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-neutral-200 active:scale-[0.99] disabled:opacity-60 text-white dark:text-black font-extrabold text-sm tracking-wider uppercase rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>LOGIN</span>
+              <span>{loading ? 'LOGGING IN...' : 'LOGIN'}</span>
             </button>
 
             <button

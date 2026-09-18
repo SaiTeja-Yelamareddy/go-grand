@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../config/supabaseClient';
+import { isOwnerAuthenticated } from '../config/authConfig';
 
 export const UPI_STORAGE_KEY = 'go-grand-business-upi-id';
 
@@ -22,6 +23,10 @@ export function getStoredUpiId(): string {
  * Saves the GO GRAND business UPI ID securely to local storage & Supabase.
  */
 export function saveUpiId(upiId: string): void {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can modify payment settings.');
+  }
+
   const clean = upiId.trim();
   try {
     localStorage.setItem(UPI_STORAGE_KEY, clean);

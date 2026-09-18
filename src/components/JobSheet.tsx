@@ -12,7 +12,6 @@ import {
   User,
   Phone,
   MapPin,
-  Sliders,
   Sparkles,
   Car,
 } from 'lucide-react';
@@ -493,8 +492,8 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         {/* FORM CONTAINER */}
         <form onSubmit={handleSaveDraft} className="space-y-4">
           
-          {/* 1. VEHICLE & CUSTOMER DETAILS SECTION */}
-          <section className="bg-white dark:bg-[#0A0A0A] rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-neutral-850 space-y-4">
+          {/* 1. VEHICLE & CUSTOMER DETAILS SECTION (MERGED) */}
+          <section className="bg-white dark:bg-[#0A0A0A] rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-neutral-850 space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-850 pb-2.5">
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-md bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400 flex items-center justify-center text-xs">
@@ -590,27 +589,10 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 </p>
               )}
             </div>
-          </section>
-
-          {/* 2. VEHICLE SPECIFICATIONS SECTION */}
-          <section className="bg-white dark:bg-[#0A0A0A] rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-neutral-850 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-850 pb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-400 flex items-center justify-center text-xs">
-                  <Sliders size={14} />
-                </span>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-                  Vehicle Details
-                </span>
-              </div>
-              <span className="text-[10px] font-bold text-slate-700 dark:text-neutral-300 bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 px-2 py-0.5 rounded-md">
-                Model & Location
-              </span>
-            </div>
 
             {/* Quick Search Filter Bar */}
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 dark:text-neutral-400">
+            <div className="relative pt-1">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 dark:text-neutral-400 pt-1">
                 <Search size={14} />
               </span>
               <input
@@ -755,7 +737,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
             )}
 
             {/* Location / Studio Bay Input */}
-            <div className="space-y-1.5 pt-1">
+            <div className="space-y-1.5 pt-0.5">
               <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
                 Studio Location / Bay
               </label>

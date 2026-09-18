@@ -258,6 +258,31 @@ export async function deleteJobRecord(id: string): Promise<void> {
   localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(jobs));
 }
 
+export async function restoreJobRecord(job: JobRecord): Promise<void> {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only an authenticated Owner can restore job records.');
+  }
+
+  const { data, error } = await supabase
+    .from('jobs')
+    .insert([mapJobRecordToRow(job)])
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('❌ Supabase restore job error:', error.message);
+    throw new Error(`Unable to restore vehicle record: ${error.message}`);
+  }
+
+  if (!data?.id) {
+    throw new Error('Unable to restore vehicle record.');
+  }
+
+  const jobs = [job, ...getAllJobRecords().filter((existingJob) => existingJob.id !== job.id)];
+  localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(jobs));
+  localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(jobs));
+}
+
 /**
  * Helper to get calendar date key in India timezone ("YYYY-MM-DD")
  */
@@ -300,4 +325,3 @@ export function getTodaysJobRecords(): JobRecord[] {
     return jobIST === currentTodayIST;
   });
 }
-

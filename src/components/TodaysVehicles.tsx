@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MoreVertical, X, Car, Download, CheckCircle2, User, Trash2 } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { Header } from './Header';
-import { deleteJobRecord, getTodaysJobRecords, syncJobsFromSupabase, formatNumericDateIST, getISTDateKey, type JobRecord } from '../utils/draftStorage';
+import { deleteJobRecord, getTodaysJobRecords, restoreJobRecord, syncJobsFromSupabase, formatNumericDateIST, getISTDateKey, type JobRecord } from '../utils/draftStorage';
 import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
@@ -29,14 +29,14 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
   const [selectedDeleteRecord, setSelectedDeleteRecord] = useState<JobRecord | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [toastData, setToastData] = useState<{ title: string; detail: string } | null>(null);
+  const [toastData, setToastData] = useState<{ title: string; detail: string; undoRecord?: JobRecord } | null>(null);
   const [showWhatsAppSettingsModal, setShowWhatsAppSettingsModal] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const showToast = (title: string, detail: string) => {
-    setToastData({ title, detail });
-    setTimeout(() => setToastData(null), 4000);
+  const showToast = (title: string, detail: string, undoRecord?: JobRecord) => {
+    setToastData({ title, detail, undoRecord });
+    setTimeout(() => setToastData((current) => current?.title === title ? null : current), 6000);
   };
 
   const reloadRecords = () => {
@@ -101,14 +101,29 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
     setDeleteError(null);
     try {
       await deleteJobRecord(selectedDeleteRecord.id);
-      const deletedVehicleNumber = selectedDeleteRecord.vehicleNumber;
+      const deletedRecord = selectedDeleteRecord;
+      const deletedVehicleNumber = deletedRecord.vehicleNumber;
       setSelectedDeleteRecord(null);
       reloadRecords();
-      showToast('VEHICLE RECORD DELETED', `${deletedVehicleNumber} was permanently removed.`);
+      showToast('VEHICLE RECORD DELETED', `${deletedVehicleNumber} was removed.`, deletedRecord);
     } catch (err: any) {
       setDeleteError(err instanceof Error ? err.message : 'Unable to delete vehicle record.');
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const handleUndoDelete = async () => {
+    const deletedRecord = toastData?.undoRecord;
+    if (!deletedRecord) return;
+
+    setToastData({ title: 'RESTORING VEHICLE RECORD', detail: 'Please wait...' });
+    try {
+      await restoreJobRecord(deletedRecord);
+      reloadRecords();
+      showToast('VEHICLE RECORD RESTORED', `${deletedRecord.vehicleNumber} is back in Today's Vehicles.`);
+    } catch (err: any) {
+      showToast('RESTORE FAILED', err instanceof Error ? err.message : 'Unable to restore vehicle record.');
     }
   };
 
@@ -533,6 +548,15 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
               {toastData.title}
             </p>
             <p className="text-[11px] text-neutral-300 font-medium mt-0.5">{toastData.detail}</p>
+            {toastData.undoRecord && (
+              <button
+                type="button"
+                onClick={handleUndoDelete}
+                className="mt-2 text-[11px] font-extrabold uppercase tracking-wider text-white underline underline-offset-2 hover:text-red-200 cursor-pointer"
+              >
+                UNDO
+              </button>
+            )}
           </div>
         </div>
       )}

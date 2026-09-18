@@ -521,18 +521,18 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
                 Vehicle Number <span className="text-rose-500">*</span>
               </label>
-              <div className="relative flex rounded-xl border-2 border-slate-300 dark:border-neutral-800 focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 bg-slate-50 dark:bg-[#050505] shadow-inner overflow-hidden transition-all">
+              <div className="relative flex rounded-xl border border-slate-300 dark:border-neutral-800 focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 bg-slate-50 dark:bg-[#050505] shadow-xs overflow-hidden transition-all">
                 {/* Country / IND Emblem Strip */}
-                <div className="w-9 bg-[#002B7F] flex flex-col items-center justify-center py-2 text-white border-r border-blue-900 select-none">
-                  <span className="text-[10px] text-amber-300 leading-none mb-0.5">☸</span>
-                  <span className="text-[9px] font-black tracking-tighter">IND</span>
+                <div className="w-8 bg-[#002B7F] flex flex-col items-center justify-center py-1 text-white border-r border-blue-900 select-none">
+                  <span className="text-[8px] text-amber-300 leading-none mb-0.5">☸</span>
+                  <span className="text-[8px] font-black tracking-tighter">IND</span>
                 </div>
                 <input
                   type="text"
                   value={formData.vehicleNumber}
                   onChange={(e) => handleChange('vehicleNumber', e.target.value.toUpperCase())}
                   placeholder="MH 02 EQ 8899"
-                  className="w-full bg-transparent border-none py-3 px-3 text-base md:text-lg font-mono font-black tracking-widest uppercase text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-600 focus:ring-0 focus:outline-none"
+                  className="w-full bg-transparent border-none py-2 px-3 text-sm sm:text-base font-mono font-bold tracking-wider uppercase text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-neutral-600 focus:ring-0 focus:outline-none"
                   required
                 />
               </div>

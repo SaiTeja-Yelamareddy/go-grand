@@ -138,7 +138,8 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       .catch(() => {});
   }, [showDropdownPicker]);
 
-  const availableServices = useMemo(() => {
+  // PRIMARY PACKAGE / SERVICE: Shows ONLY service section names (Supabase single source of truth)
+  const packageSections = useMemo(() => {
     const list: string[] = [];
     sections.forEach((sec) => {
       if (sec.name && sec.name.trim()) {
@@ -147,6 +148,18 @@ export const JobSheet: React.FC<JobSheetProps> = ({
           list.push(sName);
         }
       }
+    });
+    return list;
+  }, [sections]);
+
+  const filteredPackageSections = packageSections.filter((secName) =>
+    secName.toLowerCase().includes(serviceSearchQuery.toLowerCase().trim())
+  );
+
+  // Quick Service Chips: Individual services belonging to sections
+  const quickServices = useMemo(() => {
+    const list: string[] = [];
+    sections.forEach((sec) => {
       if (Array.isArray(sec.services)) {
         sec.services.forEach((srv) => {
           if (srv.name && srv.name.trim()) {
@@ -160,10 +173,6 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     });
     return list;
   }, [sections]);
-
-  const filteredServices = availableServices.filter((srv) =>
-    srv.toLowerCase().includes(serviceSearchQuery.toLowerCase().trim())
-  );
 
   // Pre-fill form if editing an existing job
   useEffect(() => {
@@ -219,6 +228,21 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     }
   };
 
+  const handleSelectPackageSection = (sectionName: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      selectedServices: [sectionName],
+    }));
+    setShowDropdownPicker(false);
+    if (errors.services) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.services;
+        return next;
+      });
+    }
+  };
+
   const handleToggleService = (serviceName: string) => {
     setFormData((prev) => {
       const exists = prev.selectedServices.includes(serviceName);
@@ -227,7 +251,6 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         : [...prev.selectedServices, serviceName];
       return { ...prev, selectedServices: updated };
     });
-    setShowDropdownPicker(false);
     if (errors.services) {
       setErrors((prev) => {
         const next = { ...prev };
@@ -782,7 +805,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               >
                 <span className="truncate text-slate-900 dark:text-white">
                   {formData.selectedServices.length > 0
-                    ? `${formData.selectedServices.length} Selected (${formData.selectedServices.join(', ')})`
+                    ? formData.selectedServices.join(', ')
                     : 'Choose a package or service...'}
                 </span>
                 <ChevronDown size={15} className="text-slate-400 shrink-0 ml-1" />
@@ -796,7 +819,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 />
               )}
 
-              {/* SERVICES POPUP MENU */}
+              {/* SERVICES POPUP MENU: SHOWS ONLY SECTION NAMES */}
               {showDropdownPicker && (
                 <div className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-white dark:bg-[#0F0F0F] border border-slate-300 dark:border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-64">
                   <div className="p-2 border-b border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-[#141414] flex items-center gap-2">
@@ -806,7 +829,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                         type="text"
                         value={serviceSearchQuery}
                         onChange={(e) => setServiceSearchQuery(e.target.value)}
-                        placeholder="Search services..."
+                        placeholder="Search packages..."
                         className="w-full min-h-[36px] pl-9 pr-7 bg-white dark:bg-[#1E1E1E] border border-slate-300 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
                       />
                       {serviceSearchQuery && (
@@ -829,28 +852,28 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                   </div>
 
                   <div className="p-1.5 space-y-0.5 overflow-y-auto max-h-48">
-                    {filteredServices.length > 0 ? (
-                      filteredServices.map((serviceName) => {
-                        const isSelected = formData.selectedServices.includes(serviceName);
+                    {filteredPackageSections.length > 0 ? (
+                      filteredPackageSections.map((sectionName) => {
+                        const isSelected = formData.selectedServices.includes(sectionName);
                         return (
                           <button
                             type="button"
-                            key={serviceName}
-                            onClick={() => handleToggleService(serviceName)}
-                            className={`w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between text-left transition-colors cursor-pointer ${
+                            key={sectionName}
+                            onClick={() => handleSelectPackageSection(sectionName)}
+                            className={`w-full px-3 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between text-left transition-colors cursor-pointer ${
                               isSelected
                                 ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
                                 : 'text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-neutral-800'
                             }`}
                           >
-                            <span className="truncate">{serviceName}</span>
+                            <span className="truncate">{sectionName}</span>
                             {isSelected && <Check size={15} className="text-slate-950 shrink-0 ml-1" />}
                           </button>
                         );
                       })
                     ) : (
-                      <div className="py-2.5 text-center text-xs text-slate-500 dark:text-neutral-400">
-                        No services found
+                      <div className="py-4 px-3 text-center text-xs text-slate-500 dark:text-neutral-400 font-medium">
+                        No packages or services available.
                       </div>
                     )}
                   </div>
@@ -864,14 +887,14 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               )}
             </div>
 
-            {/* Quick Service Chips (Fast Selection from Supabase) */}
-            {availableServices.length > 0 && (
+            {/* Quick Service Chips (Fast Selection of Sub-Services from Supabase) */}
+            {quickServices.length > 0 && (
               <div className="space-y-1.5">
                 <span className="block text-[11px] font-bold text-slate-700 dark:text-neutral-300">
                   Quick Service Chips:
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {availableServices.map((quickName) => {
+                  {quickServices.map((quickName) => {
                     const isSelected = formData.selectedServices.includes(quickName);
                     return (
                       <button

@@ -167,12 +167,20 @@ export async function runSafeDatabaseCapacityTest() {
   // STEP 1: PRODUCTION SAFETY GUARDS
   // ==============================================================================
   console.log('🔒 VERIFYING PRODUCTION SAFETY GUARDS...');
-  if (TEST_SUPABASE_URL === PRODUCTION_SUPABASE_URL || (process.env.SUPABASE_URL && process.env.SUPABASE_URL.includes('bpsnequgqdqofpsrcvne'))) {
-    if (TEST_DATABASE_ONLY !== 'true') {
-      console.error('⛔ FATAL ERROR: Attempted to run test with production database credentials!');
-      console.error('⛔ ABORTING. Production database is protected from test writes.');
-      process.exit(1);
-    }
+  if (TEST_DATABASE_ONLY !== 'true') {
+    console.error('⛔ FATAL ERROR: TEST_DATABASE_ONLY must remain true.');
+    console.error('⛔ ABORTING. Production database is protected from test writes.');
+    process.exit(1);
+  }
+
+  if (
+    TEST_SUPABASE_URL === PRODUCTION_SUPABASE_URL ||
+    TEST_SUPABASE_URL.includes('bpsnequgqdqofpsrcvne') ||
+    (process.env.SUPABASE_URL && process.env.SUPABASE_URL.includes('bpsnequgqdqofpsrcvne'))
+  ) {
+    console.error('⛔ FATAL ERROR: Capacity test configuration points to the production database!');
+    console.error('⛔ ABORTING. Production database is protected from test writes.');
+    process.exit(1);
   }
 
   console.log('  ✅ Guard 1: Production database URL (bpsnequgqdqofpsrcvne.supabase.co) strictly blocked.');

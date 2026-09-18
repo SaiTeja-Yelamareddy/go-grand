@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Database, HardDrive, ShieldCheck, AlertTriangle, Cloud, CheckCircle, RefreshCw } from 'lucide-react';
 import { getWhatsAppBackendUrl } from '../config/apiConfig';
+import { isSupabaseConfigured, supabase } from '../config/supabaseClient';
 
 interface DatabaseStorageModalProps {
   isOpen: boolean;
@@ -21,7 +22,9 @@ interface DatabaseUsageData {
   tableMetrics: {
     jobs: number;
     staffProfiles: number;
+    activeStaffProfiles: number;
     serviceSections: number;
+    totalServices: number;
     appSettings: number;
     whatsappAuthRecords: number;
   };
@@ -32,6 +35,15 @@ interface DatabaseUsageData {
     projectedPercentage: number;
     fitsInFreeTier: boolean;
   };
+  backup: {
+    lastSuccessfulAt: string | null;
+    lastSuccessfulFilename: string | null;
+    successfulBackupCount: number;
+    googleDriveConfigured: boolean;
+    googleDriveSuccessfulCount: number;
+    googleDriveLastSuccessfulAt: string | null;
+    status: string;
+  };
 }
 
 export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOpen, onClose }) => {
@@ -40,6 +52,33 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
   const [backupLoading, setBackupLoading] = useState<boolean>(false);
   const [backupResult, setBackupResult] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [jobsCount, setJobsCount] = useState<number | null>(null);
+  const [jobsCountLoading, setJobsCountLoading] = useState<boolean>(false);
+
+  const fetchJobsCount = async () => {
+    setJobsCountLoading(true);
+    try {
+      if (!isSupabaseConfigured()) {
+        throw new Error('Supabase database connection is not configured.');
+      }
+
+      const { count, error: jobsError } = await supabase
+        .from('jobs')
+        .select('*', { count: 'exact', head: true });
+
+      if (jobsError) {
+        throw jobsError;
+      }
+
+      setJobsCount(count ?? 0);
+    } catch (err: any) {
+      console.warn('Live jobs count fetch error:', err.message);
+      setJobsCount(null);
+      setError('Live jobs count is currently unavailable.');
+    } finally {
+      setJobsCountLoading(false);
+    }
+  };
 
   const fetchMetrics = async () => {
     setLoading(true);
@@ -65,33 +104,8 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
       }
     } catch (err: any) {
       console.warn('Database metrics fetch error:', err.message);
-      // Local fallback calculation for display
-      setData({
-        success: true,
-        timestamp: new Date().toISOString(),
-        storage: {
-          estimatedBytes: 15741240,
-          usedMb: 15.01,
-          limitMb: 500,
-          percentageUsed: 3.0,
-          status: 'HEALTHY',
-          warningMessage: 'Database usage is well within Supabase Free plan limits.',
-        },
-        tableMetrics: {
-          jobs: 6,
-          staffProfiles: 2,
-          serviceSections: 1,
-          appSettings: 1,
-          whatsappAuthRecords: 0,
-        },
-        projection5Years: {
-          assumedJobsPerDay: 20,
-          projectedTotalJobs: 36500,
-          projectedSizeMb: 28.65,
-          projectedPercentage: 5.73,
-          fitsInFreeTier: true,
-        },
-      });
+      setData(null);
+      setError('Live database metrics are currently unavailable.');
     } finally {
       setLoading(false);
     }
@@ -100,6 +114,7 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
   useEffect(() => {
     if (isOpen) {
       fetchMetrics();
+      fetchJobsCount();
       setBackupResult(null);
     }
   }, [isOpen]);
@@ -121,6 +136,7 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
       setBackupResult(json);
       // Refresh metrics after backup
       fetchMetrics();
+      fetchJobsCount();
     } catch (err: any) {
       setBackupResult({
         success: false,
@@ -133,20 +149,14 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
 
   if (!isOpen) return null;
 
-  const storage = data?.storage || {
-    usedMb: 15.01,
-    limitMb: 500,
-    percentageUsed: 3.0,
-    status: 'HEALTHY',
-    warningMessage: 'Database usage is healthy.',
-  };
+  const storage = data?.storage;
 
   const statusColor =
-    storage.status === 'CRITICAL'
+    storage?.status === 'CRITICAL'
       ? 'text-red-600 bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-700'
-      : storage.status === 'STRONG_WARNING'
+      : storage?.status === 'STRONG_WARNING'
       ? 'text-orange-600 bg-orange-50 dark:bg-orange-950/40 border-orange-300 dark:border-orange-700'
-      : storage.status === 'WARNING'
+      : storage?.status === 'WARNING'
       ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700'
       : 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700';
 
@@ -191,7 +201,7 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
           )}
 
           {/* Main Storage Status Card */}
-          <div className="p-4 rounded-xl border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#181818] space-y-3">
+          {storage && <div className="p-4 rounded-xl border border-[#E5E5E5] dark:border-[#262626] bg-white dark:bg-[#181818] space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-black uppercase tracking-wider text-[#666666] dark:text-neutral-400">
                 Current Storage Usage
@@ -226,13 +236,13 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
               />
             </div>
 
-            {storage.status !== 'HEALTHY' && (
+            {storage && storage.status !== 'HEALTHY' && (
               <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
                 <AlertTriangle size={14} className="shrink-0" />
                 <span>{storage.warningMessage}</span>
               </div>
             )}
-          </div>
+          </div>}
 
           {/* 5-Year Workload Projection */}
           {data?.projection5Years && (
@@ -256,11 +266,23 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
             <div className="grid grid-cols-2 gap-2">
               <div className="p-3 rounded-xl border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#181818]">
                 <p className="text-[11px] font-bold text-[#666666] dark:text-neutral-400 uppercase">Jobs / Visits</p>
-                <p className="text-lg font-black text-[#111111] dark:text-white">{data.tableMetrics.jobs} records</p>
+                <p className="text-lg font-black text-[#111111] dark:text-white">
+                  {jobsCountLoading ? 'Loading...' : jobsCount === null ? 'Unavailable' : `${jobsCount.toLocaleString()} ${jobsCount === 1 ? 'record' : 'records'}`}
+                </p>
               </div>
               <div className="p-3 rounded-xl border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#181818]">
                 <p className="text-[11px] font-bold text-[#666666] dark:text-neutral-400 uppercase">Staff Accounts</p>
-                <p className="text-lg font-black text-[#111111] dark:text-white">{data.tableMetrics.staffProfiles} staff</p>
+                <p className="text-lg font-black text-[#111111] dark:text-white">
+                  {data.tableMetrics.activeStaffProfiles} active / {data.tableMetrics.staffProfiles} total
+                </p>
+              </div>
+              <div className="p-3 rounded-xl border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#181818]">
+                <p className="text-[11px] font-bold text-[#666666] dark:text-neutral-400 uppercase">Service Sections</p>
+                <p className="text-lg font-black text-[#111111] dark:text-white">{data.tableMetrics.serviceSections}</p>
+              </div>
+              <div className="p-3 rounded-xl border border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#181818]">
+                <p className="text-[11px] font-bold text-[#666666] dark:text-neutral-400 uppercase">Services</p>
+                <p className="text-lg font-black text-[#111111] dark:text-white">{data.tableMetrics.totalServices}</p>
               </div>
             </div>
           )}
@@ -282,6 +304,20 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
             <p className="text-xs text-[#666666] dark:text-neutral-400 leading-normal">
               Creates full timestamped PostgreSQL SQL dumps with SHA-256 verification and uploads to Google Drive with 30-day retention.
             </p>
+            {data?.backup && (
+              <div className="text-xs text-[#666666] dark:text-neutral-400 space-y-1">
+                <p>Last successful local backup: {data.backup.lastSuccessfulAt ? new Date(data.backup.lastSuccessfulAt).toLocaleString() : 'None recorded'}</p>
+                <p>Successful backups: {data.backup.successfulBackupCount}</p>
+                <p>
+                  Google Drive:{' '}
+                  {data.backup.googleDriveSuccessfulCount > 0
+                    ? `Uploaded (${data.backup.googleDriveSuccessfulCount} successful)`
+                    : data.backup.googleDriveConfigured
+                    ? 'Configured, no confirmed upload'
+                    : 'Not configured'}
+                </p>
+              </div>
+            )}
 
             <button
               onClick={handleTriggerBackup}
@@ -311,7 +347,13 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
               >
                 <div className="flex items-center gap-1.5 font-bold">
                   {backupResult.success ? <CheckCircle size={14} /> : <AlertTriangle size={14} />}
-                  <span>{backupResult.success ? 'Backup Successfully Created!' : 'Backup Failed'}</span>
+                  <span>
+                    {backupResult.success
+                      ? backupResult.googleDrive?.uploaded
+                        ? 'Backup Created and Uploaded to Google Drive'
+                        : 'Backup Generated Locally; Google Drive Upload Not Confirmed'
+                      : 'Backup Failed'}
+                  </span>
                 </div>
                 {backupResult.filename && (
                   <p className="text-[11px] font-mono break-all">File: {backupResult.filename} ({backupResult.sizeKb} KB)</p>
@@ -329,8 +371,11 @@ export const DatabaseStorageModal: React.FC<DatabaseStorageModalProps> = ({ isOp
         {/* Modal Footer */}
         <div className="p-3 border-t border-[#E5E5E5] dark:border-[#262626] bg-[#FAFAFA] dark:bg-[#181818] flex items-center justify-between">
           <button
-            onClick={fetchMetrics}
-            disabled={loading}
+            onClick={() => {
+              fetchMetrics();
+              fetchJobsCount();
+            }}
+            disabled={loading || jobsCountLoading}
             className="px-3 py-1.5 text-xs font-bold text-[#666666] dark:text-neutral-400 hover:text-black dark:hover:text-white flex items-center gap-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />

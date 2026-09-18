@@ -7,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const BACKUPS_DIR = path.join(__dirname, 'backups');
+const BACKUP_METADATA_FILE = path.join(BACKUPS_DIR, 'backup-status.json');
 if (!fs.existsSync(BACKUPS_DIR)) {
   fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 }
@@ -34,17 +35,30 @@ function escapeSqlValue(val) {
  */
 export async function getDatabaseUsageMetrics(supabase) {
   try {
-    const [jobsRes, staffRes, servicesRes, settingsRes, waAuthRes] = await Promise.all([
+    const [jobsRes, staffRes, activeStaffRes, servicesRes, settingsRes, waAuthRes] = await Promise.all([
       supabase.from('jobs').select('id, created_at', { count: 'exact', head: false }),
       supabase.from('staff_profiles').select('id', { count: 'exact', head: true }),
-      supabase.from('service_sections').select('id', { count: 'exact', head: true }),
+      supabase.from('staff_profiles').select('id', { count: 'exact', head: true }).eq('active', true),
+      supabase.from('service_sections').select('id, services', { count: 'exact', head: false }),
       supabase.from('app_settings').select('key', { count: 'exact', head: true }),
       supabase.from('whatsapp_auth_state').select('key_id', { count: 'exact', head: true }),
     ]);
 
+    const usageResponses = [jobsRes, staffRes, activeStaffRes, servicesRes, settingsRes, waAuthRes];
+    const failedResponse = usageResponses.find((response) => response.error);
+    if (failedResponse) {
+      throw new Error(`Database usage query failed: ${failedResponse.error.message}`);
+    }
+
     const jobsCount = jobsRes.count || (jobsRes.data ? jobsRes.data.length : 0);
     const staffCount = staffRes.count || 0;
-    const servicesCount = servicesRes.count || 0;
+    const activeStaffCount = activeStaffRes.count || 0;
+    const serviceSections = servicesRes.data || [];
+    const servicesCount = serviceSections.reduce(
+      (total, section) => total + (Array.isArray(section.services) ? section.services.length : 0),
+      0
+    );
+    const serviceSectionCount = servicesRes.count || serviceSections.length;
     const settingsCount = settingsRes.count || 0;
     const waAuthCount = waAuthRes.count || 0;
 
@@ -98,10 +112,13 @@ export async function getDatabaseUsageMetrics(supabase) {
       tableMetrics: {
         jobs: jobsCount,
         staffProfiles: staffCount,
-        serviceSections: servicesCount,
+        activeStaffProfiles: activeStaffCount,
+        serviceSections: serviceSectionCount,
+        totalServices: servicesCount,
         appSettings: settingsCount,
         whatsappAuthRecords: waAuthCount,
       },
+      backup: getBackupSummary(),
       projection5Years: {
         assumedJobsPerDay: 20,
         projectedTotalJobs: fiveYearJobsCount,
@@ -130,23 +147,31 @@ export async function createDatabaseBackup(supabase) {
   console.log(`📦 [DATABASE BACKUP] Starting database dump to '${filename}'...`);
 
   try {
-    const [jobsRes, staffRes, servicesRes, settingsRes] = await Promise.all([
+    const [jobsRes, staffRes, servicesRes, settingsRes, whatsappAuthRes] = await Promise.all([
       supabase.from('jobs').select('*').order('created_at', { ascending: true }),
       supabase.from('staff_profiles').select('*').order('created_at', { ascending: true }),
       supabase.from('service_sections').select('*').order('created_at', { ascending: true }),
       supabase.from('app_settings').select('*'),
+      supabase.from('whatsapp_auth_state').select('*').order('updated_at', { ascending: true }),
     ]);
+
+    const responses = [jobsRes, staffRes, servicesRes, settingsRes, whatsappAuthRes];
+    const failedResponse = responses.find((response) => response.error);
+    if (failedResponse) {
+      throw new Error(`Backup source query failed: ${failedResponse.error.message}`);
+    }
 
     const jobs = jobsRes.data || [];
     const staff = staffRes.data || [];
     const services = servicesRes.data || [];
     const settings = settingsRes.data || [];
+    const whatsappAuth = whatsappAuthRes.data || [];
 
     const lines = [];
     lines.push('-- ==============================================================================');
     lines.push(`-- GO GRAND CAR WASH & DETAILING - FULL DATABASE BACKUP`);
     lines.push(`-- Generated At: ${new Date().toISOString()}`);
-    lines.push(`-- Records: ${jobs.length} Jobs, ${staff.length} Staff, ${services.length} Sections, ${settings.length} Settings`);
+    lines.push(`-- Records: ${jobs.length} Jobs, ${staff.length} Staff, ${services.length} Sections, ${settings.length} Settings, ${whatsappAuth.length} WhatsApp Auth Records`);
     lines.push('-- ==============================================================================\n');
     lines.push('SET statement_timeout = 0;');
     lines.push('SET client_encoding = \'UTF8\';\n');
@@ -168,6 +193,18 @@ export async function createDatabaseBackup(supabase) {
     lines.push('    created_by_id TEXT,');
     lines.push('    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone(\'utc\'::text, now())');
     lines.push(');\n');
+    lines.push('CREATE INDEX IF NOT EXISTS idx_jobs_vehicle_number ON public.jobs (vehicle_number);');
+    lines.push('CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON public.jobs (created_at DESC);');
+    lines.push('CREATE INDEX IF NOT EXISTS idx_jobs_phone_number ON public.jobs (phone_number);\n');
+    lines.push('ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;');
+    lines.push('DROP POLICY IF EXISTS "Allow authenticated read operations on jobs" ON public.jobs;');
+    lines.push('CREATE POLICY "Allow authenticated read operations on jobs" ON public.jobs FOR SELECT USING (true);');
+    lines.push('DROP POLICY IF EXISTS "Allow validated job insertions" ON public.jobs;');
+    lines.push('CREATE POLICY "Allow validated job insertions" ON public.jobs FOR INSERT WITH CHECK (length(trim(vehicle_number)) > 0 AND length(trim(customer_name)) > 0 AND length(trim(phone_number)) > 0);');
+    lines.push('DROP POLICY IF EXISTS "Allow authorized job updates" ON public.jobs;');
+    lines.push('CREATE POLICY "Allow authorized job updates" ON public.jobs FOR UPDATE USING (true) WITH CHECK (length(trim(vehicle_number)) > 0 AND length(trim(customer_name)) > 0);');
+    lines.push('DROP POLICY IF EXISTS "Allow authorized job deletions" ON public.jobs;');
+    lines.push('CREATE POLICY "Allow authorized job deletions" ON public.jobs FOR DELETE USING (true);\n');
 
     if (jobs.length > 0) {
       lines.push('INSERT INTO public.jobs (id, vehicle_number, customer_name, phone_number, vehicle_name, services, price, discount, bill_no, status, created_by, created_by_id, created_at) VALUES');
@@ -181,15 +218,20 @@ export async function createDatabaseBackup(supabase) {
     lines.push('-- Table: public.staff_profiles');
     lines.push('CREATE TABLE IF NOT EXISTS public.staff_profiles (');
     lines.push('    id TEXT PRIMARY KEY,');
-    lines.push('    user_id UUID,');
+    lines.push('    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,');
     lines.push('    staff_name TEXT NOT NULL,');
     lines.push('    phone_number TEXT NOT NULL UNIQUE,');
     lines.push('    password_hash TEXT NOT NULL,');
-    lines.push('    role TEXT NOT NULL DEFAULT \'STAFF\',');
+    lines.push('    role TEXT NOT NULL DEFAULT \'STAFF\' CHECK (role IN (\'OWNER\', \'STAFF\')),');
     lines.push('    active BOOLEAN NOT NULL DEFAULT true,');
     lines.push('    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone(\'utc\'::text, now()),');
     lines.push('    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone(\'utc\'::text, now())');
     lines.push(');\n');
+    lines.push('ALTER TABLE public.staff_profiles ENABLE ROW LEVEL SECURITY;');
+    lines.push('DROP POLICY IF EXISTS "Allow staff profile read for authentication" ON public.staff_profiles;');
+    lines.push('CREATE POLICY "Allow staff profile read for authentication" ON public.staff_profiles FOR SELECT USING (true);');
+    lines.push('DROP POLICY IF EXISTS "Allow authorized staff management mutations" ON public.staff_profiles;');
+    lines.push('CREATE POLICY "Allow authorized staff management mutations" ON public.staff_profiles FOR ALL USING (true) WITH CHECK (length(trim(staff_name)) > 0 AND length(trim(phone_number)) > 0 AND length(trim(password_hash)) > 0);\n');
 
     if (staff.length > 0) {
       lines.push('INSERT INTO public.staff_profiles (id, user_id, staff_name, phone_number, password_hash, role, active, created_at, updated_at) VALUES');
@@ -207,6 +249,11 @@ export async function createDatabaseBackup(supabase) {
     lines.push('    services JSONB NOT NULL DEFAULT \'[]\'::jsonb,');
     lines.push('    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone(\'utc\'::text, now())');
     lines.push(');\n');
+    lines.push('ALTER TABLE public.service_sections ENABLE ROW LEVEL SECURITY;');
+    lines.push('DROP POLICY IF EXISTS "Allow public read for service_sections" ON public.service_sections;');
+    lines.push('CREATE POLICY "Allow public read for service_sections" ON public.service_sections FOR SELECT USING (true);');
+    lines.push('DROP POLICY IF EXISTS "Allow authorized service mutations" ON public.service_sections;');
+    lines.push('CREATE POLICY "Allow authorized service mutations" ON public.service_sections FOR ALL USING (true) WITH CHECK (length(trim(name)) > 0);\n');
 
     if (services.length > 0) {
       lines.push('INSERT INTO public.service_sections (id, name, services, created_at) VALUES');
@@ -223,6 +270,11 @@ export async function createDatabaseBackup(supabase) {
     lines.push('    value JSONB NOT NULL,');
     lines.push('    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone(\'utc\'::text, now())');
     lines.push(');\n');
+    lines.push('ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;');
+    lines.push('DROP POLICY IF EXISTS "Allow public read for app_settings" ON public.app_settings;');
+    lines.push('CREATE POLICY "Allow public read for app_settings" ON public.app_settings FOR SELECT USING (true);');
+    lines.push('DROP POLICY IF EXISTS "Allow authorized app_settings mutations" ON public.app_settings;');
+    lines.push('CREATE POLICY "Allow authorized app_settings mutations" ON public.app_settings FOR ALL USING (true) WITH CHECK (length(trim(key)) > 0);\n');
 
     if (settings.length > 0) {
       lines.push('INSERT INTO public.app_settings (key, value, updated_at) VALUES');
@@ -230,6 +282,28 @@ export async function createDatabaseBackup(supabase) {
         return `  (${escapeSqlValue(st.key)}, ${escapeSqlValue(st.value)}, ${escapeSqlValue(st.updated_at)})`;
       });
       lines.push(settingRows.join(',\n') + '\nON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at;\n');
+    }
+
+    // 5. Table: whatsapp_auth_state (Baileys credentials and Signal keys)
+    lines.push('-- Table: public.whatsapp_auth_state');
+    lines.push('CREATE TABLE IF NOT EXISTS public.whatsapp_auth_state (');
+    lines.push('    session_id TEXT NOT NULL DEFAULT \'default\',');
+    lines.push('    key_id TEXT NOT NULL,');
+    lines.push('    value JSONB,');
+    lines.push('    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone(\'utc\'::text, now()),');
+    lines.push('    PRIMARY KEY (session_id, key_id)');
+    lines.push(');');
+    lines.push('ALTER TABLE public.whatsapp_auth_state ENABLE ROW LEVEL SECURITY;');
+    lines.push('DROP POLICY IF EXISTS "Allow server backend operations for whatsapp_auth_state" ON public.whatsapp_auth_state;');
+    lines.push('CREATE POLICY "Allow server backend operations for whatsapp_auth_state" ON public.whatsapp_auth_state FOR ALL USING (true) WITH CHECK (true);');
+    lines.push('CREATE INDEX IF NOT EXISTS idx_whatsapp_auth_state_lookup ON public.whatsapp_auth_state (session_id, key_id);\n');
+
+    if (whatsappAuth.length > 0) {
+      lines.push('INSERT INTO public.whatsapp_auth_state (session_id, key_id, value, updated_at) VALUES');
+      const authRows = whatsappAuth.map((record) => {
+        return `  (${escapeSqlValue(record.session_id)}, ${escapeSqlValue(record.key_id)}, ${escapeSqlValue(record.value)}, ${escapeSqlValue(record.updated_at)})`;
+      });
+      lines.push(authRows.join(',\n') + '\nON CONFLICT (session_id, key_id) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at;\n');
     }
 
     const sqlContent = lines.join('\n');
@@ -248,6 +322,14 @@ export async function createDatabaseBackup(supabase) {
 
     // Upload to Google Drive if credentials exist
     let googleDriveResult = await uploadToGoogleDrive(filePath, filename);
+    const backupStatus = {
+      filename,
+      localGeneratedAt: new Date().toISOString(),
+      localSuccess: true,
+      googleDrive: googleDriveResult,
+      checksumSha256,
+    };
+    saveBackupMetadata(backupStatus);
 
     // Apply retention policy
     cleanOldBackups();
@@ -264,6 +346,7 @@ export async function createDatabaseBackup(supabase) {
         staff: staff.length,
         serviceSections: services.length,
         appSettings: settings.length,
+        whatsappAuthRecords: whatsappAuth.length,
       },
       googleDrive: googleDriveResult,
       createdAt: new Date().toISOString(),
@@ -275,6 +358,41 @@ export async function createDatabaseBackup(supabase) {
       error: err.message,
     };
   }
+
+}
+
+function readBackupMetadata() {
+  try {
+    if (!fs.existsSync(BACKUP_METADATA_FILE)) return [];
+    const data = JSON.parse(fs.readFileSync(BACKUP_METADATA_FILE, 'utf8'));
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.warn('[BACKUP STATUS] Could not read backup metadata:', error.message);
+    return [];
+  }
+}
+
+function saveBackupMetadata(entry) {
+  const entries = [...readBackupMetadata().filter((item) => item.filename !== entry.filename), entry]
+    .sort((a, b) => new Date(b.localGeneratedAt) - new Date(a.localGeneratedAt))
+    .slice(0, 100);
+  fs.writeFileSync(BACKUP_METADATA_FILE, JSON.stringify(entries, null, 2), 'utf8');
+}
+
+export function getBackupSummary() {
+  const entries = readBackupMetadata();
+  const successfulLocalBackups = entries.filter((entry) => entry.localSuccess);
+  const successfulGoogleDriveBackups = entries.filter((entry) => entry.googleDrive?.uploaded === true);
+  const latest = successfulLocalBackups[0] || null;
+  return {
+    lastSuccessfulAt: latest?.localGeneratedAt || null,
+    lastSuccessfulFilename: latest?.filename || null,
+    successfulBackupCount: successfulLocalBackups.length,
+    googleDriveConfigured: entries.some((entry) => entry.googleDrive?.status !== 'CONFIG_PENDING'),
+    googleDriveSuccessfulCount: successfulGoogleDriveBackups.length,
+    googleDriveLastSuccessfulAt: successfulGoogleDriveBackups[0]?.googleDrive?.uploadedAt || null,
+    status: latest ? 'LOCAL_SUCCESS' : 'NO_SUCCESSFUL_BACKUP',
+  };
 }
 
 /**

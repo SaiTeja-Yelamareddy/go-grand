@@ -23,6 +23,7 @@ import {
   getDatabaseUsageMetrics,
   createDatabaseBackup,
   listBackups,
+  getBackupSummary,
   initBackupScheduler,
 } from './backupService.js';
 
@@ -287,6 +288,15 @@ async function connectToWhatsApp(force = false) {
     isConnecting = false;
     isConnected = false;
     io.emit('status', { status: 'error', connected: false, error: error.message });
+
+    reconnectAttempts++;
+    const backoffDelay = Math.min(30000, Math.round(3000 * Math.pow(1.5, Math.min(reconnectAttempts - 1, 5))));
+    lastReconnectAt = new Date(Date.now() + backoffDelay).toISOString();
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connectToWhatsApp();
+    }, backoffDelay);
   }
 }
 
@@ -986,6 +996,7 @@ function requireOwnerAuth(req, res, next) {
     if (token === API_SECRET) {
       return next();
     }
+    return res.status(401).json({ success: false, error: 'Unauthorized: Owner authorization required.' });
   }
 
   next();
@@ -1008,6 +1019,7 @@ app.get('/api/database/backups', requireOwnerAuth, (req, res) => {
     success: true,
     count: backups.length,
     backups,
+    summary: getBackupSummary(),
   });
 });
 

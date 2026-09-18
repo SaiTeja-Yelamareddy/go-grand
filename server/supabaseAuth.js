@@ -45,9 +45,7 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
       console.log(`[SUPABASE AUTH] ✅ Using dedicated '${targetTable}' table for WhatsApp session persistence.`);
     }
   } catch (err) {
-    console.warn('[SUPABASE AUTH] Table detection error, falling back to app_settings:', err.message);
-    targetTable = 'app_settings';
-    useFallbackAppSettings = true;
+    console.warn(`[SUPABASE AUTH] Table detection error for '${targetTable}'; retaining dedicated session storage target:`, err.message);
   }
 
   const formatKeyId = (keyId) => {
@@ -107,7 +105,6 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
    */
   const writeData = async (data, keyId) => {
     const dbKey = formatKeyId(keyId);
-    memoryCache.set(dbKey, data);
 
     const release = await mutex.acquire();
     try {
@@ -127,6 +124,7 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
           console.error(`[SUPABASE AUTH ERROR] Upsert failed for key '${dbKey}':`, error.message);
           throw error;
         } else {
+          memoryCache.set(dbKey, data);
           lastSaveTimestamp = new Date().toISOString();
           lastSaveError = null;
           saveOperationsCount++;
@@ -146,6 +144,7 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
           console.error(`[SUPABASE AUTH ERROR] Upsert failed for key '${keyId}':`, error.message);
           throw error;
         } else {
+          memoryCache.set(dbKey, data);
           lastSaveTimestamp = new Date().toISOString();
           lastSaveError = null;
           saveOperationsCount++;
@@ -327,7 +326,6 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
               const dbKey = formatKeyId(keyId);
 
               if (value) {
-                memoryCache.set(dbKey, value);
                 const serialized = JSON.stringify(value, BufferJSON.replacer);
 
                 if (useFallbackAppSettings) {
@@ -345,7 +343,6 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                   });
                 }
               } else {
-                memoryCache.delete(dbKey);
                 deletes.push(useFallbackAppSettings ? dbKey : keyId);
               }
             }
@@ -368,6 +365,10 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                   lastSaveError = error.message;
                   console.error('[SUPABASE AUTH ERROR] Batch upsert error:', error.message);
                 } else {
+                  for (const row of chunk) {
+                    const cacheKey = useFallbackAppSettings ? row.key : row.key_id;
+                    memoryCache.set(cacheKey, row.value);
+                  }
                   lastSaveTimestamp = new Date().toISOString();
                   lastSaveError = null;
                   saveOperationsCount += chunk.length;
@@ -383,6 +384,8 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                   .in('key', deletes);
                 if (error) {
                   console.warn('[SUPABASE AUTH] Batch delete error (app_settings):', error.message);
+                } else {
+                  deletes.forEach((key) => memoryCache.delete(key));
                 }
               } else {
                 const { error } = await supabase
@@ -392,6 +395,8 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                   .in('key_id', deletes);
                 if (error) {
                   console.warn('[SUPABASE AUTH] Batch delete error (whatsapp_auth_state):', error.message);
+                } else {
+                  deletes.forEach((key) => memoryCache.delete(formatKeyId(key)));
                 }
               }
             }

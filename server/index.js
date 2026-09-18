@@ -286,30 +286,13 @@ async function connectToWhatsApp(force = false) {
 
 // REST API Endpoints
 
+// Fast, ultra-lightweight health endpoint for external keep-alive monitoring (Render Free keep-alive)
 app.get('/health', (req, res) => {
-  const authDiag = getAuthStateDiagnostics();
-  res.json({
-    status: 'ok',
-    service: 'go-grand-whatsapp-server',
-    sessionPersistence: 'supabase',
-    sessionId: WHATSAPP_SESSION_ID,
-    whatsappConnected: isConnected,
-    user: connectedUser,
+  res.status(200).json({
+    ok: true,
+    service: 'go-grand-whatsapp',
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
-    diagnostics: {
-      whatsapp_connected: isConnected,
-      whatsapp_authenticated: isConnected || (connectedUser !== null),
-      has_persisted_creds: hasPersistedCreds,
-      last_connected_at: lastConnectedAt,
-      last_disconnect_at: lastDisconnectAt,
-      last_disconnect_reason: lastDisconnectReason,
-      last_disconnect_code: lastDisconnectCode,
-      last_reconnect_at: lastReconnectAt,
-      reconnect_attempts: reconnectAttempts,
-      connection_generation: socketInstanceId,
-      ...authDiag,
-    },
   });
 });
 

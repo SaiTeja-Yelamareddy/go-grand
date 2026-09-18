@@ -210,6 +210,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     }
   };
 
+
   const handleSelectPackageSection = (sectionName: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -978,7 +979,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-white">
-                    Vehicle Received
+                    Received
                   </span>
                   <span className="block text-[10px] font-black text-emerald-100 uppercase tracking-tight mt-0.5">
                     WhatsApp Alert
@@ -998,7 +999,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-white">
-                    Vehicle Ready
+                    Ready
                   </span>
                   <span className="block text-[10px] font-black text-emerald-100 uppercase tracking-tight mt-0.5">
                     Customer Alert
@@ -1139,4 +1140,3 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     </div>
   );
 };
-

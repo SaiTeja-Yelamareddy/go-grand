@@ -731,10 +731,10 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               />
             )}
 
-            {/* Location / Studio Bay Input */}
+            {/* Location Input */}
             <div className="space-y-1.5 pt-0.5">
               <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
-                Studio Location / Bay
+                Location
               </label>
               <div className="relative rounded-xl border border-slate-300 dark:border-neutral-800 bg-white dark:bg-[#121212] shadow-xs focus-within:border-slate-900 dark:focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20 transition-all">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 dark:text-neutral-400">

@@ -51,7 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header
-      className={`sticky top-0 z-40 bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-md border-b border-slate-200 dark:border-neutral-900 px-3 sm:px-4 py-2 sm:py-2.5 grid grid-cols-[1fr_auto_1fr] items-center shadow-2xs w-full max-w-full transition-colors select-none ${className}`}
+      className={`sticky top-0 z-50 bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-md border-b border-slate-200 dark:border-neutral-900 px-3 sm:px-4 py-2 sm:py-2.5 grid grid-cols-[1fr_auto_1fr] items-center shadow-2xs w-full max-w-full transition-colors select-none ${className}`}
     >
       {/* LEFT: LOGO (DRAWER TRIGGER) / BACK */}
       <div className="flex items-center justify-start min-w-0">

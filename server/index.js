@@ -234,6 +234,7 @@ async function connectToWhatsApp(force = false) {
         connectedUser = newSock.user ? newSock.user.id.split(':')[0] : 'Go Grand Detailing';
         console.log(`[BAILEYS] ✅ Connection OPENED successfully! User: ${connectedUser} | Time: ${lastConnectedAt}`);
         io.emit('status', { status: 'connected', connected: true, user: connectedUser });
+        processMessageQueue().catch((err) => console.warn('[QUEUE FLUSH ERROR]:', err.message));
       }
 
       if (connection === 'close') {
@@ -416,137 +417,353 @@ app.post('/api/whatsapp/logout', requireApiAuth, async (req, res) => {
   }
 });
 
-app.post('/api/whatsapp/send-invoice', requireApiAuth, async (req, res) => {
-  if (!isConnected || !sock) {
-    return res.status(400).json({
-      success: false,
-      error: 'WhatsApp is not connected. Please scan the QR code first.',
-    });
+// ==============================================================================
+// 24/7 WHATSAPP OUTGOING MESSAGE QUEUE & IDEMPOTENCY ENGINE
+// ==============================================================================
+const messageQueue = [];
+let isProcessingQueue = false;
+const deliveredTriggers = new Set();
+
+async function loadDeliveredTriggers() {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'wa_delivered_triggers')
+      .maybeSingle();
+
+    if (!error && data && Array.isArray(data.value)) {
+      data.value.forEach((k) => deliveredTriggers.add(k));
+      console.log(`📋 [MESSAGE QUEUE] Loaded ${deliveredTriggers.size} delivered trigger records from Supabase.`);
+    }
+  } catch (err) {
+    console.warn('[MESSAGE QUEUE] Warning loading delivered triggers:', err.message);
   }
+}
+
+async function markTriggerDelivered(idempotencyKey) {
+  if (!idempotencyKey) return;
+  deliveredTriggers.add(idempotencyKey);
+  try {
+    // Retain last 500 records to prevent database bloat
+    const recentKeys = Array.from(deliveredTriggers).slice(-500);
+    await supabase.from('app_settings').upsert({
+      key: 'wa_delivered_triggers',
+      value: recentKeys,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+  } catch (err) {
+    console.warn('[MESSAGE QUEUE] Warning persisting delivered trigger key:', err.message);
+  }
+}
+
+async function loadPendingQueue() {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'wa_pending_queue')
+      .maybeSingle();
+
+    if (!error && data && Array.isArray(data.value)) {
+      for (const item of data.value) {
+        if (item.idempotencyKey && deliveredTriggers.has(item.idempotencyKey)) continue;
+        if (!messageQueue.some((q) => q.id === item.id)) {
+          messageQueue.push(item);
+        }
+      }
+      console.log(`📋 [MESSAGE QUEUE] Restored ${messageQueue.length} pending queued items from Supabase.`);
+    }
+  } catch (err) {
+    console.warn('[MESSAGE QUEUE] Warning loading pending queue from Supabase:', err.message);
+  }
+}
+
+async function persistPendingQueue() {
+  try {
+    const serializableQueue = messageQueue.map((item) => ({
+      id: item.id,
+      type: item.type,
+      job: item.job,
+      phoneNumber: item.phoneNumber,
+      textMessage: item.textMessage,
+      idempotencyKey: item.idempotencyKey,
+      createdAt: item.createdAt,
+      attempts: item.attempts || 0,
+      upiId: item.upiId,
+    }));
+    await supabase.from('app_settings').upsert({
+      key: 'wa_pending_queue',
+      value: serializableQueue,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+  } catch (err) {
+    console.warn('[MESSAGE QUEUE] Warning saving pending queue to Supabase:', err.message);
+  }
+}
+
+async function processMessageQueue() {
+  if (isProcessingQueue) return;
+  if (!isConnected || !sock) {
+    if (!isConnecting && !reconnectTimer) {
+      console.log('[MESSAGE QUEUE] Socket not connected. Initiating connection to process queue...');
+      connectToWhatsApp();
+    }
+    return;
+  }
+
+  isProcessingQueue = true;
 
   try {
-    const { phoneNumber, message } = req.body;
+    while (messageQueue.length > 0 && isConnected && sock) {
+      const item = messageQueue[0];
 
-    if (!phoneNumber || !message) {
-      return res.status(400).json({
-        success: false,
-        error: 'Phone number and message text are required.',
-      });
+      if (item.idempotencyKey && deliveredTriggers.has(item.idempotencyKey)) {
+        console.log(`ℹ️ [MESSAGE QUEUE] Item '${item.id}' already marked delivered. Skipping.`);
+        messageQueue.shift();
+        await persistPendingQueue();
+        continue;
+      }
+
+      try {
+        let cleanPhone = (item.phoneNumber || '').replace(/\D/g, '');
+        if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
+        const jid = `${cleanPhone}@s.whatsapp.net`;
+        const [result] = await sock.onWhatsApp(jid);
+        const targetJid = result && result.exists ? result.jid : jid;
+
+        let sentMsg;
+        if (item.type === 'pdf') {
+          const pdfBuffer = item.pdfBuffer || (item.job ? await generateInvoicePDF(item.job) : null);
+          const vehNo = (item.job?.vehicleNumber || 'Vehicle').toUpperCase();
+          if (pdfBuffer) {
+            sentMsg = await sock.sendMessage(targetJid, {
+              document: pdfBuffer,
+              mimetype: 'application/pdf',
+              fileName: `Invoice_${vehNo}_GoGrand.pdf`,
+              caption: item.textMessage,
+            });
+          } else {
+            sentMsg = await sock.sendMessage(targetJid, { text: item.textMessage });
+          }
+        } else if (item.type === 'image_qr') {
+          let qrBuffer = item.imageBuffer;
+          if (!qrBuffer && item.upiId && item.job) {
+            try {
+              const priceStr = String(item.job.price || '0').replace(/[^0-9.]/g, '');
+              const discountStr = String(item.job.discount || '0').replace(/[^0-9.]/g, '');
+              const finalAmount = Math.max(0, (parseFloat(priceStr) || 0) - (parseFloat(discountStr) || 0)).toFixed(2);
+              const payeeName = encodeURIComponent('GO GRAND Car Wash and Detailing');
+              const vehNo = (item.job.vehicleNumber || 'Vehicle').toUpperCase().replace(/[^A-Z0-9]/g, '');
+              const note = encodeURIComponent(`GO GRAND Bill - ${vehNo}`);
+              const upiUri = `upi://pay?pa=${item.upiId}&pn=${payeeName}&am=${finalAmount}&cu=INR&tn=${note}`;
+              qrBuffer = await QRCode.toBuffer(upiUri, { type: 'png', width: 600, margin: 2 });
+            } catch (e) {}
+          }
+
+          if (qrBuffer) {
+            sentMsg = await sock.sendMessage(targetJid, {
+              image: qrBuffer,
+              caption: item.textMessage,
+              mimetype: 'image/png',
+            });
+          } else {
+            sentMsg = await sock.sendMessage(targetJid, { text: item.textMessage });
+          }
+        } else {
+          sentMsg = await sock.sendMessage(targetJid, {
+            text: item.textMessage,
+          });
+        }
+
+        console.log(`✅ [MESSAGE QUEUE] Delivered ${item.type} trigger to ${cleanPhone} (MsgID: ${sentMsg?.key?.id})`);
+        if (item.idempotencyKey) {
+          await markTriggerDelivered(item.idempotencyKey);
+        }
+        messageQueue.shift();
+        await persistPendingQueue();
+      } catch (sendErr) {
+        console.error(`❌ [MESSAGE QUEUE] Error delivering item ${item.id}:`, sendErr.message);
+        item.attempts = (item.attempts || 0) + 1;
+        if (item.attempts >= 3) {
+          console.error(`❌ [MESSAGE QUEUE] Max retries reached for item ${item.id}. Dropping from queue.`);
+          messageQueue.shift();
+          await persistPendingQueue();
+        } else {
+          break;
+        }
+      }
     }
+  } finally {
+    isProcessingQueue = false;
+  }
+}
 
-    // Clean phone number (strip all non-digits)
-    let cleanPhone = phoneNumber.replace(/\D/g, '');
-    if (cleanPhone.length === 10) {
-      cleanPhone = `91${cleanPhone}`;
-    }
+async function enqueueMessage(queueItem) {
+  messageQueue.push(queueItem);
+  await persistPendingQueue();
+  processMessageQueue().catch((err) => console.warn('[QUEUE FLUSH ERROR]:', err.message));
+  return queueItem;
+}
 
-    // Check if user exists on WhatsApp
-    const jid = `${cleanPhone}@s.whatsapp.net`;
-    const [result] = await sock.onWhatsApp(jid);
+app.get('/api/whatsapp/queue/status', (req, res) => {
+  res.json({
+    queueLength: messageQueue.length,
+    deliveredCount: deliveredTriggers.size,
+    isProcessing: isProcessingQueue,
+    whatsappConnected: isConnected,
+  });
+});
 
-    const targetJid = result && result.exists ? result.jid : jid;
+app.post('/api/whatsapp/send-invoice', requireApiAuth, async (req, res) => {
+  const { phoneNumber, message, idempotencyKey } = req.body;
 
-    // Send WhatsApp text message
-    const sentMsg = await sock.sendMessage(targetJid, { text: message });
-
-    res.json({
-      success: true,
-      messageId: sentMsg.key.id,
-      recipient: cleanPhone,
-    });
-  } catch (error) {
-    console.error('Error sending WhatsApp message:', error);
-    res.status(500).json({
+  if (!phoneNumber || !message) {
+    return res.status(400).json({
       success: false,
-      error: error.message || 'Failed to send WhatsApp message',
+      error: 'Phone number and message text are required.',
     });
   }
+
+  if (idempotencyKey && deliveredTriggers.has(idempotencyKey)) {
+    return res.json({ success: true, message: 'Already delivered', alreadyDelivered: true });
+  }
+
+  if (isConnected && sock) {
+    try {
+      let cleanPhone = phoneNumber.replace(/\D/g, '');
+      if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
+      const jid = `${cleanPhone}@s.whatsapp.net`;
+      const [result] = await sock.onWhatsApp(jid);
+      const targetJid = result && result.exists ? result.jid : jid;
+
+      const sentMsg = await sock.sendMessage(targetJid, { text: message });
+      if (idempotencyKey) await markTriggerDelivered(idempotencyKey);
+
+      return res.json({
+        success: true,
+        messageId: sentMsg.key.id,
+        recipient: cleanPhone,
+      });
+    } catch (error) {
+      console.error('Direct send failed, enqueueing message:', error.message);
+    }
+  }
+
+  // Enqueue for 24/7 resilient delivery
+  const queueItem = {
+    id: `txt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    type: 'text',
+    phoneNumber,
+    textMessage: message,
+    idempotencyKey,
+    createdAt: Date.now(),
+    attempts: 0,
+  };
+  await enqueueMessage(queueItem);
+
+  res.json({
+    success: true,
+    queued: true,
+    message: 'Message queued for delivery',
+    queueId: queueItem.id,
+  });
 });
 
 app.post('/api/whatsapp/send-vehicle-ready-qr', requireApiAuth, async (req, res) => {
-  if (!isConnected || !sock) {
+  const { job, phoneNumber, upiId, textMessage, idempotencyKey } = req.body;
+
+  if (!job || !phoneNumber) {
     return res.status(400).json({
       success: false,
-      error: 'WhatsApp is not connected. Please scan the QR code in Settings first.',
+      error: 'Job details and phone number are required.',
     });
   }
 
-  try {
-    const { job, phoneNumber, upiId, textMessage } = req.body;
+  const effectiveIdempotencyKey = idempotencyKey || (job?.id ? `ready_${job.id}` : null);
+  if (effectiveIdempotencyKey && deliveredTriggers.has(effectiveIdempotencyKey)) {
+    return res.json({ success: true, message: 'Vehicle Ready already delivered', alreadyDelivered: true });
+  }
 
-    if (!job || !phoneNumber) {
-      return res.status(400).json({
-        success: false,
-        error: 'Job details and phone number are required.',
-      });
-    }
+  let cleanPhone = phoneNumber.replace(/\D/g, '');
+  if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
 
-    // Clean phone number
-    let cleanPhone = phoneNumber.replace(/\D/g, '');
-    if (cleanPhone.length === 10) {
-      cleanPhone = `91${cleanPhone}`;
-    }
+  const priceStr = String(job.price || '0').replace(/[^0-9.]/g, '');
+  const discountStr = String(job.discount || '0').replace(/[^0-9.]/g, '');
+  const priceNum = parseFloat(priceStr) || 0;
+  const discountNum = parseFloat(discountStr) || 0;
+  const finalAmount = Math.max(0, priceNum - discountNum).toFixed(2);
+  const targetUpiId = (upiId || '').trim();
 
-    const jid = `${cleanPhone}@s.whatsapp.net`;
-    const [result] = await sock.onWhatsApp(jid);
-    const targetJid = result && result.exists ? result.jid : jid;
-
-    // Calculate exact invoice price
-    const priceStr = String(job.price || '0').replace(/[^0-9.]/g, '');
-    const discountStr = String(job.discount || '0').replace(/[^0-9.]/g, '');
-    const priceNum = parseFloat(priceStr) || 0;
-    const discountNum = parseFloat(discountStr) || 0;
-    const finalAmount = Math.max(0, priceNum - discountNum).toFixed(2);
-
-    let sentMsg;
-    const targetUpiId = (upiId || '').trim();
-
-    if (targetUpiId && parseFloat(finalAmount) > 0) {
-      // Build NPCI-compliant UPI deep-link URI with clean Payee Name (no ampersand)
+  let qrPngBuffer = null;
+  if (targetUpiId && parseFloat(finalAmount) > 0) {
+    try {
       const payeeName = encodeURIComponent('GO GRAND Car Wash and Detailing');
       const vehNo = (job.vehicleNumber || 'Vehicle').toUpperCase().replace(/[^A-Z0-9]/g, '');
       const note = encodeURIComponent(`GO GRAND Bill - ${vehNo}`);
       const upiUri = `upi://pay?pa=${targetUpiId}&pn=${payeeName}&am=${finalAmount}&cu=INR&tn=${note}`;
 
-      console.log(`💳 [UPI QR GENERATION] Payee: GO GRAND Car Wash and Detailing | Amount: ₹${finalAmount} | Vehicle: ${vehNo}`);
-
-      // Generate High Quality PNG Buffer of QR Code
-      const qrPngBuffer = await QRCode.toBuffer(upiUri, {
+      qrPngBuffer = await QRCode.toBuffer(upiUri, {
         type: 'png',
         width: 600,
         margin: 2,
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF',
-        },
+        color: { dark: '#000000', light: '#FFFFFF' },
       });
-
-      console.log(`📱 [WHATSAPP DISPATCH] Sending Vehicle Ready QR Image to ${cleanPhone}...`);
-
-      sentMsg = await sock.sendMessage(targetJid, {
-        image: qrPngBuffer,
-        caption: textMessage,
-        mimetype: 'image/png',
-      });
-    } else {
-      console.log(`📱 [WHATSAPP DISPATCH] Sending Vehicle Ready text message to ${cleanPhone}...`);
-      sentMsg = await sock.sendMessage(targetJid, {
-        text: textMessage,
-      });
+    } catch (qrErr) {
+      console.warn('UPI QR Buffer generation warning:', qrErr.message);
     }
-
-    res.json({
-      success: true,
-      messageId: sentMsg.key.id,
-      recipient: cleanPhone,
-    });
-  } catch (error) {
-    console.error('❌ Error sending Vehicle Ready UPI QR:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to send Vehicle Ready UPI QR',
-    });
   }
+
+  if (isConnected && sock) {
+    try {
+      const jid = `${cleanPhone}@s.whatsapp.net`;
+      const [result] = await sock.onWhatsApp(jid);
+      const targetJid = result && result.exists ? result.jid : jid;
+
+      let sentMsg;
+      if (qrPngBuffer) {
+        sentMsg = await sock.sendMessage(targetJid, {
+          image: qrPngBuffer,
+          caption: textMessage,
+          mimetype: 'image/png',
+        });
+      } else {
+        sentMsg = await sock.sendMessage(targetJid, { text: textMessage });
+      }
+
+      if (effectiveIdempotencyKey) await markTriggerDelivered(effectiveIdempotencyKey);
+
+      return res.json({
+        success: true,
+        messageId: sentMsg.key.id,
+        recipient: cleanPhone,
+      });
+    } catch (error) {
+      console.error('Direct Vehicle Ready send failed, enqueueing:', error.message);
+    }
+  }
+
+  // Enqueue for resilient delivery
+  const queueItem = {
+    id: `ready_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    type: qrPngBuffer ? 'image_qr' : 'text',
+    job,
+    phoneNumber: cleanPhone,
+    upiId: targetUpiId,
+    textMessage,
+    imageBuffer: qrPngBuffer,
+    idempotencyKey: effectiveIdempotencyKey,
+    createdAt: Date.now(),
+    attempts: 0,
+  };
+  await enqueueMessage(queueItem);
+
+  res.json({
+    success: true,
+    queued: true,
+    message: 'Vehicle Ready notification queued for delivery',
+    queueId: queueItem.id,
+  });
 });
 
 app.get('/api/whatsapp/invoice-pdf', async (req, res) => {
@@ -575,143 +792,191 @@ app.get('/api/whatsapp/invoice-pdf', async (req, res) => {
 });
 
 app.post('/api/whatsapp/send-invoice-pdf', requireApiAuth, async (req, res) => {
-  if (!isConnected || !sock) {
+  const { job, phoneNumber, textMessage, idempotencyKey } = req.body;
+
+  if (!job || !phoneNumber) {
     return res.status(400).json({
       success: false,
-      error: 'WhatsApp is not connected. Please scan the QR code first.',
+      error: 'Job details and phone number are required.',
     });
   }
 
+  const effectiveIdempotencyKey = idempotencyKey || (job?.id ? `bill_${job.id}` : null);
+  if (effectiveIdempotencyKey && deliveredTriggers.has(effectiveIdempotencyKey)) {
+    return res.json({ success: true, message: 'Invoice already sent', alreadyDelivered: true });
+  }
+
+  let cleanPhone = phoneNumber.replace(/\D/g, '');
+  if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
+
+  let pdfBuffer = null;
   try {
-    const { job, phoneNumber, textMessage } = req.body;
+    pdfBuffer = await generateInvoicePDF(job);
+  } catch (pdfErr) {
+    console.warn('PDF generation fallback:', pdfErr.message);
+  }
 
-    if (!job || !phoneNumber) {
-      return res.status(400).json({
-        success: false,
-        error: 'Job details and phone number are required.',
-      });
-    }
-
-    // Clean phone number
-    let cleanPhone = phoneNumber.replace(/\D/g, '');
-    if (cleanPhone.length === 10) {
-      cleanPhone = `91${cleanPhone}`;
-    }
-
-    const jid = `${cleanPhone}@s.whatsapp.net`;
-    const [result] = await sock.onWhatsApp(jid);
-    const targetJid = result && result.exists ? result.jid : jid;
-
-    // Generate Vector PDF Document Buffer
-    console.log(`📄 Generating PDF Tax Invoice for vehicle ${job.vehicleNumber}...`);
-    const pdfBuffer = await generateInvoicePDF(job);
-    
-    // PDF Buffer Verification
-    const isBuffer = Buffer.isBuffer(pdfBuffer);
-    const bufLen = pdfBuffer ? pdfBuffer.length : 0;
-    const header = isBuffer && bufLen >= 5 ? pdfBuffer.slice(0, 5).toString('utf-8') : 'INVALID';
-
-    console.log(`🔍 [PDF VERIFICATION] IsBuffer: ${isBuffer} | Length: ${bufLen} bytes | Header: "${header}"`);
-    if (header !== '%PDF-') {
-      console.error('❌ [PDF VERIFICATION FAILED] Buffer does not start with %PDF-!');
-    } else {
-      console.log('✅ [PDF VERIFICATION PASSED] Valid PDF header detected.');
-    }
-
-    // Inspect Baileys WhatsApp Session & Media Connection
+  if (isConnected && sock && pdfBuffer) {
     try {
-      console.log('🌐 [BAILEYS MEDIA CONN] Inspecting media upload hosts...');
-      const mediaConn = await sock.refreshMediaConn(true);
-      console.log('🌐 [BAILEYS MEDIA CONN] Hosts count:', mediaConn.hosts ? mediaConn.hosts.length : 0);
-      console.log('🌐 [BAILEYS MEDIA CONN] Hosts list:', mediaConn.hosts ? mediaConn.hosts.map(h => h.hostname) : []);
-    } catch (connErr) {
-      console.warn('⚠️ [BAILEYS MEDIA CONN WARNING] Could not refresh media conn:', connErr.message);
-    }
+      const jid = `${cleanPhone}@s.whatsapp.net`;
+      const [result] = await sock.onWhatsApp(jid);
+      const targetJid = result && result.exists ? result.jid : jid;
 
-    const vehNo = (job.vehicleNumber || 'Vehicle').toUpperCase();
-    const fileName = `Invoice_${vehNo}_GoGrand.pdf`;
+      const vehNo = (job.vehicleNumber || 'Vehicle').toUpperCase();
+      const fileName = `Invoice_${vehNo}_GoGrand.pdf`;
 
-    console.log(`📎 Dispatching native WhatsApp PDF document attachment for vehicle ${vehNo}...`);
-
-    let sentDoc;
-    try {
-      sentDoc = await sock.sendMessage(targetJid, {
+      const sentDoc = await sock.sendMessage(targetJid, {
         document: pdfBuffer,
         mimetype: 'application/pdf',
         fileName: fileName,
         caption: textMessage,
       });
 
-      console.log(`✅ Native WhatsApp PDF Document sent to ${cleanPhone}! Message ID: ${sentDoc.key.id}`);
+      if (effectiveIdempotencyKey) await markTriggerDelivered(effectiveIdempotencyKey);
 
-      res.json({
+      return res.json({
         success: true,
         messageId: sentDoc.key.id,
         recipient: cleanPhone,
         fileName: fileName,
       });
     } catch (sendErr) {
-      console.error('❌ [BAILEYS SEND ERROR DETAILED]:');
-      console.error('Error message:', sendErr.message);
-      console.error('Error name:', sendErr.name);
-      console.error('Error isBoom:', sendErr.isBoom);
-      if (sendErr.output) {
-        console.error('Boom Output:', JSON.stringify(sendErr.output, null, 2));
-      }
-      if (sendErr.data) {
-        console.error('Boom Underlying Data / Cause:', sendErr.data);
-      }
-      if (sendErr.cause) {
-        console.error('Error Cause:', sendErr.cause);
-      }
-      if (sendErr.stack) {
-        console.error('Stack Trace:', sendErr.stack);
-      }
-      throw sendErr;
+      console.error('Direct PDF invoice send failed, enqueueing:', sendErr.message);
     }
-  } catch (error) {
-    console.error('❌ Error generating or sending PDF invoice:', error);
-    if (error.response) {
-      console.error('Axios Response Status:', error.response.status);
-      console.error('Axios Response Data:', error.response.data);
-    }
-    if (error.cause) {
-      console.error('Error Cause:', error.cause);
-    }
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to generate and send PDF invoice',
-    });
   }
+
+  // Enqueue for 24/7 resilient delivery
+  const queueItem = {
+    id: `pdf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    type: 'pdf',
+    job,
+    pdfBuffer,
+    phoneNumber: cleanPhone,
+    textMessage,
+    idempotencyKey: effectiveIdempotencyKey,
+    createdAt: Date.now(),
+    attempts: 0,
+  };
+  await enqueueMessage(queueItem);
+
+  res.json({
+    success: true,
+    queued: true,
+    message: 'Invoice PDF queued for delivery',
+    queueId: queueItem.id,
+  });
 });
 
-app.post('/api/whatsapp/test-pdf', requireApiAuth, async (req, res) => {
-  try {
-    const { phoneNumber } = req.body;
-    let cleanPhone = (phoneNumber || '').replace(/\D/g, '');
-    if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
-    const jid = `${cleanPhone}@s.whatsapp.net`;
-    const [result] = await sock.onWhatsApp(jid);
-    const targetJid = result && result.exists ? result.jid : jid;
+// Dedicated Trigger Endpoints for Automatic Actions
+app.post('/api/whatsapp/trigger/vehicle-received', requireApiAuth, async (req, res) => {
+  const { job, phoneNumber, textMessage, idempotencyKey } = req.body;
+  const triggerKey = idempotencyKey || (job?.id ? `recv_${job.id}` : null);
 
-    const testPdfBuffer = Buffer.from(
-      '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 R<</Type/Pages/Count 1/Kids[3 0 R]>>endobj 3 0 R<</Type/Page/MediaBox[0 0 300 144]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n0000000115 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF'
-    );
-
-    console.log(`🧪 [TEST MINIMAL PDF] IsBuffer: ${Buffer.isBuffer(testPdfBuffer)} | Len: ${testPdfBuffer.length} | Header: "${testPdfBuffer.slice(0, 5).toString('utf-8')}"`);
-
-    const sentDoc = await sock.sendMessage(targetJid, {
-      document: testPdfBuffer,
-      mimetype: 'application/pdf',
-      fileName: 'test.pdf',
-      caption: '🧪 Test minimal PDF document attachment',
-    });
-
-    res.json({ success: true, messageId: sentDoc.key.id, recipient: cleanPhone });
-  } catch (err) {
-    console.error('❌ [TEST MINIMAL PDF ERROR DETAILED]:', err);
-    res.status(500).json({ success: false, error: err.message, data: err.data });
+  if (triggerKey && deliveredTriggers.has(triggerKey)) {
+    return res.json({ success: true, message: 'Vehicle Received trigger already sent', alreadyDelivered: true });
   }
+
+  const queueItem = {
+    id: `trig_recv_${Date.now()}`,
+    type: 'text',
+    job,
+    phoneNumber,
+    textMessage,
+    idempotencyKey: triggerKey,
+    createdAt: Date.now(),
+    attempts: 0,
+  };
+
+  await enqueueMessage(queueItem);
+
+  res.json({
+    success: true,
+    queued: true,
+    trigger: 'VEHICLE_RECEIVED',
+    queueId: queueItem.id,
+  });
+});
+
+app.post('/api/whatsapp/trigger/vehicle-ready', requireApiAuth, async (req, res) => {
+  const { job, phoneNumber, upiId, textMessage, idempotencyKey } = req.body;
+  const triggerKey = idempotencyKey || (job?.id ? `ready_${job.id}` : null);
+
+  if (triggerKey && deliveredTriggers.has(triggerKey)) {
+    return res.json({ success: true, message: 'Vehicle Ready trigger already sent', alreadyDelivered: true });
+  }
+
+  let qrPngBuffer = null;
+  const targetUpiId = (upiId || '').trim();
+  const priceNum = parseFloat(String(job?.price || '0').replace(/[^0-9.]/g, '')) || 0;
+  const discountNum = parseFloat(String(job?.discount || '0').replace(/[^0-9.]/g, '')) || 0;
+  const finalAmount = Math.max(0, priceNum - discountNum).toFixed(2);
+
+  if (targetUpiId && parseFloat(finalAmount) > 0) {
+    try {
+      const payeeName = encodeURIComponent('GO GRAND Car Wash and Detailing');
+      const vehNo = (job?.vehicleNumber || 'Vehicle').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const note = encodeURIComponent(`GO GRAND Bill - ${vehNo}`);
+      const upiUri = `upi://pay?pa=${targetUpiId}&pn=${payeeName}&am=${finalAmount}&cu=INR&tn=${note}`;
+      qrPngBuffer = await QRCode.toBuffer(upiUri, { type: 'png', width: 600, margin: 2 });
+    } catch (e) {}
+  }
+
+  const queueItem = {
+    id: `trig_ready_${Date.now()}`,
+    type: qrPngBuffer ? 'image_qr' : 'text',
+    job,
+    phoneNumber,
+    upiId: targetUpiId,
+    textMessage,
+    imageBuffer: qrPngBuffer,
+    idempotencyKey: triggerKey,
+    createdAt: Date.now(),
+    attempts: 0,
+  };
+
+  await enqueueMessage(queueItem);
+
+  res.json({
+    success: true,
+    queued: true,
+    trigger: 'VEHICLE_READY',
+    queueId: queueItem.id,
+  });
+});
+
+app.post('/api/whatsapp/trigger/whatsapp-bill', requireApiAuth, async (req, res) => {
+  const { job, phoneNumber, textMessage, idempotencyKey } = req.body;
+  const triggerKey = idempotencyKey || (job?.id ? `bill_${job.id}` : null);
+
+  if (triggerKey && deliveredTriggers.has(triggerKey)) {
+    return res.json({ success: true, message: 'WhatsApp Bill already sent', alreadyDelivered: true });
+  }
+
+  let pdfBuffer = null;
+  try {
+    pdfBuffer = await generateInvoicePDF(job);
+  } catch (e) {}
+
+  const queueItem = {
+    id: `trig_bill_${Date.now()}`,
+    type: 'pdf',
+    job,
+    pdfBuffer,
+    phoneNumber,
+    textMessage,
+    idempotencyKey: triggerKey,
+    createdAt: Date.now(),
+    attempts: 0,
+  };
+
+  await enqueueMessage(queueItem);
+
+  res.json({
+    success: true,
+    queued: true,
+    trigger: 'WHATSAPP_BILL',
+    queueId: queueItem.id,
+  });
 });
 
 io.on('connection', (socket) => {
@@ -729,7 +994,9 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Go Grand WhatsApp Server running on port ${PORT} (0.0.0.0:${PORT})`);
+  await loadDeliveredTriggers();
+  await loadPendingQueue();
   connectToWhatsApp();
 });

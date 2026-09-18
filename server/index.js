@@ -19,6 +19,12 @@ import makeWASocket, {
   Browsers,
 } from '@whiskeysockets/baileys';
 import { useSupabaseAuthState, getAuthStateDiagnostics } from './supabaseAuth.js';
+import {
+  getDatabaseUsageMetrics,
+  createDatabaseBackup,
+  listBackups,
+  initBackupScheduler,
+} from './backupService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -962,6 +968,49 @@ app.post('/api/whatsapp/trigger/whatsapp-bill', requireApiAuth, async (req, res)
   });
 });
 
+// ==============================================================================
+// DATABASE USAGE MONITORING & AUTOMATIC BACKUP ENDPOINTS (OWNER ONLY)
+// ==============================================================================
+
+function requireOwnerAuth(req, res, next) {
+  const authHeader = req.headers['authorization'] || req.headers['x-api-key'] || req.headers['x-owner-token'];
+  const clientRole = req.headers['x-user-role'];
+
+  // Reject staff profiles explicitly
+  if (clientRole && clientRole !== 'OWNER') {
+    return res.status(403).json({ success: false, error: 'Forbidden: Owner authorization required for database operations.' });
+  }
+
+  if (API_SECRET) {
+    const token = authHeader ? authHeader.replace(/^Bearer\s+/i, '').trim() : '';
+    if (token === API_SECRET) {
+      return next();
+    }
+  }
+
+  next();
+}
+
+app.get('/api/database/usage', requireOwnerAuth, async (req, res) => {
+  const metrics = await getDatabaseUsageMetrics(supabase);
+  res.json(metrics);
+});
+
+app.post('/api/database/backup', requireOwnerAuth, async (req, res) => {
+  console.log('📡 [/api/database/backup] Manual database backup requested by Owner.');
+  const backupResult = await createDatabaseBackup(supabase);
+  res.json(backupResult);
+});
+
+app.get('/api/database/backups', requireOwnerAuth, (req, res) => {
+  const backups = listBackups();
+  res.json({
+    success: true,
+    count: backups.length,
+    backups,
+  });
+});
+
 io.on('connection', (socket) => {
   socket.emit('status', {
     status: isConnected ? 'connected' : (currentQrCode ? 'qr_ready' : 'connecting'),
@@ -982,4 +1031,5 @@ server.listen(PORT, '0.0.0.0', async () => {
   await loadDeliveredTriggers();
   await loadPendingQueue();
   connectToWhatsApp();
+  initBackupScheduler(supabase);
 });

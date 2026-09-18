@@ -5,6 +5,7 @@ import { OwnerLogin } from './pages/OwnerLogin';
 import { StaffLogin } from './pages/StaffLogin';
 import { OwnerStaff } from './pages/OwnerStaff';
 import { OwnerServices } from './pages/OwnerServices';
+import { OwnerMessages } from './pages/OwnerMessages';
 import { JobSheet } from './components/JobSheet';
 import { TodaysVehicles } from './components/TodaysVehicles';
 import { TotalVehicles } from './components/TotalVehicles';
@@ -14,6 +15,7 @@ import { initTheme } from './utils/themeStorage';
 import { syncJobsFromSupabase } from './utils/draftStorage';
 import { getStaffProfiles } from './utils/staffStorage';
 import { syncServiceSectionsFromSupabase } from './utils/serviceStorage';
+import { syncMessageTemplatesFromSupabase } from './utils/templateStorage';
 
 export function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -25,6 +27,7 @@ export function App() {
     syncJobsFromSupabase().catch(() => {});
     getStaffProfiles().catch(() => {});
     syncServiceSectionsFromSupabase().catch(() => {});
+    syncMessageTemplatesFromSupabase().catch(() => {});
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
@@ -128,6 +131,15 @@ export function App() {
     </OwnerProtectedRoute>
   );
 
+  const renderOwnerMessages = () => (
+    <OwnerProtectedRoute>
+      <OwnerMessages
+        deferredPrompt={deferredPrompt}
+        onInstallApp={handleInstallApp}
+      />
+    </OwnerProtectedRoute>
+  );
+
   return (
     <BrowserRouter>
       <Routes>
@@ -149,6 +161,7 @@ export function App() {
         <Route path="/owner/job" element={renderOwnerJobSheet()} />
         <Route path="/owner/staff" element={renderOwnerStaff()} />
         <Route path="/owner/services" element={renderOwnerServices()} />
+        <Route path="/owner/messages" element={renderOwnerMessages()} />
 
         {/* Catch-all redirect to / */}
         <Route path="*" element={<Navigate to="/" replace />} />

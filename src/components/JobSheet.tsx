@@ -20,7 +20,8 @@ import { saveJobRecord, updateJobRecord, getJobRecordById, type JobRecord } from
 import { INDIAN_VEHICLE_BRANDS } from '../data/indianVehicles';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
-import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend, sendVehicleReceivedWhatsAppViaBackend } from '../utils/invoiceUtils';
+import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend, sendVehicleReceivedWhatsAppViaBackend, parsePriceNumber, generateBillNo } from '../utils/invoiceUtils';
+import { getMessageTemplates, renderTemplate, SHOP_NAME } from '../utils/templateStorage';
 
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'w-[22px] h-[22px] text-[#25D366]' }) => (
   <svg
@@ -371,14 +372,26 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const handleTextMessage = async () => {
     if (!validateForm()) return;
 
-    await handleSaveDraft();
+    const saved = await handleSaveDraft();
+    const cleanPhone = (saved?.phoneNumber || formData.phoneNumber).replace(/\D/g, '');
+    const priceNum = parsePriceNumber(saved?.price || formData.price);
+    const discountNum = saved?.discount ? parsePriceNumber(saved.discount) : 0;
+    const finalAmount = Math.max(0, priceNum - discountNum);
+    const servicesText = Array.isArray(saved?.services)
+      ? saved.services.join(', ')
+      : formData.selectedServices.join(', ');
+    const billNo = saved ? (saved.billNo || generateBillNo(saved.id, saved.createdAt)) : '';
 
-    const cleanPhone = formData.phoneNumber.replace(/\D/g, '');
-    const vehicleNo = formData.vehicleNumber.toUpperCase();
-    const custName = formData.customerName;
-    const servicesText = formData.selectedServices.join(', ');
-
-    const msg = `Hello ${custName}, regarding your vehicle ${vehicleNo} (${servicesText}) at GO GRAND Car Wash.`;
+    const templates = getMessageTemplates();
+    const msg = renderTemplate(templates.sms, {
+      customer_name: saved?.customerName || formData.customerName,
+      vehicle_model: saved?.vehicleName || formData.vehicleName,
+      vehicle_number: saved?.vehicleNumber || formData.vehicleNumber,
+      service: servicesText,
+      amount: finalAmount,
+      bill_no: billNo,
+      shop_name: SHOP_NAME,
+    });
 
     const smsUrl = `sms:+91${cleanPhone}?body=${encodeURIComponent(msg)}`;
     window.open(smsUrl, '_blank');

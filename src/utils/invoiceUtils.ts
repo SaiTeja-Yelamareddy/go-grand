@@ -1,6 +1,7 @@
 import { type JobRecord } from './draftStorage';
 import { getStoredUpiId } from './upiStorage';
 import { getWhatsAppBackendUrl } from '../config/apiConfig';
+import { getMessageTemplates, renderTemplate, SHOP_NAME } from './templateStorage';
 
 /**
  * Generates a consistent sequential bill number from ID/timestamp
@@ -90,41 +91,21 @@ export function formatWhatsAppBillText(record: JobRecord): string {
     : record.services || record.service || 'Car Wash & Detailing';
 
   const billNo = record.billNo || generateBillNo(record.id, record.createdAt);
-  const dateStr = record.createdAt ? new Date(record.createdAt).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
 
-  return (
-    `🚗 *GO GRAND CAR WASH & DETAILING*\n` +
-    `📍 Near RTO Office, Murakambattu, Chittoor\n` +
-    `📞 +91 80081 95435\n\n` +
-    `🧾 *TAX INVOICE / BILL*\n` +
-    `---------------------------\n` +
-    `*Invoice No:* ${billNo}\n` +
-    `*Date:* ${dateStr}\n` +
-    `*Customer:* ${record.customerName || 'Valued Customer'}\n` +
-    `*Vehicle No:* ${(record.vehicleNumber || '').toUpperCase()}\n` +
-    `*Vehicle:* ${record.vehicleName || 'Vehicle'}\n` +
-    `*Staff:* ${record.createdBy || 'Owner'}\n` +
-    `---------------------------\n` +
-    `*Services:* ${servicesText}\n` +
-    `*Subtotal:* ${formatCurrency(priceNum)}\n` +
-    (discountNum > 0 ? `*Discount:* -${formatCurrency(discountNum)}\n` : '') +
-    `*Total Paid:* *${formatCurrency(total)}*\n` +
-    `---------------------------\n\n` +
-    `Thank you for your visit! Have a safe drive! 🚗✨`
-  );
+  const templates = getMessageTemplates();
+  return renderTemplate(templates.whatsAppBill, {
+    customer_name: record.customerName,
+    vehicle_model: record.vehicleName,
+    vehicle_number: record.vehicleNumber,
+    service: servicesText,
+    amount: total,
+    bill_no: billNo,
+    shop_name: SHOP_NAME,
+  });
 }
 
 export function formatWhatsAppPdfCaption(record: JobRecord): string {
-  const priceNum = parsePriceNumber(record.price);
-  const discountNum = record.discount ? parsePriceNumber(record.discount) : 0;
-  const total = Math.max(0, priceNum - discountNum);
-
-  return (
-    `🚗 *GO GRAND TAX INVOICE*\n` +
-    `Vehicle: ${(record.vehicleNumber || '').toUpperCase()} (${record.vehicleName || 'Vehicle'})\n` +
-    `Total Amount: *${formatCurrency(total)}*\n\n` +
-    `Thank you for choosing GO GRAND Car Wash & Detailing! ✨`
-  );
+  return formatWhatsAppBillText(record);
 }
 
 export function openWhatsAppDirect(record: JobRecord) {
@@ -238,28 +219,24 @@ export function formatVehicleReadyMessage(
   customerName?: string,
   vehicleName?: string,
   vehicleNumber?: string,
-  amount?: string | number
+  amount?: string | number,
+  services?: string[] | string,
+  billNo?: string
 ): string {
-  const custName = customerName || 'Valued Customer';
-  const vehName = vehicleName || 'Vehicle';
-  const vehNo = (vehicleNumber || 'CAR').toUpperCase();
+  const servicesText = Array.isArray(services)
+    ? services.join(', ')
+    : services || 'Car Wash & Detailing';
 
-  let amtStr = '0';
-  if (typeof amount === 'number') {
-    amtStr = amount.toString();
-  } else if (typeof amount === 'string' && amount.trim()) {
-    amtStr = amount.replace(/[^0-9.]/g, '') || '0';
-  }
-
-  return (
-    `🚗 *VEHICLE READY!*\n\n` +
-    `Hello ${custName} 👋\n\n` +
-    `Your ${vehName} (${vehNo}) is ready for pickup at *GO GRAND Car Wash & Detailing, Murakambattu*.\n\n` +
-    `🏪 *GO GRAND Car Wash & Detailing*\n` +
-    `💰 *Amount: ₹${amtStr}*\n\n` +
-    `Please scan the QR below to complete the payment.\n\n` +
-    `👉 *Scan to Pay*`
-  );
+  const templates = getMessageTemplates();
+  return renderTemplate(templates.vehicleReady, {
+    customer_name: customerName,
+    vehicle_model: vehicleName,
+    vehicle_number: vehicleNumber,
+    amount: amount,
+    service: servicesText,
+    bill_no: billNo,
+    shop_name: SHOP_NAME,
+  });
 }
 
 export async function sendVehicleReadyWhatsAppViaBackend(record: JobRecord): Promise<{ success: boolean; method: 'backend'; error?: string }> {
@@ -281,13 +258,16 @@ export async function sendVehicleReadyWhatsAppViaBackend(record: JobRecord): Pro
       const priceNum = parsePriceNumber(record.price);
       const discountNum = record.discount ? parsePriceNumber(record.discount) : 0;
       const finalAmount = Math.max(0, priceNum - discountNum);
+      const billNo = record.billNo || generateBillNo(record.id, record.createdAt);
 
       const upiId = getStoredUpiId();
       const msg = formatVehicleReadyMessage(
         record.customerName,
         record.vehicleName,
         record.vehicleNumber,
-        finalAmount
+        finalAmount,
+        record.services || record.service,
+        billNo
       );
 
       // Call dedicated Vehicle Ready endpoint with UPI QR image generation
@@ -321,30 +301,39 @@ export function formatVehicleReceivedMessage(
   customerName?: string,
   vehicleName?: string,
   vehicleNumber?: string,
-  services?: string[] | string
+  services?: string[] | string,
+  amount?: string | number,
+  billNo?: string
 ): string {
-  const custName = customerName || 'Valued Customer';
-  const vehName = vehicleName || 'Vehicle';
-  const vehNo = (vehicleNumber || 'CAR').toUpperCase();
   const servicesText = Array.isArray(services)
     ? services.join(', ')
-    : services || 'Car Wash';
+    : services || 'Car Wash & Detailing';
 
-  return (
-    `🚗 *VEHICLE RECEIVED!*\n\n` +
-    `Hello ${custName} 👋\n\n` +
-    `We have received your ${vehName} (${vehNo}) for *${servicesText}* at *GO GRAND Car Wash & Detailing, Murakambattu*.\n\n` +
-    `Our team has started working on your vehicle with utmost care. We will notify you once your vehicle is clean and ready for pickup!\n\n` +
-    `📞 *Helpline:* +91 80081 95435`
-  );
+  const templates = getMessageTemplates();
+  return renderTemplate(templates.vehicleReceived, {
+    customer_name: customerName,
+    vehicle_model: vehicleName,
+    vehicle_number: vehicleNumber,
+    service: servicesText,
+    amount: amount,
+    bill_no: billNo,
+    shop_name: SHOP_NAME,
+  });
 }
 
 export async function sendVehicleReceivedWhatsAppViaBackend(record: JobRecord): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+  const priceNum = parsePriceNumber(record.price);
+  const discountNum = record.discount ? parsePriceNumber(record.discount) : 0;
+  const finalAmount = Math.max(0, priceNum - discountNum);
+  const billNo = record.billNo || generateBillNo(record.id, record.createdAt);
+
   const msg = formatVehicleReceivedMessage(
     record.customerName,
     record.vehicleName,
     record.vehicleNumber,
-    record.services || record.service
+    record.services || record.service,
+    finalAmount,
+    billNo
   );
   return sendWhatsAppMessageViaBackend(record.phoneNumber, msg);
 }

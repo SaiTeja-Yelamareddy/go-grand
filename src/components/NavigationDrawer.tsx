@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { X, Smartphone, Users, CreditCard } from 'lucide-react';
+import { X, Smartphone, Users, CreditCard, MessageSquare } from 'lucide-react';
 import { logoutOwner, logoutStaff, getCurrentStaff } from '../config/authConfig';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { UpiSettingsModal } from './UpiSettingsModal';
@@ -77,6 +77,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     { label: 'TOTAL VEHICLES', path: '/owner/vehicles' },
     { label: 'MANAGE STAFF', path: '/owner/staff' },
     { label: 'ADD / UPDATE SERVICES', path: '/owner/services' },
+    { label: '💬 MESSAGE CUSTOMIZATION', path: '/owner/messages' },
     { label: 'UPI PAYMENT SETTINGS', action: 'upi' },
     { label: 'WHATSAPP LINKED DEVICE', action: 'whatsapp' },
     { label: 'LOGOUT', action: 'logout' },
@@ -162,6 +163,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                   const isWhatsApp = item.action === 'whatsapp';
                   const isUpi = item.action === 'upi';
                   const isManageStaff = item.path === '/owner/staff';
+                  const isMessages = item.path === '/owner/messages';
 
                   return (
                     <button
@@ -182,6 +184,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                         {isUpi && <CreditCard className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />}
                         {isWhatsApp && <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
                         {isManageStaff && <Users className="w-4 h-4 text-current shrink-0" />}
+                        {isMessages && <MessageSquare className="w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0" />}
                         <span>{item.label}</span>
                       </span>
                     </button>

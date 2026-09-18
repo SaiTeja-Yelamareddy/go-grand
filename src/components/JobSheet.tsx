@@ -12,7 +12,6 @@ import {
   User,
   Phone,
   MapPin,
-  Sparkles,
   Car,
 } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
@@ -754,26 +753,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 />
               </div>
             </div>
-          </section>
-
-          {/* 3. SERVICE & COMMERCIALS SECTION */}
-          <section className="bg-white dark:bg-[#0A0A0A] rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-neutral-850 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-850 pb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-400 flex items-center justify-center text-xs">
-                  <Sparkles size={14} />
-                </span>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-                  Service & Commercials
-                </span>
-              </div>
-              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 px-2 py-0.5 rounded-md">
-                Billing Info
-              </span>
-            </div>
 
             {/* Primary Package / Service Selection */}
-            <div className="space-y-1.5 relative">
+            <div className="space-y-1.5 relative pt-0.5">
               <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
                 Primary Package / Service <span className="text-rose-500">*</span>
               </label>

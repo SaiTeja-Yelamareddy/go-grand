@@ -455,9 +455,6 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 Live Intake
               </span>
             </div>
-            <p className="text-xs text-slate-600 dark:text-neutral-400 mt-1 font-medium">
-              Enter vehicle specifications & detailing service package
-            </p>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">

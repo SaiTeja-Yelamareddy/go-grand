@@ -18,7 +18,6 @@ import { NavigationDrawer } from './NavigationDrawer';
 import { Header } from './Header';
 import { saveJobRecord, updateJobRecord, getJobRecordById, type JobRecord } from '../utils/draftStorage';
 import { INDIAN_VEHICLE_BRANDS } from '../data/indianVehicles';
-import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend, sendVehicleReceivedWhatsAppViaBackend, parsePriceNumber, generateBillNo } from '../utils/invoiceUtils';
 import { getMessageTemplates, renderTemplate, SHOP_NAME } from '../utils/templateStorage';
@@ -123,9 +122,6 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         opt.fullName.toLowerCase().includes(q)
     );
   }, [vehicleSearchQuery, allModelOptions]);
-
-  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [currentInvoiceRecord, setCurrentInvoiceRecord] = useState<JobRecord | null>(null);
 
   // Load ONLY the service sections & services created/managed in Add / Update Services from Supabase
   const [sections, setSections] = useState<ServiceSection[]>(() => getServiceSections());
@@ -412,8 +408,6 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
     const saved = await handleSaveDraft();
     if (saved) {
-      setCurrentInvoiceRecord(saved);
-      setShowInvoiceModal(true);
       const res = await sendWhatsAppBillViaBackend(saved);
       if (res.success) {
         showToast('BILL SENT THROUGH LINKED WHATSAPP', `PDF Tax Invoice sent to ${saved.phoneNumber}`);
@@ -1108,14 +1102,6 @@ export const JobSheet: React.FC<JobSheetProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {/* LATEX-MATCHED INVOICE & PRINT MODAL */}
-      {showInvoiceModal && currentInvoiceRecord && (
-        <InvoiceModal
-          record={currentInvoiceRecord}
-          onClose={() => setShowInvoiceModal(false)}
-        />
       )}
 
       {/* LINKED WHATSAPP SENT FLOATING TOAST */}

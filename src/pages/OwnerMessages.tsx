@@ -12,6 +12,7 @@ import {
   Smartphone,
   Sparkles,
   Info,
+  PlusCircle,
 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { NavigationDrawer } from '../components/NavigationDrawer';
@@ -38,74 +39,71 @@ interface TemplateConfig {
   icon: React.ElementType;
   iconColor: string;
   badge: string;
-  variables: { tag: string; label: string; desc: string }[];
+  variables: { token: string; label: string }[];
 }
 
 const TEMPLATE_CONFIGS: TemplateConfig[] = [
   {
     key: 'vehicleReceived',
-    title: 'Vehicle Received',
-    description: 'Customer notification when the vehicle is received at the shop.',
+    title: 'Vehicle Received Message',
+    description: 'Customer notification when the vehicle is received at the workshop.',
     icon: Car,
     iconColor: 'text-amber-500 dark:text-amber-400',
     badge: 'Vehicle Intake',
     variables: [
-      { tag: '{{customer_name}}', label: 'Customer Name', desc: 'Ravi Kumar' },
-      { tag: '{{vehicle_number}}', label: 'Vehicle Number', desc: 'AP39AB1234' },
-      { tag: '{{vehicle_model}}', label: 'Vehicle Model', desc: 'Hyundai Creta' },
-      { tag: '{{service}}', label: 'Service', desc: 'Full Foam Wash' },
-      { tag: '{{amount}}', label: 'Amount', desc: '1,500' },
-      { tag: '{{bill_no}}', label: 'Bill No', desc: 'GG-1025' },
-      { tag: '{{shop_name}}', label: 'Shop Name', desc: 'GO GRAND Car Wash & Detailing' },
+      { token: '[Customer Name]', label: '+ Customer Name' },
+      { token: '[Vehicle Model]', label: '+ Vehicle Model' },
+      { token: '[Vehicle Number]', label: '+ Vehicle Number' },
+      { token: '[Service]', label: '+ Service' },
+      { token: '[Amount]', label: '+ Amount' },
+      { token: '[Bill Number]', label: '+ Bill Number' },
     ],
   },
   {
     key: 'vehicleReady',
-    title: 'Vehicle Ready',
-    description: 'Customer notification when the vehicle detailing is complete and ready for pickup.',
+    title: 'Vehicle Ready Message',
+    description: 'Customer notification when the vehicle detailing is finished and ready for pickup.',
     icon: Sparkles,
     iconColor: 'text-emerald-500 dark:text-emerald-400',
     badge: 'Ready for Pickup',
     variables: [
-      { tag: '{{customer_name}}', label: 'Customer Name', desc: 'Ravi Kumar' },
-      { tag: '{{vehicle_number}}', label: 'Vehicle Number', desc: 'AP39AB1234' },
-      { tag: '{{vehicle_model}}', label: 'Vehicle Model', desc: 'Hyundai Creta' },
-      { tag: '{{service}}', label: 'Service', desc: 'Full Foam Wash' },
-      { tag: '{{amount}}', label: 'Amount', desc: '1,500' },
-      { tag: '{{bill_no}}', label: 'Bill No', desc: 'GG-1025' },
-      { tag: '{{shop_name}}', label: 'Shop Name', desc: 'GO GRAND Car Wash & Detailing' },
+      { token: '[Customer Name]', label: '+ Customer Name' },
+      { token: '[Vehicle Model]', label: '+ Vehicle Model' },
+      { token: '[Vehicle Number]', label: '+ Vehicle Number' },
+      { token: '[Service]', label: '+ Service' },
+      { token: '[Amount]', label: '+ Amount' },
+      { token: '[Bill Number]', label: '+ Bill Number' },
     ],
   },
   {
     key: 'whatsAppBill',
-    title: 'WhatsApp Bill',
+    title: 'WhatsApp Bill Message',
     description: 'Message sent together with the PDF invoice document.',
     icon: FileText,
     iconColor: 'text-blue-500 dark:text-blue-400',
     badge: 'Tax Invoice',
     variables: [
-      { tag: '{{customer_name}}', label: 'Customer Name', desc: 'Ravi Kumar' },
-      { tag: '{{vehicle_number}}', label: 'Vehicle Number', desc: 'AP39AB1234' },
-      { tag: '{{vehicle_model}}', label: 'Vehicle Model', desc: 'Hyundai Creta' },
-      { tag: '{{amount}}', label: 'Amount', desc: '1,500' },
-      { tag: '{{bill_no}}', label: 'Bill No', desc: 'GG-1025' },
-      { tag: '{{shop_name}}', label: 'Shop Name', desc: 'GO GRAND Car Wash & Detailing' },
+      { token: '[Customer Name]', label: '+ Customer Name' },
+      { token: '[Vehicle Model]', label: '+ Vehicle Model' },
+      { token: '[Vehicle Number]', label: '+ Vehicle Number' },
+      { token: '[Service]', label: '+ Service' },
+      { token: '[Amount]', label: '+ Amount' },
+      { token: '[Bill Number]', label: '+ Bill Number' },
     ],
   },
   {
     key: 'sms',
     title: 'SMS Message',
-    description: 'Short customer SMS sent directly through phone messaging.',
+    description: 'Short customer SMS sent directly via mobile network messaging.',
     icon: Smartphone,
     iconColor: 'text-purple-500 dark:text-purple-400',
     badge: 'Direct SMS',
     variables: [
-      { tag: '{{customer_name}}', label: 'Customer Name', desc: 'Ravi Kumar' },
-      { tag: '{{vehicle_number}}', label: 'Vehicle Number', desc: 'AP39AB1234' },
-      { tag: '{{vehicle_model}}', label: 'Vehicle Model', desc: 'Hyundai Creta' },
-      { tag: '{{amount}}', label: 'Amount', desc: '1,500' },
-      { tag: '{{bill_no}}', label: 'Bill No', desc: 'GG-1025' },
-      { tag: '{{shop_name}}', label: 'Shop Name', desc: 'GO GRAND Car Wash & Detailing' },
+      { token: '[Customer Name]', label: '+ Customer Name' },
+      { token: '[Vehicle Model]', label: '+ Vehicle Model' },
+      { token: '[Vehicle Number]', label: '+ Vehicle Number' },
+      { token: '[Amount]', label: '+ Amount' },
+      { token: '[Bill Number]', label: '+ Bill Number' },
     ],
   },
 ];
@@ -127,15 +125,15 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
   });
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Textarea refs to support variable insertion at cursor
+  // Textarea refs to support detail insertion at current cursor position
   const textareaRefs = useRef<{ [key: string]: HTMLTextAreaElement | null }>({});
 
   useEffect(() => {
-    // Initial local read
+    // Initial local cache read
     const local = getMessageTemplates();
     setTemplates(local);
 
-    // Sync from Supabase
+    // Sync latest from Supabase app_settings
     syncMessageTemplatesFromSupabase().then((synced) => {
       setTemplates(synced);
     }).catch(() => {});
@@ -155,30 +153,30 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
     }));
   };
 
-  const handleInsertVariable = (key: keyof MessageTemplates, variableTag: string) => {
+  const handleInsertToken = (key: keyof MessageTemplates, token: string) => {
     const textarea = textareaRefs.current[key];
     const currentValue = templates[key] || '';
 
     if (textarea) {
       const start = textarea.selectionStart ?? currentValue.length;
       const end = textarea.selectionEnd ?? currentValue.length;
-      const updated = currentValue.substring(0, start) + variableTag + currentValue.substring(end);
+      const updated = currentValue.substring(0, start) + token + currentValue.substring(end);
       
       setTemplates((prev) => ({
         ...prev,
         [key]: updated,
       }));
 
-      // Restore cursor position after inserted variable
+      // Restore cursor right after the inserted token
       setTimeout(() => {
         textarea.focus();
-        const newPos = start + variableTag.length;
+        const newPos = start + token.length;
         textarea.setSelectionRange(newPos, newPos);
       }, 0);
     } else {
       setTemplates((prev) => ({
         ...prev,
-        [key]: currentValue ? `${currentValue} ${variableTag}` : variableTag,
+        [key]: currentValue ? `${currentValue} ${token}` : token,
       }));
     }
   };
@@ -191,7 +189,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
 
     const value = templates[key]?.trim();
     if (!value) {
-      showToast('error', `Cannot save empty message for ${key}.`);
+      showToast('error', 'Cannot save an empty message.');
       return;
     }
 
@@ -199,10 +197,10 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
     try {
       await saveMessageTemplates({ [key]: templates[key] });
       setSavedKey(key);
-      showToast('success', `${key === 'vehicleReceived' ? 'Vehicle Received' : key === 'vehicleReady' ? 'Vehicle Ready' : key === 'whatsAppBill' ? 'WhatsApp Bill' : 'SMS'} template saved successfully!`);
+      showToast('success', `${key === 'vehicleReceived' ? 'Vehicle Received' : key === 'vehicleReady' ? 'Vehicle Ready' : key === 'whatsAppBill' ? 'WhatsApp Bill' : 'SMS'} message saved successfully!`);
       setTimeout(() => setSavedKey(null), 3000);
     } catch (err: any) {
-      showToast('error', err?.message || 'Failed to save template.');
+      showToast('error', err?.message || 'Failed to save message.');
     } finally {
       setSavingKey(null);
     }
@@ -214,10 +212,10 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
       return;
     }
 
-    // Validation
+    // Validate that no section is completely empty
     for (const config of TEMPLATE_CONFIGS) {
       if (!templates[config.key]?.trim()) {
-        showToast('error', `Template "${config.title}" cannot be empty.`);
+        showToast('error', `Message "${config.title}" cannot be empty.`);
         return;
       }
     }
@@ -225,7 +223,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
     setSaveAllLoading(true);
     try {
       await saveMessageTemplates(templates);
-      showToast('success', 'All message templates saved & synced successfully!');
+      showToast('success', 'All messages saved and synced successfully!');
     } catch (err: any) {
       showToast('error', err?.message || 'Failed to save message templates.');
     } finally {
@@ -235,7 +233,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
 
   const handleResetDefault = async (key: keyof MessageTemplates) => {
     const config = TEMPLATE_CONFIGS.find((c) => c.key === key);
-    if (!window.confirm(`Reset "${config?.title || key}" to default GO GRAND template?`)) {
+    if (!window.confirm(`Reset "${config?.title || key}" to default message?`)) {
       return;
     }
 
@@ -247,7 +245,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
       await saveMessageTemplates({ [key]: defaultVal });
       showToast('success', `Reset "${config?.title || key}" to default.`);
     } catch (err: any) {
-      showToast('error', 'Failed to persist default template.');
+      showToast('error', 'Failed to save default message.');
     }
   };
 
@@ -299,10 +297,10 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
             </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-400 border border-amber-300 dark:border-amber-800/80 uppercase tracking-wide">
-                <Shield size={10} /> Owner Access Only
+                <Shield size={10} /> Owner Only
               </span>
               <p className="text-xs text-slate-500 dark:text-neutral-400 font-medium">
-                Customize automated WhatsApp & SMS customer messages
+                Type or paste your complete WhatsApp and SMS messages exactly as desired
               </p>
             </div>
           </div>
@@ -321,11 +319,11 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
         <div className="mb-6 p-3.5 rounded-xl bg-slate-200/70 dark:bg-[#111111] border border-slate-300 dark:border-[#222222] flex items-start gap-3 text-xs text-slate-700 dark:text-neutral-300">
           <Info size={16} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
           <div className="leading-relaxed">
-            <span className="font-bold text-slate-900 dark:text-white">Placeholder Engine:</span> Click on any variable chip below to insert it into the message at your cursor position. The system will automatically replace variables with actual customer & vehicle details before sending.
+            <span className="font-bold text-slate-900 dark:text-white">Full Message Editor:</span> Paste or type your complete WhatsApp message with emojis (🚗, ✨), <code className="text-xs px-1 rounded bg-slate-300 dark:bg-neutral-800">*bold*</code>, and line breaks. To include live customer or vehicle details, click any of the <strong>Insert Details</strong> buttons.
           </div>
         </div>
 
-        {/* TEMPLATE CARDS LIST */}
+        {/* 4 MESSAGE SECTIONS */}
         <div className="space-y-6">
           {TEMPLATE_CONFIGS.map((config) => {
             const Icon = config.icon;
@@ -340,7 +338,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                 key={config.key}
                 className="bg-white dark:bg-[#0D0D0D] border border-slate-200 dark:border-[#202020] rounded-2xl shadow-sm overflow-hidden transition-colors"
               >
-                {/* CARD HEADER */}
+                {/* SECTION HEADER */}
                 <div className="p-4 border-b border-slate-100 dark:border-[#1A1A1A] flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50/50 dark:bg-[#121212]">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-xl bg-slate-200/80 dark:bg-[#1E1E1E] text-slate-800 dark:text-white shrink-0">
@@ -369,13 +367,13 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                       title={isPreviewing ? 'Hide live preview' : 'Show live preview'}
                     >
                       {isPreviewing ? <EyeOff size={14} /> : <Eye size={14} />}
-                      <span>{isPreviewing ? 'Hide Preview' : 'Preview'}</span>
+                      <span>{isPreviewing ? 'Hide Preview' : 'Live Preview'}</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleResetDefault(config.key)}
                       className="p-1.5 rounded-lg text-slate-500 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                      title="Reset to default GO GRAND template"
+                      title="Reset to default message"
                     >
                       <RotateCcw size={13} />
                       <span>Reset</span>
@@ -383,13 +381,13 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                   </div>
                 </div>
 
-                {/* CARD BODY */}
+                {/* SECTION BODY */}
                 <div className="p-4 space-y-4">
-                  {/* EDITABLE TEXTAREA */}
+                  {/* MULTILINE MESSAGE EDITOR */}
                   <div>
                     <div className="flex justify-between items-center mb-1.5">
                       <label className="text-xs font-bold uppercase text-slate-700 dark:text-neutral-300 tracking-wide">
-                        Message Template
+                        Message Content
                       </label>
                       <span className="text-[11px] font-medium text-slate-400 dark:text-neutral-500">
                         {currentText.length} characters
@@ -401,30 +399,30 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                       }}
                       value={currentText}
                       onChange={(e) => handleTextChange(config.key, e.target.value)}
-                      rows={4}
-                      className="w-full p-3 rounded-xl bg-slate-50 dark:bg-[#161616] border border-slate-300 dark:border-[#2C2C2C] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-neutral-600 text-sm font-normal focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y leading-relaxed transition-all"
-                      placeholder="Type your message template here..."
+                      rows={6}
+                      className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#161616] border border-slate-300 dark:border-[#2C2C2C] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-neutral-600 text-sm font-normal focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y leading-relaxed transition-all"
+                      placeholder="Type or paste your customized message here..."
                     />
                   </div>
 
-                  {/* AVAILABLE VARIABLES PILLS */}
+                  {/* USER-FRIENDLY INSERT DETAILS BUTTONS */}
                   <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 dark:text-neutral-400 tracking-wider block mb-2">
-                      Available Variables (Click to insert):
-                    </label>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <PlusCircle size={13} className="text-blue-500 dark:text-blue-400" />
+                      <label className="text-[11px] font-bold uppercase text-slate-600 dark:text-neutral-400 tracking-wider">
+                        Insert Details (Click to insert at cursor):
+                      </label>
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
                       {config.variables.map((v) => (
                         <button
-                          key={v.tag}
+                          key={v.token}
                           type="button"
-                          onClick={() => handleInsertVariable(config.key, v.tag)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-[#1B1B1B] hover:bg-blue-50 dark:hover:bg-blue-950/50 text-slate-800 dark:text-neutral-200 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-300 dark:border-[#2C2C2C] hover:border-blue-300 dark:hover:border-blue-700 text-xs font-mono font-medium transition-colors cursor-pointer group flex items-center gap-1"
-                          title={`Insert ${v.label} (Example: ${v.desc})`}
+                          onClick={() => handleInsertToken(config.key, v.token)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-[#181818] hover:bg-blue-50 dark:hover:bg-blue-950/60 text-slate-800 dark:text-neutral-200 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-300 dark:border-[#2A2A2A] hover:border-blue-300 dark:hover:border-blue-700 text-xs font-semibold transition-colors cursor-pointer active:scale-95"
+                          title={`Insert ${v.token} at current cursor`}
                         >
-                          <span>{v.tag}</span>
-                          <span className="text-[10px] text-slate-400 dark:text-neutral-500 group-hover:text-blue-500 hidden sm:inline">
-                            · {v.label}
-                          </span>
+                          {v.label}
                         </button>
                       ))}
                     </div>
@@ -435,14 +433,14 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                     <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-[#080808] border border-slate-200 dark:border-[#1E1E1E]">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                          <Eye size={12} /> Live Preview (Sample Customer Data)
+                          <Eye size={12} /> Live Preview (Sample Output)
                         </span>
                         <span className="text-[10px] font-medium text-slate-400 dark:text-neutral-500">
                           Recipient: Ravi Kumar (AP39AB1234)
                         </span>
                       </div>
-                      <div className="p-3 rounded-lg bg-white dark:bg-[#141414] border border-slate-200/80 dark:border-[#242424] text-xs text-slate-800 dark:text-neutral-200 font-sans whitespace-pre-wrap leading-relaxed shadow-inner">
-                        {previewText || <span className="text-slate-400 italic">Preview empty</span>}
+                      <div className="p-3.5 rounded-lg bg-white dark:bg-[#141414] border border-slate-200/80 dark:border-[#242424] text-xs text-slate-800 dark:text-neutral-200 font-sans whitespace-pre-wrap leading-relaxed shadow-inner">
+                        {previewText || <span className="text-slate-400 italic">No message content</span>}
                       </div>
                     </div>
                   )}
@@ -456,7 +454,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                         </span>
                       ) : (
                         <span className="text-[11px] text-slate-400 dark:text-neutral-500">
-                          Auto-formatted for customer delivery
+                          Preserves emojis, bold (*text*), and line breaks
                         </span>
                       )}
                     </div>
@@ -466,14 +464,14 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                         type="button"
                         onClick={() => handleSaveSingle(config.key)}
                         disabled={isSaving}
-                        className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-neutral-200 text-white dark:text-black rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-neutral-200 text-white dark:text-black rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
                       >
                         {isSaving ? (
                           <span>Saving...</span>
                         ) : (
                           <>
                             <Save size={13} />
-                            <span>Save</span>
+                            <span>Save Message</span>
                           </>
                         )}
                       </button>

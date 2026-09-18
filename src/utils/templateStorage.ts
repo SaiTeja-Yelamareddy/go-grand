@@ -9,14 +9,32 @@ export interface MessageTemplates {
 }
 
 export const DEFAULT_MESSAGE_TEMPLATES: MessageTemplates = {
-  vehicleReceived:
-    'Hello {{customer_name}}, your {{vehicle_model}} ({{vehicle_number}}) has been received at {{shop_name}}. We will notify you when your vehicle is ready.',
-  vehicleReady:
-    'Hello {{customer_name}}, your {{vehicle_model}} ({{vehicle_number}}) is ready for pickup at {{shop_name}}. Thank you for choosing us.',
-  whatsAppBill:
-    'Hello {{customer_name}}, your bill for {{vehicle_model}} ({{vehicle_number}}) from {{shop_name}} is ₹{{amount}}. Please find your invoice attached.',
-  sms:
-    '{{shop_name}}: Your {{vehicle_model}} ({{vehicle_number}}) is ready for pickup. Amount: ₹{{amount}}.',
+  vehicleReceived: `🚗 *VEHICLE RECEIVED!*
+
+Hello [Customer Name] 👋
+
+Your [Vehicle Model] ([Vehicle Number]) has been received at *GO GRAND Car Wash & Detailing, Murakambattu*.
+
+We will notify you when your vehicle is ready.`,
+  vehicleReady: `🚗 *VEHICLE READY!*
+
+Hello [Customer Name] 👋
+
+Your [Vehicle Model] ([Vehicle Number]) is now ready for pickup at *GO GRAND Car Wash & Detailing, Murakambattu*.
+
+Thank you for trusting GO GRAND with your vehicle. ✨
+
+Drive clean. Drive happy. 🚘`,
+  whatsAppBill: `🧾 *INVOICE*
+
+Hello [Customer Name] 👋
+
+Your invoice for [Vehicle Model] ([Vehicle Number]) from *GO GRAND Car Wash & Detailing, Murakambattu* is ready.
+
+*Total Amount: ₹[Amount]*
+
+Thank you for choosing GO GRAND. 🚘`,
+  sms: `GO GRAND: Your [Vehicle Model] ([Vehicle Number]) is ready for pickup. Amount: ₹[Amount].`,
 };
 
 export const TEMPLATE_STORAGE_KEY = 'go-grand-message-templates';
@@ -33,9 +51,9 @@ export interface TemplateVariables {
 }
 
 /**
- * Centralized placeholder replacement function.
- * Safely replaces all supported placeholders with provided values or fallback defaults.
- * Never leaves raw {{placeholder}} in the output message.
+ * Centralized dynamic token replacement function.
+ * Safely replaces both friendly tokens (e.g. [Customer Name]) and legacy {{placeholders}}.
+ * If no dynamic tokens are present, ordinary text entered by the Owner is preserved 100% intact.
  */
 export function renderTemplate(template: string, vars: TemplateVariables): string {
   if (!template || typeof template !== 'string') return '';
@@ -60,13 +78,14 @@ export function renderTemplate(template: string, vars: TemplateVariables): strin
   const billNo = vars.bill_no?.trim() || '';
 
   return template
-    .replace(/\{\{\s*customer_name\s*\}\}/gi, customerName)
-    .replace(/\{\{\s*vehicle_number\s*\}\}/gi, vehicleNumber)
-    .replace(/\{\{\s*vehicle_model\s*\}\}/gi, vehicleModel)
-    .replace(/\{\{\s*service\s*\}\}/gi, service)
-    .replace(/\{\{\s*amount\s*\}\}/gi, amtStr)
-    .replace(/\{\{\s*bill_no\s*\}\}/gi, billNo)
-    .replace(/\{\{\s*shop_name\s*\}\}/gi, shopName);
+    // Friendly tokens [Customer Name] or legacy {{customer_name}}
+    .replace(/(\[\s*Customer\s*Name\s*\]|\{\{\s*customer_name\s*\}\}|\{\{\s*customerName\s*\}\})/gi, customerName)
+    .replace(/(\[\s*Vehicle\s*Number\s*\]|\{\{\s*vehicle_number\s*\}\}|\{\{\s*vehicleNumber\s*\}\})/gi, vehicleNumber)
+    .replace(/(\[\s*Vehicle\s*Model\s*\]|\{\{\s*vehicle_model\s*\}\}|\{\{\s*vehicleModel\s*\}\}|\{\{\s*vehicle_name\s*\}\})/gi, vehicleModel)
+    .replace(/(\[\s*Service\s*\]|\[\s*Services\s*\]|\{\{\s*service\s*\}\}|\{\{\s*services\s*\}\})/gi, service)
+    .replace(/(\[\s*Amount\s*\]|\[\s*Total\s*Amount\s*\]|\{\{\s*amount\s*\}\})/gi, amtStr)
+    .replace(/(\[\s*Bill\s*Number\s*\]|\[\s*Bill\s*No\s*\]|\[\s*Invoice\s*No\s*\]|\{\{\s*bill_no\s*\}\}|\{\{\s*billNo\s*\}\})/gi, billNo)
+    .replace(/(\[\s*Shop\s*Name\s*\]|\{\{\s*shop_name\s*\}\}|\{\{\s*shopName\s*\}\})/gi, shopName);
 }
 
 /**

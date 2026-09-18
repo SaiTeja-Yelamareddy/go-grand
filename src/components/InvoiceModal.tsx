@@ -25,11 +25,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ record, onClose }) =
   if (Array.isArray(record.services) && record.services.length > 0) {
     servicesList = record.services;
   } else if (typeof record.services === 'string' && record.services.trim()) {
-    servicesList = [record.services.trim()];
+    servicesList = record.services.split(',').map((service) => service.trim()).filter(Boolean);
   } else if (record.service) {
-    servicesList = [record.service];
+    servicesList = record.service.split(',').map((service) => service.trim()).filter(Boolean);
   }
-  const servicesText = servicesList.length > 0 ? servicesList.join(', ') : 'Car Wash & Detailing';
+  const sectionName = servicesList[0] || '';
+  const selectedServices = servicesList.slice(1).filter((service) => service.trim());
 
   const handlePrint = () => {
     window.print();
@@ -183,7 +184,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ record, onClose }) =
               </thead>
               <tbody>
                 <tr className="border-b border-[#E5E5E5]">
-                  <td className="py-2.5 pr-2 font-bold uppercase">{servicesText}</td>
+                  <td className="py-2.5 pr-2 font-bold uppercase">
+                    <div>{sectionName}</div>
+                    {selectedServices.length > 0 && (
+                      <div className="mt-1 text-[10px] font-normal normal-case text-[#555555]">
+                        {selectedServices.join(' • ')}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-2.5 px-2 text-center">Rs. {priceNum.toFixed(2)}</td>
                   <td className="py-2.5 px-2 text-center">1</td>
                   <td className="py-2.5 pl-2 text-right font-bold">Rs. {priceNum.toFixed(2)}</td>

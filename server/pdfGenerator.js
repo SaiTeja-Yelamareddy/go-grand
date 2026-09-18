@@ -125,26 +125,17 @@ export function generateInvoicePDF(job) {
       const grandTotal = Math.max(0, priceNum - discountNum);
       const amountInWords = numberToWordsRupees(grandTotal);
 
-      let servicesText = 'FOAM WASH';
-      let bulletPoints = [
-        'Foam Wash',
-        'Hydraulic Lift',
-        'Dashboard Polishing',
-        'Vacuum Clean',
-        'Mat Clean',
-        '2 Mat Papers',
-      ];
-
-      if (Array.isArray(job.services) && job.services.length > 0) {
-        servicesText = job.services[0].toUpperCase();
-        if (job.services.length > 1) {
-          bulletPoints = job.services;
-        }
-      } else if (typeof job.services === 'string' && job.services.trim()) {
-        servicesText = job.services.toUpperCase();
-      } else if (job.service) {
-        servicesText = String(job.service).toUpperCase();
-      }
+      const rawServices = Array.isArray(job.services)
+        ? job.services
+        : typeof job.services === 'string' && job.services.trim()
+          ? job.services.split(',').map((service) => service.trim()).filter(Boolean)
+          : job.service
+            ? String(job.service).split(',').map((service) => service.trim()).filter(Boolean)
+            : [];
+      const servicesText = String(rawServices[0] || '').toUpperCase();
+      const bulletPoints = rawServices
+        .slice(1)
+        .filter((service) => typeof service === 'string' && service.trim());
 
       const primaryColor = '#171717';
       const grayText = '#555555';
@@ -348,14 +339,15 @@ export function generateInvoicePDF(job) {
         .text(`Rs. ${priceNum.toFixed(2)}`, 460, tableY, { width: 95.28, align: 'right' });
 
       tableY += 16;
-      // Sub-bullets text line
-      doc
-        .fontSize(8)
-        .font('Helvetica')
-        .fillColor(grayText)
-        .text(bulletPoints.join('  •  '), 40, tableY);
-
-      tableY += 16;
+      if (bulletPoints.length > 0) {
+        // Show only services configured for the selected section.
+        doc
+          .fontSize(8)
+          .font('Helvetica')
+          .fillColor(grayText)
+          .text(bulletPoints.join('  •  '), 40, tableY);
+        tableY += 16;
+      }
       // Bottom table line
       doc
         .moveTo(40, tableY)

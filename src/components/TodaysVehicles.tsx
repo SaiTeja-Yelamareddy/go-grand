@@ -539,15 +539,19 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
 
       {/* LINKED WHATSAPP SENT FLOATING TOAST */}
       {toastData && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#111111] text-white border-l-4 border-[#25D366] px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in max-w-[90vw]">
-          <div className="w-8 h-8 rounded-full bg-[#25D366]/20 flex items-center justify-center shrink-0">
-            <CheckCircle2 size={18} className="text-[#25D366]" />
+        <div
+          role="alert"
+          aria-live="polite"
+          className="fixed bottom-4 sm:bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[100] w-auto sm:min-w-[360px] max-w-[calc(100vw-2rem)] bg-[#111111] text-white border border-white/20 border-l-4 border-l-[#25D366] px-4 py-3.5 rounded-xl shadow-2xl flex items-start gap-3 animate-fade-in"
+        >
+          <div className="w-9 h-9 rounded-full bg-[#25D366]/20 flex items-center justify-center shrink-0">
+            <CheckCircle2 size={20} className="text-[#25D366]" />
           </div>
-          <div>
-            <p className="font-extrabold text-xs tracking-wider uppercase text-[#25D366]">
+          <div className="min-w-0 flex-1">
+            <p className="font-extrabold text-sm tracking-wide uppercase text-[#25D366] leading-tight">
               {toastData.title}
             </p>
-            <p className="text-[11px] text-neutral-300 font-medium mt-0.5">{toastData.detail}</p>
+            <p className="text-xs text-white/80 font-medium mt-1 leading-relaxed break-words">{toastData.detail}</p>
             {toastData.undoRecord && (
               <button
                 type="button"

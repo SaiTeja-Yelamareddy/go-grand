@@ -200,15 +200,11 @@ export function generateInvoicePDF(job) {
         .fontSize(8.5)
         .font('Helvetica')
         .fillColor(primaryColor)
-        .text(`Bill No: `, 350, 68, { align: 'right', width: 205.28, continued: true })
-        .font('Helvetica-Bold')
-        .text(billNo);
+        .text(`Bill No: ${billNo}`, 350, 68, { align: 'right', width: 205.28 });
 
       doc
         .font('Helvetica')
-        .text(`Date: `, 350, 82, { align: 'right', width: 205.28, continued: true })
-        .font('Helvetica-Bold')
-        .text(dateStr);
+        .text(`Date: ${dateStr}`, 350, 82, { align: 'right', width: 205.28 });
 
       // 2. BRAND GOLD ACCENT BAR
       doc

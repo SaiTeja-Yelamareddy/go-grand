@@ -463,19 +463,13 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               </button>
             )}
 
-            {/* COMBINED PROFESSIONAL STATUS & MODE BADGE ON RIGHT */}
-            <div className="inline-flex items-center rounded-full border border-slate-200 dark:border-neutral-800 bg-white dark:bg-[#121212] p-0.5 shadow-2xs">
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Live Intake
-              </span>
-              <span className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-700 dark:text-neutral-300">
-                {mode === 'owner'
-                  ? 'Owner Mode'
-                  : currentStaff?.staff_name
-                    ? `Staff: ${currentStaff.staff_name.toUpperCase()}`
-                    : 'Staff Mode'}
-              </span>
+            {/* MODE BADGE ON RIGHT */}
+            <div className="px-3 py-1 rounded-full text-[10.5px] sm:text-[11px] font-black uppercase tracking-wider border bg-white dark:bg-[#121212] text-slate-800 dark:text-neutral-200 border-slate-200 dark:border-neutral-800 shadow-2xs whitespace-nowrap">
+              {mode === 'owner'
+                ? 'Owner Mode'
+                : currentStaff?.staff_name
+                  ? `Staff: ${currentStaff.staff_name.toUpperCase()}`
+                  : 'Staff Mode'}
             </div>
           </div>
         </section>

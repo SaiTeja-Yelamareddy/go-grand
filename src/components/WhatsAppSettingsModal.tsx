@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, RefreshCw, LogOut, Send, Smartphone, AlertCircle, X, Server, Globe } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { getWhatsAppBackendUrl } from '../config/apiConfig';
@@ -35,11 +35,32 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
   const [customBackendUrl, setCustomBackendUrl] = useState<string>('');
   const [showServerConfig, setShowServerConfig] = useState<boolean>(false);
   const [urlSaveSuccess, setUrlSaveSuccess] = useState<boolean>(false);
+  const retryTimerRef = useRef<number | null>(null);
+  const retryAttemptRef = useRef(0);
 
   const activeBackendUrl = getWhatsAppBackendUrl();
 
-  const fetchStatus = async () => {
-    setIsLoading(true);
+  const clearRetryTimer = () => {
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  };
+
+  const scheduleStatusRetry = () => {
+    if (retryTimerRef.current !== null) return;
+
+    const delays = [2000, 5000, 10000, 20000];
+    const delay = delays[Math.min(retryAttemptRef.current, delays.length - 1)];
+    retryAttemptRef.current += 1;
+    retryTimerRef.current = window.setTimeout(() => {
+      retryTimerRef.current = null;
+      fetchStatus(true);
+    }, delay);
+  };
+
+  const fetchStatus = async (automaticRetry = false) => {
+    if (!automaticRetry) setIsLoading(true);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
@@ -53,6 +74,8 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
 
       if (res.ok) {
         const data = await res.json();
+        retryAttemptRef.current = 0;
+        clearRetryTimer();
         setServerOnline(true);
         if (data.connected) {
           setStatus('connected');
@@ -67,10 +90,12 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
         }
       } else {
         setServerOnline(false);
+        scheduleStatusRetry();
       }
     } catch (err) {
       console.warn('[WHATSAPP HEALTH] Check failed or timed out:', err);
       setServerOnline(false);
+      scheduleStatusRetry();
     } finally {
       setIsLoading(false);
     }
@@ -96,6 +121,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
       }
     } catch {
       setServerOnline(false);
+      scheduleStatusRetry();
     } finally {
       setIsLoading(false);
     }
@@ -128,12 +154,17 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
 
       socket.on('connect', () => {
         console.log('[WHATSAPP SOCKET] Connected');
+        retryAttemptRef.current = 0;
+        clearRetryTimer();
         setServerOnline(true);
+        fetchStatus(true);
         socket?.emit('request_qr');
       });
 
       socket.on('disconnect', () => {
         console.log('[WHATSAPP SOCKET] Disconnected');
+        setServerOnline(false);
+        scheduleStatusRetry();
       });
 
       socket.on('qr', (data: { qrCode: string }) => {
@@ -162,6 +193,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
     }
 
     return () => {
+      clearRetryTimer();
       if (socket) {
         socket.off('connect');
         socket.off('disconnect');
@@ -298,7 +330,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
                 {serverOnline ? 'Online' : 'Server Offline'}
               </span>
               <button
-                onClick={fetchStatus}
+                onClick={() => fetchStatus()}
                 className="p-1 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 title="Refresh Status"
               >

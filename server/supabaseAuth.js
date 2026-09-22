@@ -40,16 +40,24 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
       targetTable = 'app_settings';
       useFallbackAppSettings = true;
     } else if (error) {
-      console.warn(`[SUPABASE AUTH] Table check warning for '${targetTable}':`, error.message);
+      throw new Error(`Supabase auth table check failed for '${targetTable}': ${error.message}`);
     } else {
       console.log(`[SUPABASE AUTH] ✅ Using dedicated '${targetTable}' table for WhatsApp session persistence.`);
     }
   } catch (err) {
-    console.warn(`[SUPABASE AUTH] Table detection error for '${targetTable}'; retaining dedicated session storage target:`, err.message);
+    console.error('[SUPABASE AUTH] Table detection failed:', err.message);
+    throw err;
   }
 
   const formatKeyId = (keyId) => {
     return useFallbackAppSettings ? `wa_auth:${sessionId}:${keyId}` : keyId;
+  };
+
+  const parseStoredValue = (value) => {
+    if (value === null || value === undefined) return null;
+    return typeof value === 'string'
+      ? JSON.parse(value, BufferJSON.reviver)
+      : JSON.parse(JSON.stringify(value), BufferJSON.reviver);
   };
 
   /**
@@ -69,11 +77,10 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
           .eq('key', dbKey)
           .maybeSingle();
 
-        if (error || !data || !data.value) return null;
+        if (error) throw new Error(`Supabase read failed for '${dbKey}': ${error.message}`);
+        if (!data || data.value === null || data.value === undefined) return null;
 
-        const parsed = typeof data.value === 'string'
-          ? JSON.parse(data.value, BufferJSON.reviver)
-          : JSON.parse(JSON.stringify(data.value), BufferJSON.reviver);
+        const parsed = parseStoredValue(data.value);
 
         memoryCache.set(dbKey, parsed);
         return parsed;
@@ -85,18 +92,17 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
           .eq('key_id', keyId)
           .maybeSingle();
 
-        if (error || !data || !data.value) return null;
+        if (error) throw new Error(`Supabase read failed for '${dbKey}': ${error.message}`);
+        if (!data || data.value === null || data.value === undefined) return null;
 
-        const parsed = typeof data.value === 'string'
-          ? JSON.parse(data.value, BufferJSON.reviver)
-          : JSON.parse(JSON.stringify(data.value), BufferJSON.reviver);
+        const parsed = parseStoredValue(data.value);
 
         memoryCache.set(dbKey, parsed);
         return parsed;
       }
     } catch (err) {
-      console.warn(`[SUPABASE AUTH] Error reading key '${keyId}':`, err.message);
-      return null;
+      console.error(`[SUPABASE AUTH] Error reading key '${keyId}':`, err.message);
+      throw err;
     }
   };
 
@@ -105,7 +111,6 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
    */
   const writeData = async (data, keyId) => {
     const dbKey = formatKeyId(keyId);
-
     const release = await mutex.acquire();
     try {
       const serialized = JSON.stringify(data, BufferJSON.replacer);
@@ -150,9 +155,11 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
           saveOperationsCount++;
         }
       }
+      memoryCache.set(dbKey, data);
     } catch (err) {
       lastSaveError = err.message;
       console.error(`[SUPABASE AUTH EXCEPTION] Failed writing key '${keyId}':`, err.message);
+      throw err;
     } finally {
       release();
     }
@@ -173,7 +180,7 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
           .gte('key', prefix)
           .lt('key', `${prefix}\uffff`);
         if (error) {
-          console.warn('[SUPABASE AUTH] Error clearing session from app_settings:', error.message);
+          throw new Error(`Supabase auth clear failed: ${error.message}`);
         } else {
           console.log(`[SUPABASE AUTH] 🧹 Successfully cleared all auth keys for session '${sessionId}'`);
         }
@@ -183,13 +190,14 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
           .delete()
           .eq('session_id', sessionId);
         if (error) {
-          console.warn('[SUPABASE AUTH] Error clearing session from whatsapp_auth_state:', error.message);
+          throw new Error(`Supabase auth clear failed: ${error.message}`);
         } else {
           console.log(`[SUPABASE AUTH] 🧹 Successfully cleared all auth keys for session '${sessionId}'`);
         }
       }
     } catch (err) {
-      console.warn('[SUPABASE AUTH] Exception clearing session:', err.message);
+      console.error('[SUPABASE AUTH] Exception clearing session:', err.message);
+      throw err;
     } finally {
       release();
     }
@@ -202,7 +210,7 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
   const hasValidCreds = !!(existingCreds && existingCreds.me && existingCreds.me.id);
 
   if (hasValidCreds) {
-    console.log(`[SUPABASE AUTH] ✅ Existing authenticated credentials loaded (Me ID: ${creds.me.id}).`);
+    console.log('[SUPABASE AUTH] ✅ Existing authenticated credentials loaded.');
   } else if (existingCreds) {
     console.log('[SUPABASE AUTH] ℹ️ Found uncompleted pairing credentials. Ready to connect.');
   } else {
@@ -255,9 +263,7 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                   const rawVal = rowMap.get(dbKey);
                   let value = null;
                   if (rawVal) {
-                    value = typeof rawVal === 'string'
-                      ? JSON.parse(rawVal, BufferJSON.reviver)
-                      : JSON.parse(JSON.stringify(rawVal), BufferJSON.reviver);
+                    value = parseStoredValue(rawVal);
                     memoryCache.set(dbKey, value);
                   }
                   if (type === 'app-state-sync-key' && value) {
@@ -265,6 +271,8 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                   }
                   data[id] = value;
                 }
+              } else if (error) {
+                throw new Error(`Supabase key read failed for '${type}': ${error.message}`);
               } else {
                 for (const id of missingIds) {
                   data[id] = null;
@@ -289,9 +297,7 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                   const rawVal = rowMap.get(keyId);
                   let value = null;
                   if (rawVal) {
-                    value = typeof rawVal === 'string'
-                      ? JSON.parse(rawVal, BufferJSON.reviver)
-                      : JSON.parse(JSON.stringify(rawVal), BufferJSON.reviver);
+                    value = parseStoredValue(rawVal);
                     memoryCache.set(formatKeyId(keyId), value);
                   }
                   if (type === 'app-state-sync-key' && value) {
@@ -299,6 +305,8 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                   }
                   data[id] = value;
                 }
+              } else if (error) {
+                throw new Error(`Supabase key read failed for '${type}': ${error.message}`);
               } else {
                 for (const id of missingIds) {
                   data[id] = null;
@@ -306,10 +314,8 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
               }
             }
           } catch (err) {
-            console.warn(`[SUPABASE AUTH] Batch fetch error for keys of type '${type}':`, err.message);
-            for (const id of missingIds) {
-              data[id] = null;
-            }
+            console.error(`[SUPABASE AUTH] Batch fetch error for keys of type '${type}':`, err.message);
+            throw err;
           }
 
           return data;
@@ -326,6 +332,7 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
               const dbKey = formatKeyId(keyId);
 
               if (value) {
+                // Cache only after the complete batch has been accepted below.
                 const serialized = JSON.stringify(value, BufferJSON.replacer);
 
                 if (useFallbackAppSettings) {
@@ -364,11 +371,8 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                 if (error) {
                   lastSaveError = error.message;
                   console.error('[SUPABASE AUTH ERROR] Batch upsert error:', error.message);
+                  throw error;
                 } else {
-                  for (const row of chunk) {
-                    const cacheKey = useFallbackAppSettings ? row.key : row.key_id;
-                    memoryCache.set(cacheKey, row.value);
-                  }
                   lastSaveTimestamp = new Date().toISOString();
                   lastSaveError = null;
                   saveOperationsCount += chunk.length;
@@ -384,8 +388,7 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                   .in('key', deletes);
                 if (error) {
                   console.warn('[SUPABASE AUTH] Batch delete error (app_settings):', error.message);
-                } else {
-                  deletes.forEach((key) => memoryCache.delete(key));
+                  throw error;
                 }
               } else {
                 const { error } = await supabase
@@ -395,14 +398,21 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
                   .in('key_id', deletes);
                 if (error) {
                   console.warn('[SUPABASE AUTH] Batch delete error (whatsapp_auth_state):', error.message);
-                } else {
-                  deletes.forEach((key) => memoryCache.delete(formatKeyId(key)));
+                  throw error;
                 }
+              }
+            }
+            for (const category in data) {
+              for (const id in data[category]) {
+                const dbKey = formatKeyId(`${category}-${id}`);
+                if (data[category][id]) memoryCache.set(dbKey, data[category][id]);
+                else memoryCache.delete(dbKey);
               }
             }
           } catch (err) {
             lastSaveError = err.message;
             console.error('[SUPABASE AUTH EXCEPTION] Batch keys update failed:', err.message);
+            throw err;
           } finally {
             release();
           }
@@ -414,5 +424,35 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
     },
     hasValidCreds,
     clearAuthState,
+    getDiagnostics: async () => {
+      const credsValue = await readData('creds');
+      const requiredCredentialsExist = Boolean(
+        credsValue && credsValue.noiseKey && credsValue.signedIdentityKey &&
+        credsValue.signedPreKey && credsValue.registrationId && credsValue.advSecretKey
+      );
+      let keyStoreReadable = false;
+      let keyCount = 0;
+      const keyQuery = useFallbackAppSettings
+        ? supabase.from(targetTable).select('key,value', { count: 'exact', head: false }).like('key', `wa_auth:${sessionId}:%`).limit(1)
+        : supabase.from(targetTable).select('key_id,value', { count: 'exact', head: false }).eq('session_id', sessionId).limit(1);
+      const { data: keyRows, error: keyError, count } = await keyQuery;
+      if (keyError) throw new Error(`Supabase auth key diagnostic failed: ${keyError.message}`);
+      if (Array.isArray(keyRows)) {
+        keyStoreReadable = keyRows.length === 0 || keyRows.every((row) => parseStoredValue(row.value) !== null);
+      }
+      keyCount = count || 0;
+      return {
+        session_exists: Boolean(credsValue),
+        required_credentials_exist: requiredCredentialsExist,
+        credentials_deserialized: Boolean(credsValue),
+        signal_key_store_readable: keyStoreReadable,
+        stored_key_count: keyCount,
+        storage_table: targetTable,
+        uses_local_auth_files: false,
+        last_save_at: lastSaveTimestamp,
+        last_save_error: lastSaveError,
+        save_operations_count: saveOperationsCount,
+      };
+    },
   };
 };

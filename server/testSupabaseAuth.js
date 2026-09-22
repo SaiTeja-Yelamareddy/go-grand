@@ -48,8 +48,20 @@ async function runTests() {
       'session': {
         '919876543210:0@s.whatsapp.net': { sessionData: 'active_encrypted_session', version: 3 },
       },
+      'app-state-sync-key': {
+        'sync-test': { keyData: new Uint8Array(testBuffer1) },
+      },
     });
     console.log('✅ Test 3 Passed: Keys batch set and uploaded to Supabase.');
+
+    // 3b. Concurrent key updates must all survive serialized writes
+    console.log('\n--- Test 3b: Concurrent Signal-key updates ---');
+    await Promise.all([
+      auth1.state.keys.set({ 'session': { 'concurrent-a': { version: 1 } } }),
+      auth1.state.keys.set({ 'session': { 'concurrent-b': { version: 1 } } }),
+      auth1.state.keys.set({ 'pre-key': { '3': { keyPair: { public: new Uint8Array(testBuffer2), private: testBuffer1 } } } }),
+    ]);
+    console.log('✅ Test 3b Passed: Concurrent key updates completed without overwrite errors.');
 
     // 4. Reload from fresh instance (simulating server restart)
     console.log('\n--- Test 4: Reload auth state in a new instance (Restart Simulation) ---');
@@ -62,6 +74,12 @@ async function runTests() {
     }
     console.log('✅ Test 4a Passed: Creds accurately reloaded from Supabase across restarts.');
 
+    const diagnostics = await auth2.getDiagnostics();
+    if (!diagnostics.session_exists || !diagnostics.required_credentials_exist || !diagnostics.credentials_deserialized || !diagnostics.signal_key_store_readable) {
+      throw new Error(`Safe auth diagnostics failed: ${JSON.stringify(diagnostics)}`);
+    }
+    console.log('✅ Test 4b Passed: Safe auth diagnostics confirm credentials and key-store readability.');
+
     // 5. Batch get keys in new instance
     console.log('\n--- Test 5: Verify Signal keys retrieval and Buffer integrity ---');
     const keys = await auth2.state.keys.get('pre-key', ['1', '2', '999']);
@@ -70,6 +88,10 @@ async function runTests() {
     }
     if (Buffer.compare(keys['1'].keyPair.public, testBuffer1) !== 0) {
       throw new Error('Key 1 public buffer contents do not match original!');
+    }
+    const appStateKeys = await auth2.state.keys.get('app-state-sync-key', ['sync-test']);
+    if (!appStateKeys['sync-test']?.keyData || !Buffer.isBuffer(appStateKeys['sync-test'].keyData)) {
+      throw new Error('App-state sync key was not revived as a Buffer!');
     }
     if (keys['999'] !== null) {
       throw new Error(`Non-existent key should return null, got: ${keys['999']}`);

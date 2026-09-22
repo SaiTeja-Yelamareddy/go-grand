@@ -13,4 +13,6 @@ services:
         sync: false
       - key: SUPABASE_KEY
         sync: false
+      - key: WHATSAPP_SESSION_ID
+        value: go-grand-session
 

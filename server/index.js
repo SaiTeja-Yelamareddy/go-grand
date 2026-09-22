@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url';
 import https from 'https';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import { Mutex } from 'async-mutex';
 import { generateInvoicePDF } from './pdfGenerator.js';
 import makeWASocket, {
   DisconnectReason,
@@ -135,11 +136,31 @@ let lastDisconnectCode = null;
 let lastReconnectAt = null;
 let hasPersistedCreds = false;
 let authHandle = null;
+const connectionInitMutex = new Mutex();
 
 const logger = pino({ level: 'silent' }); // Silent pino to prevent noisy internal logs
 const httpsAgent = new https.Agent({ keepAlive: true });
 
+function scheduleReconnect(reason = 'temporary connection failure') {
+  if (reconnectTimer || isConnected) return;
+
+  reconnectAttempts++;
+  const backoffDelay = Math.min(30000, Math.round(3000 * Math.pow(1.5, Math.min(reconnectAttempts - 1, 5))));
+  lastReconnectAt = new Date(Date.now() + backoffDelay).toISOString();
+  console.log(`[BAILEYS] 🔄 Scheduling automatic reconnect in ${backoffDelay}ms (Attempt #${reconnectAttempts}; ${reason}) using persisted Supabase auth state...`);
+  io.emit('status', { status: 'reconnecting', connected: false });
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    console.log(`[BAILEYS] 🔄 Executing scheduled reconnect #${reconnectAttempts}...`);
+    connectToWhatsApp().catch((err) => console.error('[BAILEYS] Reconnect initialization failed:', err.message));
+  }, backoffDelay);
+}
+
 async function connectToWhatsApp(force = false) {
+  return connectionInitMutex.runExclusive(() => connectToWhatsAppUnlocked(force));
+}
+
+async function connectToWhatsAppUnlocked(force = false) {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -150,7 +171,7 @@ async function connectToWhatsApp(force = false) {
     return;
   }
 
-  if (isConnecting && !force) {
+  if (isConnecting) {
     console.log('[BAILEYS] ⏳ Connection already in progress. Reusing in-flight connection.');
     return;
   }
@@ -173,8 +194,8 @@ async function connectToWhatsApp(force = false) {
   }
 
   try {
-    const { state, saveCreds, hasValidCreds, clearAuthState } = await useSupabaseAuthState(supabase, WHATSAPP_SESSION_ID);
-    authHandle = { clearAuthState, saveCreds };
+    const { state, saveCreds, hasValidCreds, clearAuthState, getDiagnostics } = await useSupabaseAuthState(supabase, WHATSAPP_SESSION_ID);
+    authHandle = { clearAuthState, saveCreds, getDiagnostics };
     hasPersistedCreds = hasValidCreds;
 
     const { version } = await fetchLatestBaileysVersion();
@@ -203,11 +224,13 @@ async function connectToWhatsApp(force = false) {
 
     newSock.ev.on('creds.update', async () => {
       if (currentInstance !== socketInstanceId) return;
+      console.log('[WA] credentials update received');
       try {
         await saveCreds();
         hasPersistedCreds = true;
+        console.log('[WA] credentials persisted successfully');
       } catch (err) {
-        console.error('[BAILEYS] Creds update persistence error:', err.message);
+        console.error('[WA] credentials persistence failed:', err.message);
       }
     });
 
@@ -267,19 +290,7 @@ async function connectToWhatsApp(force = false) {
           io.emit('status', { status: 'logged_out', connected: false });
           // Note: Do NOT automatically delete Supabase records; user can scan fresh QR to re-authenticate
         } else if (shouldReconnect) {
-          reconnectAttempts++;
-          // Exponential backoff: 3s, 5s, 8s, 12s, 18s, max 30s
-          const backoffDelay = Math.min(30000, Math.round(3000 * Math.pow(1.5, Math.min(reconnectAttempts - 1, 5))));
-          lastReconnectAt = new Date(Date.now() + backoffDelay).toISOString();
-
-          console.log(`[BAILEYS] 🔄 Scheduling automatic reconnect in ${backoffDelay}ms (Attempt #${reconnectAttempts}) using persisted Supabase auth state...`);
-          io.emit('status', { status: 'reconnecting', connected: false });
-
-          if (reconnectTimer) clearTimeout(reconnectTimer);
-          reconnectTimer = setTimeout(() => {
-            console.log(`[BAILEYS] 🔄 Executing scheduled reconnect #${reconnectAttempts}...`);
-            connectToWhatsApp();
-          }, backoffDelay);
+          scheduleReconnect(`socket closed with status ${statusCode || 'unknown'}`);
         }
       }
     });
@@ -288,15 +299,7 @@ async function connectToWhatsApp(force = false) {
     isConnecting = false;
     isConnected = false;
     io.emit('status', { status: 'error', connected: false, error: error.message });
-
-    reconnectAttempts++;
-    const backoffDelay = Math.min(30000, Math.round(3000 * Math.pow(1.5, Math.min(reconnectAttempts - 1, 5))));
-    lastReconnectAt = new Date(Date.now() + backoffDelay).toISOString();
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      connectToWhatsApp();
-    }, backoffDelay);
+    scheduleReconnect('socket initialization failed');
   }
 }
 
@@ -307,13 +310,20 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     ok: true,
     service: 'go-grand-whatsapp',
+    whatsapp: {
+      socket: isConnected ? 'open' : (isConnecting ? 'connecting' : 'closed'),
+      authenticated: Boolean(isConnected && connectedUser),
+      reconnecting: Boolean(reconnectTimer),
+      lastConnectedAt,
+    },
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
   });
 });
 
-app.get('/api/whatsapp/health', (req, res) => {
+app.get('/api/whatsapp/health', async (req, res) => {
   const authDiag = getAuthStateDiagnostics();
+  const persistedAuthDiag = authHandle?.getDiagnostics ? await authHandle.getDiagnostics().catch((error) => ({ diagnostic_error: error.message })) : null;
   res.json({
     status: 'ok',
     service: 'go-grand-whatsapp-server',
@@ -335,12 +345,14 @@ app.get('/api/whatsapp/health', (req, res) => {
       reconnect_attempts: reconnectAttempts,
       connection_generation: socketInstanceId,
       ...authDiag,
+      persisted_auth: persistedAuthDiag,
     },
   });
 });
 
-app.get('/api/whatsapp/status', (req, res) => {
+app.get('/api/whatsapp/status', async (req, res) => {
   const authDiag = getAuthStateDiagnostics();
+  const persistedAuthDiag = authHandle?.getDiagnostics ? await authHandle.getDiagnostics().catch((error) => ({ diagnostic_error: error.message })) : null;
   res.json({
     connected: isConnected,
     user: connectedUser,
@@ -359,6 +371,7 @@ app.get('/api/whatsapp/status', (req, res) => {
       reconnect_attempts: reconnectAttempts,
       connection_generation: socketInstanceId,
       ...authDiag,
+      persisted_auth: persistedAuthDiag,
       uptime: Math.floor(process.uptime()),
     },
   });
@@ -1001,6 +1014,43 @@ function requireOwnerAuth(req, res, next) {
 
   next();
 }
+
+function requireStrictOwnerAuth(req, res, next) {
+  const authHeader = req.headers['authorization'] || req.headers['x-api-key'] || req.headers['x-owner-token'];
+  const token = authHeader ? authHeader.replace(/^Bearer\s+/i, '').trim() : '';
+  if (req.headers['x-user-role'] === 'OWNER' || (API_SECRET && token === API_SECRET)) {
+    return next();
+  }
+  return res.status(403).json({ success: false, error: 'Forbidden: Owner authorization required.' });
+}
+
+app.get('/api/whatsapp/diagnostic', requireStrictOwnerAuth, async (req, res) => {
+  try {
+    const persistedAuth = authHandle?.getDiagnostics
+      ? await authHandle.getDiagnostics()
+      : { session_exists: false, diagnostic_state: 'not_initialized' };
+    res.json({
+      success: true,
+      backend_online: true,
+      session_id: WHATSAPP_SESSION_ID,
+      session_persistence: 'supabase',
+      persisted_auth: persistedAuth,
+      socket: {
+        state: isConnected ? 'open' : (isConnecting ? 'connecting' : (reconnectTimer ? 'reconnecting' : 'closed')),
+        authenticated: Boolean(isConnected && connectedUser),
+        last_connected_at: lastConnectedAt,
+      },
+    });
+  } catch (error) {
+    console.error('[WA] Safe diagnostic failed:', error.message);
+    res.status(503).json({
+      success: false,
+      backend_online: true,
+      session_persistence: 'supabase',
+      error: 'WhatsApp persistence diagnostic unavailable',
+    });
+  }
+});
 
 app.get('/api/database/usage', requireOwnerAuth, async (req, res) => {
   const metrics = await getDatabaseUsageMetrics(supabase);

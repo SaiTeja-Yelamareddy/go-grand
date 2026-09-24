@@ -32,6 +32,7 @@ export const WhatsAppHealthCheck: React.FC = () => {
         });
         clearTimeout(fetchTimeout);
 
+        if (isUnmountedRef.current) return;
         if (!res.ok) throw new Error('Not OK');
 
         // Backend is awake!
@@ -49,6 +50,7 @@ export const WhatsAppHealthCheck: React.FC = () => {
         // Stop polling completely once the backend responds
         return;
       } catch (err) {
+        if (isUnmountedRef.current) return;
         attempt++;
         
         // Only show notification if recovery takes a while (e.g. 3 attempts / ~17 seconds)
@@ -75,6 +77,9 @@ export const WhatsAppHealthCheck: React.FC = () => {
     return () => {
       isUnmountedRef.current = true;
       clearTimeout(timeoutId);
+      if (notificationIdRef.current) {
+        dismiss(notificationIdRef.current);
+      }
     };
   }, [notify, dismiss]);
 

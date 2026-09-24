@@ -71,7 +71,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { notify } = useNotifications();
+  const { notify, dismiss } = useNotifications();
 
   const editId = searchParams.get('editId') || searchParams.get('edit');
   const isEditing = Boolean(editId);
@@ -370,9 +370,11 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
     const saved = await handleSaveDraft();
     if (saved) {
+      const notifId = notify({ type: 'loading', title: 'Sending...', message: 'Notifying customer...', duration: 0 });
       const res = await sendVehicleReceivedWhatsAppViaBackend(saved);
-      if (res.success) {
-        notify({ type: 'success', title: 'Vehicle Received', message: 'Customer notification sent successfully.' });
+      dismiss(notifId);
+      if (res && res.success) {
+        notify({ type: 'success', title: 'Sent ✓', message: 'Customer notification sent successfully.' });
       } else {
         notify({ type: 'error', title: 'Vehicle Notification Failed', message: 'Vehicle was saved, but the notification could not be sent.' });
         setShowWhatsAppSettingsModal(true);
@@ -385,9 +387,11 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
     const saved = await handleSaveDraft();
     if (saved) {
+      const notifId = notify({ type: 'loading', title: 'Sending...', message: 'Notifying customer...', duration: 0 });
       const res = await sendVehicleReadyWhatsAppViaBackend(saved);
-      if (res.success) {
-        notify({ type: 'success', title: 'Vehicle Ready', message: 'Customer has been notified successfully.' });
+      dismiss(notifId);
+      if (res && res.success) {
+        notify({ type: 'success', title: 'Sent ✓', message: 'Customer has been notified successfully.' });
       } else {
         notify({ type: 'error', title: 'Vehicle Ready Notification Failed', message: 'The vehicle status was updated, but the notification could not be sent.' });
         setShowWhatsAppSettingsModal(true);
@@ -433,9 +437,11 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
     const saved = await handleSaveDraft();
     if (saved) {
+      const notifId = notify({ type: 'loading', title: 'Sending...', message: 'Sending invoice via WhatsApp...', duration: 0 });
       const res = await sendWhatsAppBillViaBackend(saved);
-      if (res.success) {
-        notify({ type: 'success', title: 'Bill Sent', message: 'Invoice has been sent via WhatsApp.' });
+      dismiss(notifId);
+      if (res && res.success) {
+        notify({ type: 'success', title: 'Sent ✓', message: 'Invoice has been sent via WhatsApp.' });
       } else {
         notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
         setShowWhatsAppSettingsModal(true);

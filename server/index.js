@@ -540,9 +540,7 @@ async function processMessageQueue() {
       try {
         let cleanPhone = (item.phoneNumber || '').replace(/\D/g, '');
         if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
-        const jid = `${cleanPhone}@s.whatsapp.net`;
-        const [result] = await sock.onWhatsApp(jid);
-        const targetJid = result && result.exists ? result.jid : jid;
+        const targetJid = `${cleanPhone}@s.whatsapp.net`;
 
         let sentMsg;
         if (item.type === 'pdf') {
@@ -597,13 +595,13 @@ async function processMessageQueue() {
       } catch (sendErr) {
         console.error(`❌ [MESSAGE QUEUE] Error delivering item ${item.id}:`, sendErr.message);
         item.attempts = (item.attempts || 0) + 1;
+        messageQueue.shift();
         if (item.attempts >= 3) {
           console.error(`❌ [MESSAGE QUEUE] Max retries reached for item ${item.id}. Dropping from queue.`);
-          messageQueue.shift();
-          await persistPendingQueue();
         } else {
-          break;
+          messageQueue.push(item);
         }
+        await persistPendingQueue();
       }
     }
   } finally {
@@ -645,9 +643,7 @@ app.post('/api/whatsapp/send-invoice', requireApiAuth, async (req, res) => {
     try {
       let cleanPhone = phoneNumber.replace(/\D/g, '');
       if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
-      const jid = `${cleanPhone}@s.whatsapp.net`;
-      const [result] = await sock.onWhatsApp(jid);
-      const targetJid = result && result.exists ? result.jid : jid;
+      const targetJid = `${cleanPhone}@s.whatsapp.net`;
 
       const sentMsg = await sock.sendMessage(targetJid, { text: message });
       if (idempotencyKey) await markTriggerDelivered(idempotencyKey);
@@ -658,7 +654,8 @@ app.post('/api/whatsapp/send-invoice', requireApiAuth, async (req, res) => {
         recipient: cleanPhone,
       });
     } catch (error) {
-      console.error('Direct send failed, enqueueing message:', error.message);
+      console.error('Direct send failed:', error.message);
+      return res.status(400).json({ success: false, error: 'WhatsApp could not send the message. Make sure the number is valid and on WhatsApp.' });
     }
   }
 
@@ -728,9 +725,7 @@ app.post('/api/whatsapp/send-vehicle-ready-qr', requireApiAuth, async (req, res)
 
   if (isConnected && sock) {
     try {
-      const jid = `${cleanPhone}@s.whatsapp.net`;
-      const [result] = await sock.onWhatsApp(jid);
-      const targetJid = result && result.exists ? result.jid : jid;
+      const targetJid = `${cleanPhone}@s.whatsapp.net`;
 
       let sentMsg;
       if (qrPngBuffer) {
@@ -751,7 +746,8 @@ app.post('/api/whatsapp/send-vehicle-ready-qr', requireApiAuth, async (req, res)
         recipient: cleanPhone,
       });
     } catch (error) {
-      console.error('Direct Vehicle Ready send failed, enqueueing:', error.message);
+      console.error('Direct Vehicle Ready send failed:', error.message);
+      return res.status(400).json({ success: false, error: 'WhatsApp could not send the message. Make sure the number is valid and on WhatsApp.' });
     }
   }
 
@@ -830,9 +826,7 @@ app.post('/api/whatsapp/send-invoice-pdf', requireApiAuth, async (req, res) => {
 
   if (isConnected && sock && pdfBuffer) {
     try {
-      const jid = `${cleanPhone}@s.whatsapp.net`;
-      const [result] = await sock.onWhatsApp(jid);
-      const targetJid = result && result.exists ? result.jid : jid;
+      const targetJid = `${cleanPhone}@s.whatsapp.net`;
 
       const vehNo = (job.vehicleNumber || 'Vehicle').toUpperCase();
       const fileName = `Invoice_${vehNo}_GoGrand.pdf`;
@@ -853,7 +847,8 @@ app.post('/api/whatsapp/send-invoice-pdf', requireApiAuth, async (req, res) => {
         fileName: fileName,
       });
     } catch (sendErr) {
-      console.error('Direct PDF invoice send failed, enqueueing:', sendErr.message);
+      console.error('Direct PDF invoice send failed:', sendErr.message);
+      return res.status(400).json({ success: false, error: 'WhatsApp could not send the message. Make sure the number is valid and on WhatsApp.' });
     }
   }
 

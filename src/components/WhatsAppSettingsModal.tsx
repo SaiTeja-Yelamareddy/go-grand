@@ -83,6 +83,10 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
         } else if (data.qrCode) {
           setStatus('qr_ready');
           setQrCode(data.qrCode);
+        } else if (data.diagnostics?.last_disconnect_code === 401 || data.diagnostics?.last_disconnect_reason === 'Logged out') {
+          setStatus('logged_out');
+        } else if (data.diagnostics?.reconnect_attempts > 0) {
+          setStatus('reconnecting');
         } else if (data.isConnecting) {
           setStatus('connecting');
         } else {
@@ -158,7 +162,6 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
         clearRetryTimer();
         setServerOnline(true);
         fetchStatus(true);
-        socket?.emit('request_qr');
       });
 
       socket.on('disconnect', () => {
@@ -445,26 +448,52 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
             </div>
           )}
 
-          {/* QR Code / Pairing State */}
+          {/* Non-Connected States */}
           {status !== 'connected' && serverOnline && (
             <div className="p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700/50 flex flex-col items-center justify-center text-center space-y-4">
-              <div className="space-y-1">
-                <h4 className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
-                  Link WhatsApp via QR Code
-                </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Open WhatsApp on your mobile → Linked Devices → Link a Device
-                </p>
-              </div>
-
-              {qrCode ? (
-                <div className="p-4 bg-white rounded-2xl shadow-md border border-slate-200">
-                  <img src={qrCode} alt="WhatsApp Pairing QR Code" className="w-56 h-56 object-contain" />
+              {status === 'qr_ready' && qrCode ? (
+                <>
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
+                      Link WhatsApp via QR Code
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Open WhatsApp on your mobile → Linked Devices → Link a Device
+                    </p>
+                  </div>
+                  <div className="p-4 bg-white rounded-2xl shadow-md border border-slate-200">
+                    <img src={qrCode} alt="WhatsApp Pairing QR Code" className="w-56 h-56 object-contain" />
+                  </div>
+                </>
+              ) : status === 'logged_out' ? (
+                <div className="py-8 space-y-3 flex flex-col items-center text-rose-500 dark:text-rose-400">
+                  <AlertCircle className="w-8 h-8" />
+                  <h4 className="font-bold text-sm uppercase tracking-wider">WhatsApp Session Revoked</h4>
+                  <p className="text-xs font-medium">WhatsApp needs to be linked again.</p>
+                  <button
+                    onClick={async () => {
+                      setIsLoading(true);
+                      try {
+                        await fetch(`${activeBackendUrl}/api/whatsapp/logout`, { method: 'POST' });
+                        await handleManualConnect();
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Request New QR Code
+                  </button>
+                </div>
+              ) : status === 'reconnecting' ? (
+                <div className="py-8 space-y-3 flex flex-col items-center text-amber-500 dark:text-amber-400">
+                  <RefreshCw className="w-8 h-8 animate-spin" />
+                  <p className="text-xs font-medium">Reconnecting to WhatsApp...</p>
                 </div>
               ) : (
                 <div className="py-8 space-y-3 flex flex-col items-center text-slate-500 dark:text-slate-400">
                   <RefreshCw className="w-8 h-8 animate-spin text-emerald-500" />
-                  <p className="text-xs font-medium">Generating encrypted WhatsApp QR code...</p>
+                  <p className="text-xs font-medium">Starting WhatsApp Engine...</p>
                 </div>
               )}
             </div>

@@ -86,6 +86,10 @@ export const WhatsAppProvider: React.FC<React.PropsWithChildren> = ({ children }
         } else if (data.qrCode) {
           setStatus('qr_ready');
           setQrCode(data.qrCode);
+        } else if (data.diagnostics?.last_disconnect_code === 401 || data.diagnostics?.last_disconnect_reason === 'Logged out') {
+          setStatus('logged_out');
+        } else if (data.diagnostics?.reconnect_attempts > 0) {
+          setStatus('reconnecting');
         } else if (data.isConnecting) {
           setStatus('connecting');
         } else {
@@ -172,7 +176,6 @@ export const WhatsAppProvider: React.FC<React.PropsWithChildren> = ({ children }
         clearRetryTimer();
         setServerOnline(true);
         fetchStatus(true);
-        socket.emit('request_qr');
       });
 
       socket.on('disconnect', () => {

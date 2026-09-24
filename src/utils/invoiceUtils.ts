@@ -133,7 +133,7 @@ export async function sendWhatsAppBillViaBackend(record: JobRecord): Promise<{ s
 
       const fullTextMessage = formatWhatsAppBillText(record);
       const pdfCaptionMessage = formatWhatsAppPdfCaption(record);
-      const idempotencyKey = record.id ? `bill_${record.id}` : undefined;
+      const idempotencyKey = record.id ? `bill_${record.id}_${Date.now()}` : undefined;
       
       // Try sending PDF invoice document with clean short caption
       const pdfSendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice-pdf`, {
@@ -274,7 +274,7 @@ export async function sendVehicleReadyWhatsAppViaBackend(record: JobRecord): Pro
         billNo
       );
 
-      const idempotencyKey = record.id ? `ready_${record.id}` : undefined;
+      const idempotencyKey = record.id ? `ready_${record.id}_${Date.now()}` : undefined;
 
       // Call dedicated Vehicle Ready endpoint with UPI QR image generation
       const sendRes = await fetch(`${backendUrl}/api/whatsapp/send-vehicle-ready-qr`, {
@@ -342,6 +342,6 @@ export async function sendVehicleReceivedWhatsAppViaBackend(record: JobRecord): 
     finalAmount,
     billNo
   );
-  const idempotencyKey = record.id ? `recv_${record.id}` : undefined;
+  const idempotencyKey = record.id ? `recv_${record.id}_${Date.now()}` : undefined;
   return sendWhatsAppMessageViaBackend(record.phoneNumber, msg, idempotencyKey);
 }

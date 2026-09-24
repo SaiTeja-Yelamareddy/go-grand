@@ -22,7 +22,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
   onInstallApp,
 }) => {
   const navigate = useNavigate();
-  const { notify } = useNotifications();
+  const { notify, dismiss } = useNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [records, setRecords] = useState<JobRecord[]>([]);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -300,7 +300,9 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                 <button
                                   onClick={async () => {
                                     setActiveMenuId(null);
+                                    const loadingId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
                                     const res = await sendWhatsAppBillViaBackend(item);
+                                    dismiss(loadingId);
                                     if (res.success) {
                                       notify({ type: 'success', title: 'Bill Sent', message: 'Invoice has been sent via WhatsApp.' });
                                     } else {
@@ -326,7 +328,9 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                 <button
                                   onClick={async () => {
                                     setActiveMenuId(null);
+                                    const loadingId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
                                     const res = await sendVehicleReadyWhatsAppViaBackend(item);
+                                    dismiss(loadingId);
                                     if (res.success) {
                                       notify({ type: 'success', title: 'Vehicle Ready', message: 'Customer has been notified successfully.' });
                                     } else {

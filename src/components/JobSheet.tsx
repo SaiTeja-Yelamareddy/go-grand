@@ -370,7 +370,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
     const saved = await handleSaveDraft();
     if (saved) {
-      const notifId = notify({ type: 'loading', title: 'Sending...', message: 'Notifying customer...', duration: 0 });
+      const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
       const res = await sendVehicleReceivedWhatsAppViaBackend(saved);
       dismiss(notifId);
       if (res && res.success) {
@@ -387,7 +387,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
     const saved = await handleSaveDraft();
     if (saved) {
-      const notifId = notify({ type: 'loading', title: 'Sending...', message: 'Notifying customer...', duration: 0 });
+      const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
       const res = await sendVehicleReadyWhatsAppViaBackend(saved);
       dismiss(notifId);
       if (res && res.success) {
@@ -437,7 +437,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
     const saved = await handleSaveDraft();
     if (saved) {
-      const notifId = notify({ type: 'loading', title: 'Sending...', message: 'Sending invoice via WhatsApp...', duration: 0 });
+      const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
       const res = await sendWhatsAppBillViaBackend(saved);
       dismiss(notifId);
       if (res && res.success) {

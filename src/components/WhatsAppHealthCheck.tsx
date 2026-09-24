@@ -65,8 +65,8 @@ export const WhatsAppHealthCheck: React.FC = () => {
           });
         }
 
-        // Backoff: 2s -> 5s -> 10s -> 20s -> every 20s
-        const delays = [2000, 5000, 10000, 20000];
+        // Backoff: 2s -> 4s -> 5s -> every 5s
+        const delays = [2000, 4000, 5000];
         const delay = delays[Math.min(attempt - 1, delays.length - 1)];
         timeoutId = window.setTimeout(checkHealth, delay);
       }

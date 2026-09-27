@@ -204,7 +204,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ record, onClose }) =
                     <div>{sectionName}</div>
                     {selectedServices.length > 0 && (
                       <div className="mt-1 text-[10px] font-normal normal-case text-[#555555]">
-                        {selectedServices.join(' • ')}
+                        {selectedServices.map(s => `• ${s}`).join('   ')}
                       </div>
                     )}
                   </td>

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { X, Smartphone, Users, CreditCard, MessageSquare, Database } from 'lucide-react';
-import { logoutOwner, logoutStaff, getCurrentStaff } from '../config/authConfig';
+import { X, Smartphone, Users, CreditCard, MessageSquare, Database, Lock } from 'lucide-react';
+import { logoutStaff, getCurrentStaff } from '../config/authConfig';
+import { supabase } from '../config/supabaseClient';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { UpiSettingsModal } from './UpiSettingsModal';
 import { DatabaseStorageModal } from './DatabaseStorageModal';
+import { PasswordChangeModal } from './PasswordChangeModal';
 import { ThemeToggle } from './ThemeToggle';
 
 interface NavigationDrawerProps {
@@ -18,7 +20,7 @@ interface NavigationDrawerProps {
 interface MenuItem {
   label: string;
   path?: string;
-  action?: 'logout' | 'whatsapp' | 'upi' | 'database';
+  action?: 'logout' | 'whatsapp' | 'upi' | 'database' | 'password';
 }
 
 export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
@@ -31,6 +33,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   const [isWaModalOpen, setIsWaModalOpen] = useState<boolean>(false);
   const [isUpiModalOpen, setIsUpiModalOpen] = useState<boolean>(false);
   const [isDbModalOpen, setIsDbModalOpen] = useState<boolean>(false);
+  const [isPwdModalOpen, setIsPwdModalOpen] = useState<boolean>(false);
   const currentStaff = getCurrentStaff();
 
   // Close on Escape key
@@ -82,6 +85,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     { label: '💬 MESSAGE CUSTOMIZATION', path: '/owner/messages' },
     { label: 'UPI PAYMENT SETTINGS', action: 'upi' },
     { label: 'WHATSAPP LINKED DEVICE', action: 'whatsapp' },
+    { label: 'CHANGE PASSWORD', action: 'password' },
     { label: 'DATABASE & BACKUP', action: 'database' },
     { label: 'LOGOUT', action: 'logout' },
   ];
@@ -98,21 +102,26 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     } else if (item.action === 'database') {
       onClose();
       setIsDbModalOpen(true);
+    } else if (item.action === 'password') {
+      onClose();
+      setIsPwdModalOpen(true);
     } else if (item.action === 'logout') {
       onClose();
       if (mode === 'owner') {
-        logoutOwner();
+        supabase.auth.signOut().then(() => {
+          navigate('/');
+        });
       } else {
         logoutStaff();
+        navigate('/');
       }
-      navigate('/');
     } else if (item.path) {
       onClose();
       navigate(item.path);
     }
   };
 
-  if (!isOpen && !isWaModalOpen && !isUpiModalOpen && !isDbModalOpen) return null;
+  if (!isOpen && !isWaModalOpen && !isUpiModalOpen && !isDbModalOpen && !isPwdModalOpen) return null;
 
   return (
     <>
@@ -169,6 +178,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                   const isWhatsApp = item.action === 'whatsapp';
                   const isUpi = item.action === 'upi';
                   const isDatabase = item.action === 'database';
+                  const isPassword = item.action === 'password';
                   const isManageStaff = item.path === '/owner/staff';
                   const isMessages = item.path === '/owner/messages';
 
@@ -180,6 +190,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                       className={`w-full min-h-[48px] px-4 rounded-xl text-sm font-bold tracking-wide uppercase transition-colors text-left flex items-center justify-between border cursor-pointer ${
                         isDatabase
                           ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
+                          : isPassword
+                          ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-300 border-rose-300 dark:border-rose-700/60 hover:bg-rose-100 dark:hover:bg-rose-900/50'
                           : isUpi
                           ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 hover:bg-amber-100 dark:hover:bg-amber-900/50'
                           : isWhatsApp
@@ -191,6 +203,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                     >
                       <span className="flex items-center space-x-2.5">
                         {isDatabase && <Database className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                        {isPassword && <Lock className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />}
                         {isUpi && <CreditCard className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />}
                         {isWhatsApp && <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
                         {isManageStaff && <Users className="w-4 h-4 text-current shrink-0" />}
@@ -228,6 +241,12 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
       <DatabaseStorageModal
         isOpen={isDbModalOpen}
         onClose={() => setIsDbModalOpen(false)}
+      />
+
+      {/* Password Change Modal */}
+      <PasswordChangeModal
+        isOpen={isPwdModalOpen}
+        onClose={() => setIsPwdModalOpen(false)}
       />
     </>
   );

@@ -144,10 +144,14 @@ export const OwnerStaff: React.FC<OwnerStaffProps> = ({
 
   const handleDeleteStaff = async () => {
     if (!deleteConfirmStaff) return;
-    await deleteStaffProfile(deleteConfirmStaff.id);
-    setDeleteConfirmStaff(null);
-    notify({ type: 'success', title: 'Staff Deleted', message: 'The staff account has been removed.' });
-    await loadStaff();
+    try {
+      await deleteStaffProfile(deleteConfirmStaff.id);
+      setDeleteConfirmStaff(null);
+      notify({ type: 'success', title: 'Staff Deleted', message: 'The staff account has been removed.' });
+      await loadStaff();
+    } catch (err: any) {
+      notify({ type: 'error', title: 'Staff Deletion Failed', message: err.message || 'Unable to remove the staff account.' });
+    }
   };
 
   const filteredStaff = staffList.filter((s) => {

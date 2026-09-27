@@ -11,7 +11,7 @@ import {
 import { Header } from '../components/Header';
 import { NavigationDrawer } from '../components/NavigationDrawer';
 import { useNotifications } from '../components/NotificationSystem';
-import { isOwnerAuthenticated } from '../config/authConfig';
+import { useAuth } from '../contexts/AuthContext';
 import {
   DEFAULT_MESSAGE_TEMPLATES,
   getMessageTemplates,
@@ -82,6 +82,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
   deferredPrompt,
   onInstallApp,
 }) => {
+  const { isOwner } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [templates, setTemplates] = useState<MessageTemplates>(DEFAULT_MESSAGE_TEMPLATES);
   const [activeKey, setActiveKey] = useState<keyof MessageTemplates | null>(null);
@@ -163,7 +164,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
   const handleSaveActiveMessage = async () => {
     if (!activeKey) return;
 
-    if (!isOwnerAuthenticated()) {
+    if (!isOwner) {
       notify({ type: 'error', title: 'Access Denied', message: 'Owner access is required.' });
       return;
     }

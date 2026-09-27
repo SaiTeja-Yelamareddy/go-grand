@@ -197,9 +197,11 @@ export function generateInvoicePDF(job) {
         .font('Helvetica')
         .text(`Date: ${dateStr}`, 350, 82, { align: 'right', width: 205.28 });
 
+      const headerBottomY = doc.y + 15;
+
       // 2. BRAND GOLD ACCENT BAR
       doc
-        .rect(40, 114, 515.28, 3.5)
+        .rect(40, headerBottomY, 515.28, 3.5)
         .fill(accentGold);
 
       // 3. CUSTOMER & VEHICLE INFORMATION GRID
@@ -207,9 +209,9 @@ export function generateInvoicePDF(job) {
         .fontSize(9)
         .font('Helvetica-Bold')
         .fillColor(primaryColor)
-        .text('CUSTOMER & VEHICLE INFORMATION', 40, 128);
+        .text('CUSTOMER & VEHICLE INFORMATION', 40, headerBottomY + 15);
 
-      const gridY = 142;
+      const gridY = headerBottomY + 29;
       const gridW = 515.28;
       const gridH = 88;
       const colW = gridW / 2;
@@ -287,7 +289,7 @@ export function generateInvoicePDF(job) {
          .font('Helvetica').text('GO GRAND');
 
       // 4. SERVICE DETAILS TABLE
-      let tableY = 246;
+      let tableY = gridY + gridH + 16;
       doc
         .fontSize(9)
         .font('Helvetica-Bold')
@@ -345,9 +347,10 @@ export function generateInvoicePDF(job) {
           .fontSize(8)
           .font('Helvetica')
           .fillColor(grayText)
-          .text(bulletPoints.join('  •  '), 40, tableY);
-        tableY += 16;
+          .text(bulletPoints.map(p => `• ${p}`).join('   '), 40, tableY);
+        tableY += Math.ceil(doc.heightOfString(bulletPoints.map(p => `• ${p}`).join('   '), { width: 270 })) + 4;
       }
+      
       // Bottom table line
       doc
         .moveTo(40, tableY)

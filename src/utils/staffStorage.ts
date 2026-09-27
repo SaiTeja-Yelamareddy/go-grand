@@ -82,37 +82,12 @@ export async function verifyPassword(
   return { valid: false, needsUpgrade: false };
 }
 
-// Initial seed staff list with bcrypt hashes for '123456'
-const INITIAL_STAFF: Omit<StaffProfile, 'id' | 'created_at' | 'updated_at'>[] = [
-  {
-    staff_name: 'Sai Kumar',
-    phone_number: '9876543210',
-    password_hash: '$2b$10$wlgCKifUQhmeU8taaMO3mu63wrRLvQ5.ssoT3ENbR7XQaE0aKCioG', // bcrypt for '123456'
-    role: 'STAFF',
-    active: true,
-  },
-  {
-    staff_name: 'Ravi',
-    phone_number: '9876543211',
-    password_hash: '$2b$10$wlgCKifUQhmeU8taaMO3mu63wrRLvQ5.ssoT3ENbR7XQaE0aKCioG', // bcrypt for '123456'
-    role: 'STAFF',
-    active: true,
-  },
-  {
-    staff_name: 'Prasad',
-    phone_number: '9876543212',
-    password_hash: '$2b$10$wlgCKifUQhmeU8taaMO3mu63wrRLvQ5.ssoT3ENbR7XQaE0aKCioG', // bcrypt for '123456'
-    role: 'STAFF',
-    active: false,
-  },
-];
-
 export function getLocalStaffProfiles(): StaffProfile[] {
   try {
     const raw = localStorage.getItem(LOCAL_STAFF_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
@@ -120,16 +95,9 @@ export function getLocalStaffProfiles(): StaffProfile[] {
     console.error('Failed to parse local staff profiles:', e);
   }
 
-  // Initialize with seed data
-  const now = new Date().toISOString();
-  const seeded: StaffProfile[] = INITIAL_STAFF.map((s, idx) => ({
-    ...s,
-    id: `staff_${Date.now()}_${idx}`,
-    created_at: now,
-    updated_at: now,
-  }));
-  localStorage.setItem(LOCAL_STAFF_KEY, JSON.stringify(seeded));
-  return seeded;
+  // No automatic recreation of seed data.
+  // The system relies on Supabase or manually created staff.
+  return [];
 }
 
 export function saveLocalStaffProfiles(profiles: StaffProfile[]): void {
@@ -148,30 +116,21 @@ export async function getStaffProfiles(): Promise<StaffProfile[]> {
         .order('created_at', { ascending: true });
 
       if (!error && Array.isArray(data)) {
-        const mergedMap = new Map<string, StaffProfile>();
+        const remoteProfiles = data.map((remote: any) => ({
+          id: String(remote.id || ''),
+          user_id: remote.user_id,
+          staff_name: String(remote.staff_name || ''),
+          phone_number: String(remote.phone_number || ''),
+          password_hash: String(remote.password_hash || ''),
+          role: remote.role || 'STAFF',
+          active: remote.active !== undefined ? Boolean(remote.active) : true,
+          created_at: remote.created_at || new Date().toISOString(),
+          updated_at: remote.updated_at || new Date().toISOString(),
+        }));
 
-        localList.forEach((s) => {
-          mergedMap.set(s.phone_number.toLowerCase().trim(), s);
-        });
-
-        data.forEach((remote: any) => {
-          const profile: StaffProfile = {
-            id: String(remote.id || ''),
-            user_id: remote.user_id,
-            staff_name: String(remote.staff_name || ''),
-            phone_number: String(remote.phone_number || ''),
-            password_hash: String(remote.password_hash || ''),
-            role: remote.role || 'STAFF',
-            active: remote.active !== undefined ? Boolean(remote.active) : true,
-            created_at: remote.created_at || new Date().toISOString(),
-            updated_at: remote.updated_at || new Date().toISOString(),
-          };
-          mergedMap.set(profile.phone_number.toLowerCase().trim(), profile);
-        });
-
-        const mergedList = Array.from(mergedMap.values());
-        saveLocalStaffProfiles(mergedList);
-        return mergedList;
+        // Always overwrite local with fresh database state
+        saveLocalStaffProfiles(remoteProfiles);
+        return remoteProfiles;
       }
     } catch (err) {
       console.warn('Supabase fetch failed, using local staff profiles:', err);
@@ -194,7 +153,7 @@ export async function addStaffProfile(data: {
   active?: boolean;
 }): Promise<StaffProfile> {
   // Authorization check: Admin / Owner only
-  if (!isOwnerAuthenticated()) {
+  if (!(await isOwnerAuthenticated())) {
     throw new Error('Forbidden: Only the Owner can create new staff accounts.');
   }
 
@@ -292,7 +251,7 @@ export async function updateStaffProfile(
   bypassOwnerCheck = false
 ): Promise<StaffProfile | null> {
   // Authorization check: Admin / Owner only (unless internal reset/migration bypass)
-  if (!bypassOwnerCheck && !isOwnerAuthenticated()) {
+  if (!bypassOwnerCheck && !(await isOwnerAuthenticated())) {
     throw new Error('Forbidden: Only the Owner can modify staff accounts.');
   }
 
@@ -345,7 +304,7 @@ export async function updateStaffProfile(
 
 // Toggle staff active / disabled
 export async function toggleStaffStatus(id: string): Promise<StaffProfile | null> {
-  if (!isOwnerAuthenticated()) {
+  if (!(await isOwnerAuthenticated())) {
     throw new Error('Forbidden: Only the Owner can change staff status.');
   }
 
@@ -358,21 +317,28 @@ export async function toggleStaffStatus(id: string): Promise<StaffProfile | null
 
 // Delete staff profile
 export async function deleteStaffProfile(id: string): Promise<boolean> {
-  if (!isOwnerAuthenticated()) {
+  if (!(await isOwnerAuthenticated())) {
     throw new Error('Forbidden: Only the Owner can delete staff accounts.');
   }
 
+  if (isSupabaseConfigured() && supabase) {
+    const { error, count } = await supabase
+      .from('staff_profiles')
+      .delete({ count: 'exact' })
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Database deletion failed: ${error.message}`);
+    }
+    if (count === 0) {
+      throw new Error('Deletion failed. Record not found or permission denied by database.');
+    }
+  }
+
+  // Update local storage only if database operation succeeds or we are offline
   const current = getLocalStaffProfiles();
   const filtered = current.filter((s) => s.id !== id);
   saveLocalStaffProfiles(filtered);
-
-  if (isSupabaseConfigured() && supabase) {
-    try {
-      await supabase.from('staff_profiles').delete().eq('id', id);
-    } catch (err) {
-      console.warn('Supabase delete failed:', err);
-    }
-  }
 
   return true;
 }

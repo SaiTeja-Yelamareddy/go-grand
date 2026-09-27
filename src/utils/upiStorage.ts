@@ -22,8 +22,8 @@ export function getStoredUpiId(): string {
 /**
  * Saves the GO GRAND business UPI ID securely to local storage & Supabase.
  */
-export function saveUpiId(upiId: string): void {
-  if (!isOwnerAuthenticated()) {
+export async function saveUpiId(upiId: string): Promise<void> {
+  if (!(await isOwnerAuthenticated())) {
     throw new Error('Forbidden: Only the Owner can modify payment settings.');
   }
 

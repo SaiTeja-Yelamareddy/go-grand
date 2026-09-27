@@ -1,10 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { useNotifications } from './NotificationSystem';
 import { getWhatsAppBackendUrl } from '../config/apiConfig';
-import { isOwnerAuthenticated, isStaffAuthenticated } from '../config/authConfig';
+import { isStaffAuthenticated } from '../config/authConfig';
+import { useAuth } from '../contexts/AuthContext';
 
 export const WhatsAppHealthCheck: React.FC = () => {
   const { notify, dismiss } = useNotifications();
+  const { isOwner } = useAuth();
   const notificationIdRef = useRef<number | null>(null);
   const isRecoveringRef = useRef<boolean>(false);
   const isUnmountedRef = useRef<boolean>(false);
@@ -15,7 +17,7 @@ export const WhatsAppHealthCheck: React.FC = () => {
     let attempt = 0;
 
     // Only run the startup wake-up if the user is authenticated
-    if (!isOwnerAuthenticated() && !isStaffAuthenticated()) {
+    if (!isOwner && !isStaffAuthenticated()) {
       return;
     }
 
@@ -81,7 +83,7 @@ export const WhatsAppHealthCheck: React.FC = () => {
         dismiss(notificationIdRef.current);
       }
     };
-  }, [notify, dismiss]);
+  }, [notify, dismiss, isOwner]);
 
   return null;
 };

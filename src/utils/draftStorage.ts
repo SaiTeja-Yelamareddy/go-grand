@@ -128,7 +128,7 @@ export async function syncJobsFromSupabase(): Promise<JobRecord[]> {
 export async function saveJobRecord(
   jobData: Omit<JobRecord, 'id' | 'createdAt'>
 ): Promise<JobRecord> {
-  const isOwner = isOwnerAuthenticated();
+  const isOwner = await isOwnerAuthenticated();
   const currentStaff = getCurrentStaff();
 
   if (!isOwner && (!currentStaff || !currentStaff.active)) {
@@ -170,7 +170,7 @@ export async function updateJobRecord(
   id: string,
   updatedData: Partial<Omit<JobRecord, 'id' | 'createdAt'>>
 ): Promise<JobRecord | undefined> {
-  const isOwner = isOwnerAuthenticated();
+  const isOwner = await isOwnerAuthenticated();
   const currentStaff = getCurrentStaff();
 
   if (!isOwner && (!currentStaff || !currentStaff.active)) {
@@ -228,7 +228,7 @@ export async function updateJobRecord(
 }
 
 export async function deleteJobRecord(id: string): Promise<void> {
-  if (!isOwnerAuthenticated()) {
+  if (!(await isOwnerAuthenticated())) {
     throw new Error('Forbidden: Only an authenticated Owner can delete job records.');
   }
 
@@ -259,7 +259,7 @@ export async function deleteJobRecord(id: string): Promise<void> {
 }
 
 export async function restoreJobRecord(job: JobRecord): Promise<void> {
-  if (!isOwnerAuthenticated()) {
+  if (!(await isOwnerAuthenticated())) {
     throw new Error('Forbidden: Only an authenticated Owner can restore job records.');
   }
 

@@ -154,11 +154,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     secName.toLowerCase().includes(serviceSearchQuery.toLowerCase().trim())
   );
 
-  const selectedSectionName = formData.selectedServices[0] || '';
-  const selectedSection = sections.find(
-    (section) => section.name.trim().toLowerCase() === selectedSectionName.trim().toLowerCase()
-  );
-  const availableServicesForSelectedSection = selectedSection?.services || [];
+
 
   // Pre-fill form if editing an existing job
   useEffect(() => {
@@ -216,9 +212,15 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
 
   const handleSelectPackageSection = (sectionName: string) => {
+    const section = sections.find(
+      (s) => s.name.trim().toLowerCase() === sectionName.trim().toLowerCase()
+    );
+    const serviceList = section?.services || [];
+    const serviceNames = serviceList.map((s: any) => typeof s === 'string' ? s : s.name);
+
     setFormData((prev) => ({
       ...prev,
-      selectedServices: [sectionName],
+      selectedServices: [sectionName, ...serviceNames],
     }));
     setShowDropdownPicker(false);
     if (errors.services) {
@@ -234,24 +236,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     handleSelectPackageSection(serviceName);
   };
 
-  const handleToggleConfiguredService = (serviceName: string) => {
-    setFormData((prev) => {
-      const sectionName = prev.selectedServices[0];
-      if (!sectionName) return prev;
-      const selected = prev.selectedServices.slice(1);
-      const updated = selected.includes(serviceName)
-        ? selected.filter((service) => service !== serviceName)
-        : [...selected, serviceName];
-      return { ...prev, selectedServices: [sectionName, ...updated] };
-    });
-    if (errors.services) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next.services;
-        return next;
-      });
-    }
-  };
+
 
   const handleRemoveService = (serviceName: string) => {
     setFormData((prev) => ({
@@ -894,35 +879,6 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 </p>
               )}
             </div>
-
-            {/* Services configured under the selected section; only checked services are saved on the job. */}
-            {availableServicesForSelectedSection.length > 0 && (
-              <div className="space-y-1.5">
-                <span className="block text-[11px] font-bold text-slate-700 dark:text-neutral-300">
-                  Select Services for {selectedSectionName}:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {availableServicesForSelectedSection.map((service) => {
-                    const serviceName = typeof service === 'string' ? service : service.name;
-                    const isSelected = formData.selectedServices.slice(1).includes(serviceName);
-                    return (
-                      <button
-                        key={service.id || serviceName}
-                        type="button"
-                        onClick={() => handleToggleConfiguredService(serviceName)}
-                        className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-amber-400 text-slate-950 border-amber-500 font-black shadow-xs'
-                            : 'bg-slate-100 dark:bg-[#141414] text-slate-800 dark:text-neutral-200 hover:bg-slate-200 dark:hover:bg-neutral-800 border-slate-300 dark:border-neutral-800 font-bold'
-                        }`}
-                      >
-                        {isSelected ? `✓ ${serviceName}` : `+ ${serviceName}`}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {/* Quick Service Chips (Fast Selection of Sections from Supabase) */}
             {packageSections.length > 0 && (

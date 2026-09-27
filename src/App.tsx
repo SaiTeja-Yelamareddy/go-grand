@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ModeSelection } from './pages/ModeSelection';
 import { OwnerLogin } from './pages/OwnerLogin';
-import { ResetPassword } from './pages/ResetPassword';
 import { StaffLogin } from './pages/StaffLogin';
 import { OwnerStaff } from './pages/OwnerStaff';
 import { OwnerServices } from './pages/OwnerServices';
@@ -16,10 +15,10 @@ import { initTheme } from './utils/themeStorage';
 import { syncJobsFromSupabase } from './utils/draftStorage';
 import { getStaffProfiles } from './utils/staffStorage';
 import { syncServiceSectionsFromSupabase } from './utils/serviceStorage';
+import { syncUpiSettingsFromSupabase } from './utils/upiStorage';
 import { syncMessageTemplatesFromSupabase } from './utils/templateStorage';
 import { NotificationProvider } from './components/NotificationSystem';
 import { WhatsAppHealthCheck } from './components/WhatsAppHealthCheck';
-import { AuthProvider } from './contexts/AuthContext';
 
 export function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -31,6 +30,7 @@ export function App() {
     syncJobsFromSupabase().catch(() => {});
     getStaffProfiles().catch(() => {});
     syncServiceSectionsFromSupabase().catch(() => {});
+syncUpiSettingsFromSupabase().catch(() => {});
     syncMessageTemplatesFromSupabase().catch(() => {});
 
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -145,7 +145,6 @@ export function App() {
   );
 
   return (
-    <AuthProvider>
     <NotificationProvider>
       <WhatsAppHealthCheck />
       <BrowserRouter>
@@ -162,7 +161,6 @@ export function App() {
 
         {/* Owner Authentication & Protected Routes */}
         <Route path="/owner/login" element={<OwnerLogin />} />
-        <Route path="/owner/reset-password" element={<ResetPassword />} />
         <Route path="/owner" element={renderOwnerJobSheet()} />
         <Route path="/owner/today" element={renderOwnerTodaysVehicles()} />
         <Route path="/owner/vehicles" element={renderOwnerTotalVehicles()} />
@@ -176,8 +174,8 @@ export function App() {
       </Routes>
       </BrowserRouter>
     </NotificationProvider>
-    </AuthProvider>
   );
 }
 
 export default App;
+

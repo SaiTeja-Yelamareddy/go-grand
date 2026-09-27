@@ -16,11 +16,12 @@ import {
 } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { Header } from './Header';
-import { saveJobRecord, updateJobRecord, getJobRecordById, type JobRecord } from '../utils/draftStorage';
+import { saveJobRecord, updateJobRecord, getJobRecordById, lookupVehicleHistory, type JobRecord } from '../utils/draftStorage';
 import { INDIAN_VEHICLE_BRANDS } from '../data/indianVehicles';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { useNotifications } from './NotificationSystem';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend, sendVehicleReceivedWhatsAppViaBackend, parsePriceNumber, generateBillNo } from '../utils/invoiceUtils';
+import { getUpiEnabled } from '../utils/upiStorage';
 import { getMessageTemplates, renderTemplate, SHOP_NAME } from '../utils/templateStorage';
 
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'w-[22px] h-[22px] text-[#25D366]' }) => (
@@ -74,7 +75,8 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const { notify, dismiss } = useNotifications();
 
   const editId = searchParams.get('editId') || searchParams.get('edit');
-  const isEditing = Boolean(editId);
+  const [activeJobId, setActiveJobId] = useState<string | null>(editId);
+  const isEditing = Boolean(activeJobId);
   const [formData, setFormData] = useState<FormState>({
     vehicleNumber: '',
     customerName: '',
@@ -91,6 +93,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [savedVehNum, setSavedVehNum] = useState('');
+  
+  const [lastLookedUp, setLastLookedUp] = useState('');
+
 
   // Two-step Vehicle Selection States
   const [selectedCompany, setSelectedCompany] = useState<string>('');
@@ -113,6 +118,56 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     });
     return options;
   }, []);
+
+  useEffect(() => {
+    if (isEditing) return;
+    
+    const vNum = formData.vehicleNumber.trim().toUpperCase();
+    if (vNum.length < 4 || vNum === lastLookedUp) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const previousJob = await lookupVehicleHistory(vNum);
+        setLastLookedUp(vNum);
+        
+        if (previousJob) {
+          const vName = previousJob.vehicleName || '';
+          
+          setFormData((prev) => ({
+            ...prev,
+            customerName: prev.customerName || previousJob.customerName || '',
+            phoneNumber: prev.phoneNumber || previousJob.phoneNumber || '',
+            vehicleName: prev.vehicleName || vName,
+            location: prev.location || previousJob.location || '',
+          }));
+
+          if (vName && !selectedCompany && !selectedModel) {
+            const match = allModelOptions.find(
+              (opt) => opt.fullName.toLowerCase() === vName.toLowerCase() || opt.model.toLowerCase() === vName.toLowerCase()
+            );
+            if (match) {
+              setSelectedCompany(match.company);
+              setSelectedModel(match.model);
+              setIsManualEntry(false);
+            } else {
+              setSelectedCompany('Other');
+              setIsManualEntry(true);
+            }
+          }
+
+          notify({
+            type: 'success',
+            title: 'Returning customer ✓',
+            message: 'Customer details auto-filled from previous visit.',
+          });
+        }
+      } catch (err) {
+        notify({ type: 'warning', title: 'Lookup failed', message: 'Unable to check vehicle history right now.' });
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [formData.vehicleNumber, isEditing, lastLookedUp, notify, allModelOptions, selectedCompany, selectedModel]);
 
   const searchedModels = useMemo(() => {
     if (!vehicleSearchQuery.trim()) return [];
@@ -158,8 +213,8 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
   // Pre-fill form if editing an existing job
   useEffect(() => {
-    if (editId) {
-      const existing = getJobRecordById(editId);
+    if (activeJobId) {
+      const existing = getJobRecordById(activeJobId);
       if (existing) {
         let initialServices: string[] = [];
         if (Array.isArray(existing.services)) {
@@ -197,7 +252,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         }
       }
     }
-  }, [editId, allModelOptions]);
+  }, [activeJobId, allModelOptions]);
 
   const handleChange = (field: keyof FormState, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -277,7 +332,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSaveDraft = async (e?: React.FormEvent): Promise<JobRecord | null> => {
+  const handleSaveDraft = async (e?: React.FormEvent, forceStatus?: string): Promise<JobRecord | null> => {
     if (e) e.preventDefault();
 
     if (!validateForm()) {
@@ -294,24 +349,29 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       customerName: formData.customerName.trim(),
       phoneNumber: formData.phoneNumber.trim(),
       vehicleName: formData.vehicleName.trim(),
+      location: formData.location.trim(),
       services: formData.selectedServices,
       price: formData.price.trim(),
       createdBy: staffName,
       createdById: staffId,
-    };
+    } as any;
+    if (forceStatus) {
+      payload.status = forceStatus;
+    }
 
     notify({ type: 'loading', title: isEditing ? 'Updating Vehicle...' : 'Saving Job Sheet...', message: 'Please wait while the record is saved.', duration: 2500 });
     try {
       let savedRecord: JobRecord;
-      if (isEditing && editId) {
-        const updated = await updateJobRecord(editId, payload);
+      if (isEditing && activeJobId) {
+        const updated = await updateJobRecord(activeJobId, payload);
         savedRecord = updated || {
           ...payload,
-          id: editId,
+          id: activeJobId,
           createdAt: new Date().toISOString(),
         };
       } else {
         savedRecord = await saveJobRecord(payload);
+          setActiveJobId(savedRecord.id);
       }
 
       notify({
@@ -346,6 +406,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     setIsManualEntry(false);
     setErrors({});
     setSaveSuccess(false);
+    setActiveJobId(null);
   };
 
   const [showWhatsAppSettingsModal, setShowWhatsAppSettingsModal] = useState(false);
@@ -353,7 +414,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const handleVehicleReceived = async () => {
     if (!validateForm()) return;
 
-    const saved = await handleSaveDraft();
+    const saved = await handleSaveDraft(undefined, 'received');
     if (saved) {
       const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
       const res = await sendVehicleReceivedWhatsAppViaBackend(saved);
@@ -362,7 +423,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         notify({ type: 'success', title: 'Sent ✓', message: 'Customer notification sent successfully.' });
       } else {
         notify({ type: 'error', title: 'Vehicle Notification Failed', message: 'Vehicle was saved, but the notification could not be sent.' });
-        setShowWhatsAppSettingsModal(true);
+        
       }
     }
   };
@@ -370,7 +431,11 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const handleVehicleReady = async () => {
     if (!validateForm()) return;
 
-    const saved = await handleSaveDraft();
+    if (!getUpiEnabled()) {
+      notify({ type: 'info', title: 'UPI Disabled', message: 'UPI payments are currently disabled.' });
+    }
+
+    const saved = await handleSaveDraft(undefined, 'ready');
     if (saved) {
       const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
       const res = await sendVehicleReadyWhatsAppViaBackend(saved);
@@ -379,7 +444,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         notify({ type: 'success', title: 'Sent ✓', message: 'Customer has been notified successfully.' });
       } else {
         notify({ type: 'error', title: 'Vehicle Ready Notification Failed', message: 'The vehicle status was updated, but the notification could not be sent.' });
-        setShowWhatsAppSettingsModal(true);
+        
       }
     }
   };
@@ -387,7 +452,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const handleTextMessage = async () => {
     if (!validateForm()) return;
 
-    const saved = await handleSaveDraft();
+    const saved = await handleSaveDraft(undefined, 'billed');
     const cleanPhone = (saved?.phoneNumber || formData.phoneNumber).replace(/\D/g, '');
     const priceNum = parsePriceNumber(saved?.price || formData.price);
     const discountNum = saved?.discount ? parsePriceNumber(saved.discount) : 0;
@@ -420,7 +485,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const handleBillWhatsApp = async () => {
     if (!validateForm()) return;
 
-    const saved = await handleSaveDraft();
+    const saved = await handleSaveDraft(undefined, 'billed');
     if (saved) {
       const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
       const res = await sendWhatsAppBillViaBackend(saved);
@@ -429,7 +494,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         notify({ type: 'success', title: 'Sent ✓', message: 'Invoice has been sent via WhatsApp.' });
       } else {
         notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
-        setShowWhatsAppSettingsModal(true);
+        
       }
     }
   };
@@ -911,7 +976,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
             {/* Selected Service Pills */}
             {formData.selectedServices.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {formData.selectedServices.map((srvName) => (
+                {formData.selectedServices.filter(srvName => packageSections.includes(srvName)).map((srvName) => (
                   <span
                     key={srvName}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/30 rounded-lg text-[11px] font-bold text-amber-950 dark:text-amber-300 shadow-2xs"
@@ -1128,3 +1193,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     </div>
   );
 };
+
+
+
+

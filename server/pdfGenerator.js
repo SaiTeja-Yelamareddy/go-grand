@@ -199,11 +199,6 @@ export function generateInvoicePDF(job) {
 
       const headerBottomY = doc.y + 15;
 
-      // 2. BRAND GOLD ACCENT BAR
-      doc
-        .rect(40, headerBottomY, 515.28, 3.5)
-        .fill(accentGold);
-
       // 3. CUSTOMER & VEHICLE INFORMATION GRID
       doc
         .fontSize(9)
@@ -288,8 +283,15 @@ export function generateInvoicePDF(job) {
       doc.font('Helvetica-Bold').text('Location: ', rightX, rightY, { continued: true })
          .font('Helvetica').text('GO GRAND');
 
-      // 4. SERVICE DETAILS TABLE
+      // 2. BRAND GOLD ACCENT BAR
       let tableY = gridY + gridH + 16;
+      doc
+        .rect(40, tableY, 515.28, 3.5)
+        .fill(accentGold);
+
+      tableY += 16; // spacing after yellow line
+
+      // 4. SERVICE DETAILS TABLE
       doc
         .fontSize(9)
         .font('Helvetica-Bold')

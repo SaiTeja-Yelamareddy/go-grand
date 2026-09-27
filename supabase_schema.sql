@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.jobs (
 -- Safely drop unnecessary legacy columns if they exist in existing database
 ALTER TABLE public.jobs DROP COLUMN IF EXISTS email;
 ALTER TABLE public.jobs DROP COLUMN IF EXISTS address;
-ALTER TABLE public.jobs DROP COLUMN IF EXISTS location;
+ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS location TEXT;
 ALTER TABLE public.jobs DROP COLUMN IF EXISTS service;
 
 ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;

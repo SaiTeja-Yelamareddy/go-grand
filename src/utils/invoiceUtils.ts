@@ -1,5 +1,5 @@
 import { type JobRecord } from './draftStorage';
-import { getStoredUpiId } from './upiStorage';
+import { getStoredUpiId, getUpiEnabled } from './upiStorage';
 import { getWhatsAppBackendUrl } from '../config/apiConfig';
 import { getMessageTemplates, renderTemplate, SHOP_NAME } from './templateStorage';
 
@@ -264,7 +264,7 @@ export async function sendVehicleReadyWhatsAppViaBackend(record: JobRecord): Pro
       const finalAmount = Math.max(0, priceNum - discountNum);
       const billNo = record.billNo || generateBillNo(record.id, record.createdAt);
 
-      const upiId = getStoredUpiId();
+      const upiId = getUpiEnabled() ? getStoredUpiId() : '';
       const msg = formatVehicleReadyMessage(
         record.customerName,
         record.vehicleName,
@@ -345,3 +345,4 @@ export async function sendVehicleReceivedWhatsAppViaBackend(record: JobRecord): 
   const idempotencyKey = record.id ? `recv_${record.id}_${Date.now()}` : undefined;
   return sendWhatsAppMessageViaBackend(record.phoneNumber, msg, idempotencyKey);
 }
+

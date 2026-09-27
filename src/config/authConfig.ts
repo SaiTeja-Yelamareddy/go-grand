@@ -1,5 +1,13 @@
+import bcrypt from 'bcryptjs';
 import type { StaffProfile } from '../utils/staffStorage';
-import { supabase } from './supabaseClient';
+
+// Secure Owner Authentication Config (Default bcrypt hash for 'admin123')
+const DEFAULT_OWNER_ID = 'admin';
+const DEFAULT_OWNER_HASH = '$2b$10$VcCiV3Gyl8s3MUWhjw.WD.TWJ9OTTDq.2VwczlFdDJstm4pgjeU.2';
+
+const OWNER_LOGIN_ID = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_OWNER_LOGIN_ID) || DEFAULT_OWNER_ID;
+const OWNER_PASSWORD_HASH = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_OWNER_PASSWORD_HASH) || DEFAULT_OWNER_HASH;
+
 export const OWNER_AUTH_KEY = 'go-grand-owner-session';
 export const STAFF_AUTH_KEY = 'go-grand-staff-session';
 
@@ -7,6 +15,12 @@ export const STAFF_AUTH_KEY = 'go-grand-staff-session';
 export const OWNER_SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 Hours
 export const STAFF_SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 Hours
 
+interface OwnerSession {
+  token: string;
+  loginId: string;
+  createdAt: number;
+  expiresAt: number;
+}
 
 interface StaffSession {
   token: string;
@@ -31,24 +45,65 @@ function generateSecureToken(): string {
 // ==========================================
 // OWNER AUTHENTICATION
 // ==========================================
-
-export async function isOwnerAuthenticated(): Promise<boolean> {
+export function isOwnerAuthenticated(): boolean {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return false;
-    
-    const { data } = await supabase
-      .from('owner_profiles')
-      .select('id')
-      .eq('user_id', session.user.id)
-      .eq('role', 'owner')
-      .eq('active', true)
-      .maybeSingle();
-      
-    return !!data;
+    const raw = sessionStorage.getItem(OWNER_AUTH_KEY);
+    if (!raw) return false;
+
+    // Support legacy boolean flag during migration
+    if (raw === 'true') {
+      logoutOwner();
+      return false;
+    }
+
+    const session: OwnerSession = JSON.parse(raw);
+    const now = Date.now();
+
+    if (!session || !session.token || !session.expiresAt || now >= session.expiresAt) {
+      logoutOwner();
+      return false;
+    }
+
+    // Sliding window renewal on active usage
+    if (session.expiresAt - now < OWNER_SESSION_TTL_MS / 2) {
+      session.expiresAt = now + OWNER_SESSION_TTL_MS;
+      sessionStorage.setItem(OWNER_AUTH_KEY, JSON.stringify(session));
+    }
+
+    return true;
   } catch {
+    logoutOwner();
     return false;
   }
+}
+
+export async function loginOwner(loginId: string, pass: string): Promise<boolean> {
+  const cleanId = loginId.trim();
+  if (!cleanId || !pass) return false;
+
+  const isIdMatch = cleanId === OWNER_LOGIN_ID;
+  if (!isIdMatch) return false;
+
+  let isPasswordValid = false;
+  try {
+    isPasswordValid = await bcrypt.compare(pass, OWNER_PASSWORD_HASH);
+  } catch {
+    isPasswordValid = false;
+  }
+
+  if (isPasswordValid) {
+    const now = Date.now();
+    const session: OwnerSession = {
+      token: generateSecureToken(),
+      loginId: cleanId,
+      createdAt: now,
+      expiresAt: now + OWNER_SESSION_TTL_MS,
+    };
+    sessionStorage.setItem(OWNER_AUTH_KEY, JSON.stringify(session));
+    return true;
+  }
+
+  return false;
 }
 
 export function logoutOwner(): void {

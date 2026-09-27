@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MoreVertical, X, Car, Search, ChevronDown, Download, User } from 'lucide-react';
+import { MoreVertical, X, Car, Search, ChevronDown, Download, User, Trash2 } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { Header } from './Header';
-import { getAllJobRecords, syncJobsFromSupabase, formatNumericDateIST, type JobRecord } from '../utils/draftStorage';
+import { getAllJobRecords, syncJobsFromSupabase, formatNumericDateIST, deleteJobRecord, restoreJobRecord, type JobRecord } from '../utils/draftStorage';
 import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { useNotifications } from './NotificationSystem';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend } from '../utils/invoiceUtils';
+import { getUpiEnabled } from '../utils/upiStorage';
 
 interface TotalVehiclesProps {
   mode: 'staff' | 'owner';
@@ -48,9 +49,49 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [selectedVehicleDetails, setSelectedVehicleDetails] = useState<JobRecord | null>(null);
   const [selectedInvoiceRecord, setSelectedInvoiceRecord] = useState<JobRecord | null>(null);
+  const [selectedDeleteRecord, setSelectedDeleteRecord] = useState<JobRecord | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showWhatsAppSettingsModal, setShowWhatsAppSettingsModal] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
+
+  
+  const handleDeleteRecord = async () => {
+    if (!selectedDeleteRecord || mode !== 'owner') return;
+
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      await deleteJobRecord(selectedDeleteRecord.id);
+      const deletedRecord = selectedDeleteRecord;
+      setSelectedDeleteRecord(null);
+      reloadRecords();
+      notify({
+        type: 'success',
+        title: 'Vehicle Record Deleted',
+        message: 'The vehicle record has been permanently deleted.',
+        duration: 6000,
+        actionLabel: 'Undo',
+        onAction: () => { void handleUndoDelete(deletedRecord); },
+      });
+    } catch (err: any) {
+      setDeleteError('The vehicle record could not be deleted.');
+      notify({ type: 'error', title: 'Delete Failed', message: 'The vehicle record could not be deleted.' });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleUndoDelete = async (deletedRecord: JobRecord) => {
+    try {
+      await restoreJobRecord(deletedRecord);
+      reloadRecords();
+      notify({ type: 'success', title: 'Vehicle Record Restored', message: 'The vehicle record is back in Total Vehicles.' });
+    } catch {
+      notify({ type: 'error', title: 'Restore Failed', message: 'The vehicle record could not be restored.' });
+    }
+  };
 
   const reloadRecords = () => {
     setAllRecords(getAllJobRecords());
@@ -440,7 +481,7 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
                                       notify({ type: 'success', title: 'Bill Sent', message: 'Invoice has been sent via WhatsApp.' });
                                     } else {
                                       notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
-                                      setShowWhatsAppSettingsModal(true);
+                                      
                                     }
                                   }}
                                   className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-[#25D366] hover:bg-green-50 dark:hover:bg-green-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
@@ -462,13 +503,14 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
                                   onClick={async () => {
                                     setActiveMenuId(null);
                                     const loadingId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
-                                    const res = await sendVehicleReadyWhatsAppViaBackend(item);
+                                    if (!getUpiEnabled()) { notify({ type: 'info', title: 'UPI Disabled', message: 'UPI payments are currently disabled.' }); }
+                                      const res = await sendVehicleReadyWhatsAppViaBackend(item);
                                     dismiss(loadingId);
                                     if (res.success) {
                                       notify({ type: 'success', title: 'Vehicle Ready', message: 'Customer has been notified successfully.' });
                                     } else {
                                       notify({ type: 'error', title: 'Vehicle Ready Notification Failed', message: 'The vehicle status was updated, but the notification could not be sent.' });
-                                      setShowWhatsAppSettingsModal(true);
+                                      
                                     }
                                   }}
                                   className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
@@ -496,7 +538,20 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
                                   EDIT
                                 </button>
 
-                                <button
+                                                                  {mode === 'owner' && (
+                                    <button
+                                      onClick={() => {
+                                        setActiveMenuId(null);
+                                        setDeleteError(null);
+                                        setSelectedDeleteRecord(item);
+                                      }}
+                                      className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center justify-start gap-2 tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
+                                    >
+                                      <Trash2 size={13} />
+                                      DELETE
+                                    </button>
+                                  )}
+                                  <button
                                   onClick={() => setActiveMenuId(null)}
                                   className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-[#1C1C1C] flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
                                 >
@@ -626,7 +681,52 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
         />
       )}
 
-      {/* LINKED WHATSAPP DEVICE MODAL */}
+      
+      {selectedDeleteRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="delete-vehicle-title">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+            onClick={() => {
+              if (!deleteLoading) setSelectedDeleteRecord(null);
+            }}
+          />
+          <div className="relative z-10 w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-2xl border border-red-200 dark:border-red-900/60 shadow-2xl p-6 text-left">
+            <h3 id="delete-vehicle-title" className="font-extrabold text-base text-red-600 dark:text-red-400 uppercase tracking-wide">
+              Delete Vehicle Record?
+            </h3>
+            <p className="mt-3 text-sm text-slate-700 dark:text-neutral-200">
+              This will permanently delete this job record and its associated vehicle visit data.
+            </p>
+
+            {deleteError && (
+              <p className="mt-4 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 p-3 text-xs font-semibold text-red-700 dark:text-red-300">
+                {deleteError}
+              </p>
+            )}
+
+            <div className="flex gap-3 mt-5">
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={() => setSelectedDeleteRecord(null)}
+                className="flex-1 min-h-[44px] rounded-xl border border-slate-300 dark:border-[#333333] text-slate-700 dark:text-neutral-200 font-bold text-xs uppercase tracking-wider hover:bg-slate-100 dark:hover:bg-[#1A1A1A] disabled:opacity-50 cursor-pointer"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={handleDeleteRecord}
+                className="flex-1 min-h-[44px] rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider disabled:opacity-50 cursor-pointer"
+              >
+                {deleteLoading ? 'DELETING...' : 'DELETE'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+        {/* LINKED WHATSAPP DEVICE MODAL */}
       <WhatsAppSettingsModal
         isOpen={showWhatsAppSettingsModal}
         onClose={() => setShowWhatsAppSettingsModal(false)}
@@ -634,3 +734,10 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
     </div>
   );
 };
+
+
+
+
+
+
+

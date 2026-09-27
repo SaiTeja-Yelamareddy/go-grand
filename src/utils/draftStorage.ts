@@ -71,6 +71,7 @@ export function mapJobRecordToRow(job: JobRecord): any {
     customer_name: job.customerName.trim(),
     phone_number: job.phoneNumber.trim(),
     vehicle_name: job.vehicleName || '',
+      location: job.location || '',
     services: serviceList,
     price: job.price || '0',
     discount: job.discount || '',
@@ -128,7 +129,7 @@ export async function syncJobsFromSupabase(): Promise<JobRecord[]> {
 export async function saveJobRecord(
   jobData: Omit<JobRecord, 'id' | 'createdAt'>
 ): Promise<JobRecord> {
-  const isOwner = await isOwnerAuthenticated();
+  const isOwner = isOwnerAuthenticated();
   const currentStaff = getCurrentStaff();
 
   if (!isOwner && (!currentStaff || !currentStaff.active)) {
@@ -170,7 +171,7 @@ export async function updateJobRecord(
   id: string,
   updatedData: Partial<Omit<JobRecord, 'id' | 'createdAt'>>
 ): Promise<JobRecord | undefined> {
-  const isOwner = await isOwnerAuthenticated();
+  const isOwner = isOwnerAuthenticated();
   const currentStaff = getCurrentStaff();
 
   if (!isOwner && (!currentStaff || !currentStaff.active)) {
@@ -228,7 +229,7 @@ export async function updateJobRecord(
 }
 
 export async function deleteJobRecord(id: string): Promise<void> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Forbidden: Only an authenticated Owner can delete job records.');
   }
 
@@ -259,7 +260,7 @@ export async function deleteJobRecord(id: string): Promise<void> {
 }
 
 export async function restoreJobRecord(job: JobRecord): Promise<void> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Forbidden: Only an authenticated Owner can restore job records.');
   }
 
@@ -324,4 +325,33 @@ export function getTodaysJobRecords(): JobRecord[] {
     const jobIST = getISTDateKey(job.createdAt);
     return jobIST === currentTodayIST;
   });
+}
+export async function lookupVehicleHistory(vehicleNumber: string): Promise<JobRecord | null> {
+  if (!vehicleNumber || vehicleNumber.trim().length < 4) return null;
+
+  try {
+    const normalizedSearch = vehicleNumber.replace(/\s+/g, '').toLowerCase();
+    const searchPattern = '%' + normalizedSearch.split('').join('%') + '%';
+
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('*')
+      .ilike('vehicle_number', searchPattern)
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    if (error || !data || data.length === 0) return null;
+
+    // Filter locally to find exact alphanumeric match
+    for (const row of data) {
+      const dbVehicle = (row.vehicle_number || '').replace(/\s+/g, '').toLowerCase();
+      if (dbVehicle === normalizedSearch) {
+        return mapRowToJobRecord(row);
+      }
+    }
+  } catch (err) {
+    console.error('Vehicle lookup error:', err);
+  }
+
+  return null;
 }

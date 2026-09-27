@@ -153,7 +153,7 @@ export async function addStaffProfile(data: {
   active?: boolean;
 }): Promise<StaffProfile> {
   // Authorization check: Admin / Owner only
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Forbidden: Only the Owner can create new staff accounts.');
   }
 
@@ -251,7 +251,7 @@ export async function updateStaffProfile(
   bypassOwnerCheck = false
 ): Promise<StaffProfile | null> {
   // Authorization check: Admin / Owner only (unless internal reset/migration bypass)
-  if (!bypassOwnerCheck && !(await isOwnerAuthenticated())) {
+  if (!bypassOwnerCheck && !isOwnerAuthenticated()) {
     throw new Error('Forbidden: Only the Owner can modify staff accounts.');
   }
 
@@ -304,7 +304,7 @@ export async function updateStaffProfile(
 
 // Toggle staff active / disabled
 export async function toggleStaffStatus(id: string): Promise<StaffProfile | null> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Forbidden: Only the Owner can change staff status.');
   }
 
@@ -317,7 +317,7 @@ export async function toggleStaffStatus(id: string): Promise<StaffProfile | null
 
 // Delete staff profile
 export async function deleteStaffProfile(id: string): Promise<boolean> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Forbidden: Only the Owner can delete staff accounts.');
   }
 

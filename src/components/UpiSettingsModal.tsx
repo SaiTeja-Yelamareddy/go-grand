@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Save, CheckCircle2, ShieldCheck, Edit3, Check } from 'lucide-react';
-import { getStoredUpiId, saveUpiId } from '../utils/upiStorage';
+import { getStoredUpiId, saveUpiId, getUpiEnabled, saveUpiEnabled } from '../utils/upiStorage';
 
 interface UpiSettingsModalProps {
   isOpen: boolean;
@@ -12,6 +12,7 @@ export const UpiSettingsModal: React.FC<UpiSettingsModalProps> = ({
   onClose,
 }) => {
   const [savedUpiId, setSavedUpiId] = useState<string>('');
+  const [upiEnabled, setUpiEnabled] = useState<boolean>(true);
   const [upiIdInput, setUpiIdInput] = useState<string>('');
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [savedFeedback, setSavedFeedback] = useState<boolean>(false);
@@ -21,6 +22,7 @@ export const UpiSettingsModal: React.FC<UpiSettingsModalProps> = ({
     if (isOpen) {
       const current = getStoredUpiId();
       setSavedUpiId(current);
+      setUpiEnabled(getUpiEnabled());
       setUpiIdInput(current);
       // If no UPI ID is saved yet, open directly in edit/input mode
       setIsEditing(!current);
@@ -30,6 +32,18 @@ export const UpiSettingsModal: React.FC<UpiSettingsModalProps> = ({
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handleToggleUpiStatus = () => {
+    const newState = !upiEnabled;
+    saveUpiEnabled(newState);
+    setUpiEnabled(newState);
+    setSavedFeedback(true);
+    setErrorMsg('toggle');
+    setTimeout(() => {
+      setSavedFeedback(false);
+      setErrorMsg('');
+    }, 4000);
+  };
 
   const handleStartEdit = () => {
     setUpiIdInput(savedUpiId);
@@ -125,7 +139,7 @@ export const UpiSettingsModal: React.FC<UpiSettingsModalProps> = ({
         {savedFeedback && (
           <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
             <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>GO GRAND UPI Settings updated successfully!</span>
+            <span>{errorMsg === 'toggle' ? (upiEnabled ? 'UPI payments are now active.' : 'UPI payments have been disabled.') : 'GO GRAND UPI Settings updated successfully!'}</span>
           </div>
         )}
 
@@ -137,10 +151,15 @@ export const UpiSettingsModal: React.FC<UpiSettingsModalProps> = ({
                 <label className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                   Configured UPI ID
                 </label>
-                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60">
-                  <Check size={10} />
-                  Active
-                </span>
+                {upiEnabled ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60">
+                    <Check size={10} /> Active
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 border border-slate-300 dark:border-neutral-700">
+                    <span className="w-2.5 h-2.5 rounded-full border-[1.5px] border-current opacity-70" /> Inactive
+                  </span>
+                )}
               </div>
 
               {/* Display Box */}
@@ -155,21 +174,34 @@ export const UpiSettingsModal: React.FC<UpiSettingsModalProps> = ({
             </div>
 
             {/* Action Buttons */}
-            <div className="pt-2 flex gap-2">
+            <div className="pt-2 flex flex-col gap-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-1/3 min-h-[48px] bg-white dark:bg-[#121212] border border-slate-300 dark:border-[#262626] hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-slate-900 dark:text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  className="w-2/3 min-h-[48px] bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-neutral-200 active:scale-[0.99] text-white dark:text-black font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Edit3 size={16} />
+                  <span>EDIT UPI ID</span>
+                </button>
+              </div>
               <button
                 type="button"
-                onClick={onClose}
-                className="w-1/3 min-h-[48px] bg-white dark:bg-[#121212] border border-slate-300 dark:border-[#262626] hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-slate-900 dark:text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+                onClick={handleToggleUpiStatus}
+                className={`w-full min-h-[48px] border font-extrabold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer ${
+                  upiEnabled
+                    ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900'
+                    : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900'
+                }`}
               >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={handleStartEdit}
-                className="w-2/3 min-h-[48px] bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-neutral-200 active:scale-[0.99] text-white dark:text-black font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Edit3 size={16} />
-                <span>EDIT UPI ID</span>
+                {upiEnabled ? 'DEACTIVATE UPI' : 'ACTIVATE UPI'}
               </button>
             </div>
           </div>
@@ -222,3 +254,5 @@ export const UpiSettingsModal: React.FC<UpiSettingsModalProps> = ({
     </div>
   );
 };
+
+

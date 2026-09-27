@@ -9,6 +9,7 @@ import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { useNotifications } from './NotificationSystem';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend } from '../utils/invoiceUtils';
+import { getUpiEnabled } from '../utils/upiStorage';
 
 interface TodaysVehiclesProps {
   mode: 'staff' | 'owner';
@@ -307,7 +308,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                       notify({ type: 'success', title: 'Bill Sent', message: 'Invoice has been sent via WhatsApp.' });
                                     } else {
                                       notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
-                                      setShowWhatsAppSettingsModal(true);
+                                      
                                     }
                                   }}
                                   className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-[#25D366] hover:bg-green-50 dark:hover:bg-green-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
@@ -329,13 +330,14 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                   onClick={async () => {
                                     setActiveMenuId(null);
                                     const loadingId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
-                                    const res = await sendVehicleReadyWhatsAppViaBackend(item);
+                                    if (!getUpiEnabled()) { notify({ type: 'info', title: 'UPI Disabled', message: 'UPI payments are currently disabled.' }); }
+                                      const res = await sendVehicleReadyWhatsAppViaBackend(item);
                                     dismiss(loadingId);
                                     if (res.success) {
                                       notify({ type: 'success', title: 'Vehicle Ready', message: 'Customer has been notified successfully.' });
                                     } else {
                                       notify({ type: 'error', title: 'Vehicle Ready Notification Failed', message: 'The vehicle status was updated, but the notification could not be sent.' });
-                                      setShowWhatsAppSettingsModal(true);
+                                      
                                     }
                                   }}
                                   className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
@@ -548,3 +550,4 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
     </div>
   );
 };
+

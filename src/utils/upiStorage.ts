@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from '../config/supabaseClient';
 import { isOwnerAuthenticated } from '../config/authConfig';
 
 export const UPI_STORAGE_KEY = 'go-grand-business-upi-id';
+export const UPI_ENABLED_KEY = 'go-grand-business-upi-enabled';
 
 /**
  * Retrieves the configured GO GRAND business UPI ID.
@@ -22,8 +23,8 @@ export function getStoredUpiId(): string {
 /**
  * Saves the GO GRAND business UPI ID securely to local storage & Supabase.
  */
-export async function saveUpiId(upiId: string): Promise<void> {
-  if (!(await isOwnerAuthenticated())) {
+export function saveUpiId(upiId: string): void {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Forbidden: Only the Owner can modify payment settings.');
   }
 
@@ -42,7 +43,7 @@ export async function saveUpiId(upiId: string): Promise<void> {
           .from('app_settings')
           .upsert({
             key: 'upi_payment_settings',
-            value: { upi_id: clean },
+            value: { upi_id: clean, upi_enabled: getUpiEnabled() },
             updated_at: new Date().toISOString(),
           });
         if (error) {
@@ -82,4 +83,71 @@ export function generateUpiPaymentUri(
   const note = encodeURIComponent(`GO GRAND Bill - ${vehNo}`);
 
   return `upi://pay?pa=${cleanUpi}&pn=${payeeName}&am=${amtStr}&cu=INR&tn=${note}`;
+}
+
+export function getUpiEnabled(): boolean {
+  try {
+    const stored = localStorage.getItem(UPI_ENABLED_KEY);
+    if (stored !== null) {
+      return stored === 'true';
+    }
+  } catch (e) {
+    console.error('Failed to get UPI enabled status:', e);
+  }
+  return true; // Default is true
+}
+
+export function saveUpiEnabled(enabled: boolean): void {
+  if (!isOwnerAuthenticated()) {
+    throw new Error('Forbidden: Only the Owner can modify payment settings.');
+  }
+
+  try {
+    localStorage.setItem(UPI_ENABLED_KEY, String(enabled));
+  } catch (e) {
+    console.error('Failed to save UPI enabled status locally:', e);
+  }
+
+  if (isSupabaseConfigured() && supabase) {
+    (async () => {
+      try {
+        const upiId = getStoredUpiId();
+        const { error } = await supabase
+          .from('app_settings')
+          .upsert({
+            key: 'upi_payment_settings',
+            value: { upi_id: upiId, upi_enabled: enabled },
+            updated_at: new Date().toISOString(),
+          });
+        if (error) {
+          console.warn('Could not sync UPI status to Supabase:', error.message);
+        }
+      } catch (err) {
+        console.warn('Supabase UPI status sync failed:', err);
+      }
+    })();
+  }
+}
+
+export async function syncUpiSettingsFromSupabase(): Promise<void> {
+  if (!isSupabaseConfigured() || !supabase) return;
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'upi_payment_settings')
+      .single();
+    
+    if (data && !error && data.value) {
+      const { upi_id, upi_enabled } = data.value;
+      if (typeof upi_id === 'string') {
+        localStorage.setItem(UPI_STORAGE_KEY, upi_id);
+      }
+      if (typeof upi_enabled === 'boolean') {
+        localStorage.setItem(UPI_ENABLED_KEY, String(upi_enabled));
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to sync UPI settings from Supabase:', err);
+  }
 }

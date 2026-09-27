@@ -173,7 +173,7 @@ export async function syncMessageTemplatesFromSupabase(): Promise<MessageTemplat
 export async function saveMessageTemplates(
   updates: Partial<MessageTemplates>
 ): Promise<MessageTemplates> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Forbidden: Only the Owner can modify message templates.');
   }
 

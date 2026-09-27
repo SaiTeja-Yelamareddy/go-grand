@@ -81,7 +81,7 @@ export async function syncServiceSectionsFromSupabase(): Promise<ServiceSection[
  * Only Owner can create sections.
  */
 export async function addServiceSection(name: string): Promise<ServiceSection> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Unauthorized: Only the Owner can add service sections.');
   }
 
@@ -122,7 +122,7 @@ export async function addServiceSection(name: string): Promise<ServiceSection> {
  * Updates a section name in Supabase.
  */
 export async function updateServiceSectionName(sectionId: string, newName: string): Promise<void> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Unauthorized: Only the Owner can update service section names.');
   }
 
@@ -152,7 +152,7 @@ export async function updateServiceSectionName(sectionId: string, newName: strin
  * Deletes a section from Supabase.
  */
 export async function deleteServiceSection(sectionId: string): Promise<void> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Unauthorized: Only the Owner can delete service sections.');
   }
 
@@ -174,7 +174,7 @@ export async function deleteServiceSection(sectionId: string): Promise<void> {
  * Adds a service item to a section in Supabase.
  */
 export async function addServiceToSection(sectionId: string, serviceName: string): Promise<ServiceSection[]> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Unauthorized: Only the Owner can add services.');
   }
 
@@ -223,7 +223,7 @@ export async function addServiceToSection(sectionId: string, serviceName: string
  * Updates a service name inside a section in Supabase.
  */
 export async function updateServiceName(sectionId: string, serviceId: string, newName: string): Promise<ServiceSection[]> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Unauthorized: Only the Owner can update services.');
   }
 
@@ -268,7 +268,7 @@ export async function updateServiceName(sectionId: string, serviceId: string, ne
  * Deletes a service from a section in Supabase.
  */
 export async function deleteServiceFromSection(sectionId: string, serviceId: string): Promise<ServiceSection[]> {
-  if (!(await isOwnerAuthenticated())) {
+  if (!isOwnerAuthenticated()) {
     throw new Error('Unauthorized: Only the Owner can delete services.');
   }
 

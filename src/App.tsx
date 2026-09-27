@@ -17,6 +17,7 @@ import { getStaffProfiles } from './utils/staffStorage';
 import { syncServiceSectionsFromSupabase } from './utils/serviceStorage';
 import { syncUpiSettingsFromSupabase } from './utils/upiStorage';
 import { syncMessageTemplatesFromSupabase } from './utils/templateStorage';
+import { syncOwnerCredentialsFromSupabase } from './config/authConfig';
 import { NotificationProvider } from './components/NotificationSystem';
 import { WhatsAppHealthCheck } from './components/WhatsAppHealthCheck';
 
@@ -30,8 +31,9 @@ export function App() {
     syncJobsFromSupabase().catch(() => {});
     getStaffProfiles().catch(() => {});
     syncServiceSectionsFromSupabase().catch(() => {});
-syncUpiSettingsFromSupabase().catch(() => {});
+    syncUpiSettingsFromSupabase().catch(() => {});
     syncMessageTemplatesFromSupabase().catch(() => {});
+    syncOwnerCredentialsFromSupabase().catch(() => {});
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();

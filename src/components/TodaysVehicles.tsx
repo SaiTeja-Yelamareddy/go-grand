@@ -138,7 +138,12 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
 
   const formatServices = (services?: string[] | string) => {
     if (!services) return '-';
-    if (Array.isArray(services)) return services.join(', ');
+    if (Array.isArray(services)) {
+      return services.length > 0 ? services[0] : '-';
+    }
+    if (typeof services === 'string' && services.trim()) {
+      return services.split(',')[0].trim() || '-';
+    }
     return services;
   };
 

@@ -294,10 +294,15 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
 
   const handleRemoveService = (serviceName: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      selectedServices: prev.selectedServices.filter((s) => s !== serviceName),
-    }));
+    setFormData((prev) => {
+      if (prev.selectedServices[0] === serviceName) {
+        return { ...prev, selectedServices: [] };
+      }
+      return {
+        ...prev,
+        selectedServices: prev.selectedServices.filter((s) => s !== serviceName),
+      };
+    });
   };
 
   const validateForm = (): boolean => {
@@ -863,7 +868,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               >
                 <span className="truncate text-slate-900 dark:text-white">
                   {formData.selectedServices.length > 0
-                    ? formData.selectedServices.join(', ')
+                    ? formData.selectedServices[0]
                     : 'Choose a package or service...'}
                 </span>
                 <ChevronDown size={15} className="text-slate-400 shrink-0 ml-1" />
@@ -912,7 +917,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                   <div className="p-1.5 space-y-0.5 overflow-y-auto max-h-48">
                     {filteredPackageSections.length > 0 ? (
                       filteredPackageSections.map((sectionName) => {
-                        const isSelected = formData.selectedServices.includes(sectionName);
+                        const isSelected =
+                          formData.selectedServices.length > 0 &&
+                          formData.selectedServices[0].toLowerCase() === sectionName.toLowerCase();
                         return (
                           <button
                             type="button"
@@ -953,7 +960,8 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {packageSections.map((secName) => {
-                    const isSelected = formData.selectedServices.includes(secName);
+                    const primaryService = formData.selectedServices.length > 0 ? formData.selectedServices[0] : '';
+                    const isSelected = primaryService.toLowerCase() === secName.toLowerCase();
                     return (
                       <button
                         key={secName}
@@ -974,26 +982,28 @@ export const JobSheet: React.FC<JobSheetProps> = ({
             )}
 
             {/* Selected Service Pills */}
-            {formData.selectedServices.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {formData.selectedServices.filter(srvName => packageSections.includes(srvName)).map((srvName) => (
+            {formData.selectedServices.length > 0 && (() => {
+              const primaryService = formData.selectedServices[0];
+              if (!primaryService) return null;
+              return (
+                <div className="flex flex-wrap gap-1.5 pt-1">
                   <span
-                    key={srvName}
+                    key={primaryService}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/30 rounded-lg text-[11px] font-bold text-amber-950 dark:text-amber-300 shadow-2xs"
                   >
                     <Check size={12} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>{srvName}</span>
+                    <span>{primaryService}</span>
                     <button
                       type="button"
-                      onClick={() => handleRemoveService(srvName)}
+                      onClick={() => handleRemoveService(primaryService)}
                       className="text-amber-800 dark:text-amber-400 hover:text-rose-500 dark:hover:text-rose-400 p-0.5 cursor-pointer ml-0.5"
                     >
                       <X size={12} />
                     </button>
                   </span>
-                ))}
-              </div>
-            )}
+                </div>
+              );
+            })()}
 
             {/* Price & Currency Input */}
             <div className="space-y-1.5 pt-1">

@@ -182,7 +182,10 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
 
   const formatServices = (val: string[] | string | undefined) => {
     if (Array.isArray(val)) {
-      return val.length > 0 ? val.join(', ') : 'Standard Service';
+      return val.length > 0 ? val[0] : 'Standard Service';
+    }
+    if (typeof val === 'string' && val.trim()) {
+      return val.split(',')[0].trim() || 'Standard Service';
     }
     return val || 'Standard Service';
   };

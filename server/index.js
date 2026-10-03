@@ -615,8 +615,9 @@ async function connectToWhatsAppUnlocked(force = false) {
       getMessage: async (key) => {
         const msgId = key?.id;
         if (!msgId) return undefined;
+        let entry = null;
         try {
-          let entry = sentMessagesStore.get(msgId);
+          entry = sentMessagesStore.get(msgId);
           if (!entry) {
             entry = await lookupMessageInSupabase(msgId);
           }
@@ -642,14 +643,8 @@ Result: PENDING`);
             return undefined;
           }
 
-          // Ensure session is asserted for participant
-          try {
-            if (sock && sock.assertSessions) {
-              await sock.assertSessions([participant], true);
-            }
-          } catch (sessionErr) {
-            console.warn(`[BAILEYS RETRY] Session assertion notice: ${sessionErr.message}`);
-          }
+          // Mark retry in-progress so Layer-2 watchdog cooperates and yields to native Baileys
+          entry._retryInProgress = true;
 
           const msg = await getMessageForRetry(key);
           if (msg) {
@@ -670,8 +665,13 @@ Result: RESOLVED`);
 
           return undefined;
         } catch (retryErr) {
-          console.error(`[BAILEYS RETRY] ❌ Error in getMessage handler for ${key?.id}:`, retryErr.message);
+          const errMsg = retryErr?.message || String(retryErr || 'Unknown error');
+          console.error(`[BAILEYS RETRY] ❌ Error in getMessage handler for ${key?.id}:`, errMsg);
           return undefined;
+        } finally {
+          if (entry) {
+            entry._retryInProgress = false;
+          }
         }
       },
     });
@@ -783,29 +783,47 @@ Result: RESOLVED`);
       }
     });
 
-    // Layer 2: Watchdog & Rescue Resend Interceptor
+    // Helper to verify socket is open and actively connected
+    const isSocketActive = () => Boolean(newSock && newSock.ws && newSock.ws.isOpen && !newSock.ws.isClosed);
+
+    // Layer 2: Watchdog & Rescue Resend Interceptor (Cooperative Fallback)
     newSock.ws.on('CB:receipt', async (node) => {
       if (currentInstance !== socketInstanceId) return;
+      let msgId = null;
       try {
         const { attrs, content } = node || {};
         if (attrs?.type !== 'retry') return;
 
-        const msgId = attrs.id;
+        msgId = attrs.id;
         const remoteJid = attrs.from;
         const participant = attrs.participant || remoteJid;
         const retryNode = Array.isArray(content) ? content.find((c) => c?.tag === 'retry') : null;
         const retryCount = parseInt(retryNode?.attrs?.count || '1', 10);
 
-        // Deduplication check: prevent duplicate resends if both Baileys internal and interceptor trigger
-        const retryDedupeKey = `${msgId}:${participant}:${retryCount}`;
-        if (inflightRetryResends.has(retryDedupeKey)) {
+        if (!msgId) return;
+
+        // Deduplication: Lock at the message ID level so concurrent stanzas (or device fan-outs)
+        // cannot trigger multiple simultaneous rescue operations for the same message.
+        if (inflightRetryResends.has(msgId)) {
           return;
         }
-        inflightRetryResends.add(retryDedupeKey);
-        setTimeout(() => inflightRetryResends.delete(retryDedupeKey), 8000);
+        inflightRetryResends.add(msgId);
+        setTimeout(() => inflightRetryResends.delete(msgId), 10000);
 
-        // Allow Baileys native sendMessagesAgain a short window (150ms) to execute via getMessage
-        await new Promise((r) => setTimeout(r, 150));
+        // Pre-check: if socket is already closed or shutting down, exit cleanly without attempting sends
+        if (!isSocketActive() || currentInstance !== socketInstanceId) {
+          console.log(`[BAILEYS RETRY] ℹ️ Socket #${currentInstance} is closed/inactive. Bypassing rescue for ${msgId} to allow clean reconnect.`);
+          return;
+        }
+
+        // Allow Baileys native sendMessagesAgain a cooperative window (1200ms) to execute via getMessage
+        await new Promise((r) => setTimeout(r, 1200));
+
+        // Re-check socket health immediately after wait window: if socket closed in interim, exit cleanly!
+        if (!isSocketActive() || currentInstance !== socketInstanceId) {
+          console.log(`[BAILEYS RETRY] ℹ️ Socket #${currentInstance} closed during wait window. Aborting rescue for ${msgId} to allow clean reconnect.`);
+          return;
+        }
 
         let entry = sentMessagesStore.get(msgId);
         if (!entry) {
@@ -827,8 +845,14 @@ Result: NOT_FOUND_IN_STORE`);
           return;
         }
 
-        // If native Baileys sendMessagesAgain already successfully re-sent the message, skip duplicate rescue
-        if (entry._retryHandled && (Date.now() - entry._retryHandled < 4000)) {
+        // If native Baileys sendMessagesAgain is in-progress or recently re-sent the message, skip duplicate rescue!
+        if (entry._retryInProgress || (entry._retryHandled && (Date.now() - entry._retryHandled < 10000))) {
+          return;
+        }
+
+        // Final socket health check before starting rescue session assertion and relay
+        if (!isSocketActive() || currentInstance !== socketInstanceId) {
+          console.log(`[BAILEYS RETRY] ℹ️ Socket #${currentInstance} closed before rescue resend. Aborting for ${msgId}.`);
           return;
         }
 
@@ -837,10 +861,21 @@ Result: NOT_FOUND_IN_STORE`);
 
         let sessionAsserted = false;
         try {
-          await newSock.assertSessions([participant], true);
-          sessionAsserted = true;
+          if (isSocketActive()) {
+            await newSock.assertSessions([participant], true);
+            sessionAsserted = true;
+          }
         } catch (sessErr) {
-          console.warn(`[BAILEYS RETRY] Rescue session assertion warning: ${sessErr.message}`);
+          if (!isSocketActive()) {
+            console.log(`[BAILEYS RETRY] ℹ️ Session assertion for ${msgId} aborted because socket closed.`);
+            return;
+          }
+          console.warn(`[BAILEYS RETRY] Rescue session assertion warning: ${sessErr?.message || sessErr}`);
+        }
+
+        if (!isSocketActive() || currentInstance !== socketInstanceId) {
+          console.log(`[BAILEYS RETRY] ℹ️ Socket closed during session assertion. Aborting rescue for ${msgId}.`);
+          return;
         }
 
         const reconstructedMsg = await getMessageForRetry({
@@ -862,6 +897,11 @@ Session assertion: ${sessionAsserted ? 'SUCCESS' : 'FAILED'}
 Re-encryption: FAILED
 Resend: FAILED
 Result: RECONSTRUCTION_FAILED`);
+          return;
+        }
+
+        if (!isSocketActive() || currentInstance !== socketInstanceId) {
+          console.log(`[BAILEYS RETRY] ℹ️ Socket closed before relayMessage. Aborting rescue for ${msgId}.`);
           return;
         }
 
@@ -894,7 +934,12 @@ Re-encryption: SUCCESS
 Resend: RESCUE_SUCCESS
 Result: RESOLVED`);
       } catch (interceptErr) {
-        console.error(`[BAILEYS RETRY RECEIPT] ❌ Error in rescue handler:`, interceptErr.message);
+        const errText = interceptErr?.stack || interceptErr?.message || (typeof interceptErr === 'object' ? JSON.stringify(interceptErr) : String(interceptErr || 'Unknown error'));
+        if (String(errText).includes('Connection Closed') || String(errText).includes('428')) {
+          console.warn(`[BAILEYS RETRY] ℹ️ Rescue for ${msgId || 'unknown'} cleanly aborted: connection closed (${errText.split('\n')[0]})`);
+        } else {
+          console.error(`[BAILEYS RETRY RECEIPT] ❌ Error in rescue handler for ${msgId || 'unknown'}:`, errText);
+        }
       }
     });
   } catch (error) {

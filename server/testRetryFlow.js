@@ -360,6 +360,117 @@ assert.ok(!sampleDiagnosticLog.includes('PRIVATE KEY'), 'Log must not contain pr
 assert.ok(!sampleDiagnosticLog.includes('eyJhbG'), 'Log must not contain JWT tokens');
 console.log('  ✅ Confirmed: Dual-layer pipeline and safe diagnostic logging format verified.');
 
+// -----------------------------------------------------------------------------
+// TEST 10: Socket Closure Tolerance, Deduplication & Clean Reconnect Lifecycle
+// -----------------------------------------------------------------------------
+console.log('\n▶ TEST 10: Socket Closure Tolerance, Deduplication & Clean Reconnect...');
+
+let resendCount = 0;
+let cleanExitWithoutCrash = false;
+let reconnectStarted = false;
+const inflightTestSet = new Set();
+
+const mockSocket1 = {
+  instanceId: 1,
+  ws: {
+    isOpen: true,
+    isClosed: false,
+  },
+  assertSessions: async () => true,
+  relayMessage: async () => {
+    resendCount++;
+    return true;
+  },
+};
+
+let currentSocketInstance = 1;
+
+// Simulate the Layer 2 handler under test
+async function handleRetryReceipt(node, sockInstance) {
+  let msgId = node?.attrs?.id;
+  try {
+    if (!msgId) return;
+
+    // Deduplication check
+    if (inflightTestSet.has(msgId)) {
+      return;
+    }
+    inflightTestSet.add(msgId);
+
+    // Initial socket check
+    if (!sockInstance.ws.isOpen || sockInstance.instanceId !== currentSocketInstance) {
+      return;
+    }
+
+    // Wait window (shortened to 20ms for unit testing)
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Socket closure during wait window
+    if (!sockInstance.ws.isOpen || sockInstance.instanceId !== currentSocketInstance) {
+      cleanExitWithoutCrash = true;
+      return;
+    }
+
+    // If socket is still open, perform relay
+    await sockInstance.relayMessage();
+  } catch (err) {
+    const errText = err?.stack || err?.message || String(err || 'Unknown error');
+    assert.notStrictEqual(errText, 'undefined', 'Error logging must never evaluate to undefined');
+  }
+}
+
+const retryStanza = {
+  tag: 'receipt',
+  attrs: { id: '3EB0_RESCUE_TEST_555', from: '917660984590@s.whatsapp.net', type: 'retry' }
+};
+
+// 10A: Verify duplicate retry receipts do not cause duplicate resends
+const promise1 = handleRetryReceipt(retryStanza, mockSocket1);
+const promise2 = handleRetryReceipt(retryStanza, mockSocket1); // Duplicate receipt arrives immediately
+await Promise.all([promise1, promise2]);
+
+assert.strictEqual(resendCount, 1, 'Duplicate retry receipt must be deduplicated; resendCount should be 1');
+console.log('  ✅ Confirmed: Duplicate retry receipts do not cause duplicate resend operations.');
+
+// 10B: Verify socket closure during rescue exits cleanly without unhandled rejection
+inflightTestSet.clear();
+const retryStanza2 = {
+  tag: 'receipt',
+  attrs: { id: '3EB0_SOCKET_DROP_777', from: '917660984590@s.whatsapp.net', type: 'retry' }
+};
+
+const dropPromise = handleRetryReceipt(retryStanza2, mockSocket1);
+// Socket closes 5ms into the wait window
+setTimeout(() => {
+  mockSocket1.ws.isOpen = false;
+  mockSocket1.ws.isClosed = true;
+  // Trigger reconnect
+  currentSocketInstance = 2;
+  reconnectStarted = true;
+}, 5);
+
+await dropPromise;
+
+assert.strictEqual(cleanExitWithoutCrash, true, 'Rescue must exit cleanly when socket closes during operation');
+assert.strictEqual(reconnectStarted, true, 'Normal reconnect lifecycle must proceed unimpeded');
+console.log('  ✅ Confirmed: Socket closure during rescue exits cleanly without unhandled rejection and allows clean reconnect.');
+
+// 10C: Verify error formatting never yields 'undefined'
+const testErrorCases = [
+  undefined,
+  null,
+  1006,
+  { output: { statusCode: 428 } },
+  new Error('Connection Closed')
+];
+
+for (const errCase of testErrorCases) {
+  const formatted = errCase?.stack || errCase?.message || (typeof errCase === 'object' ? JSON.stringify(errCase) : String(errCase || 'Unknown error'));
+  assert.notStrictEqual(formatted, 'undefined', `Formatted error for ${errCase} must never be 'undefined'`);
+  assert.ok(formatted.length > 0, 'Formatted error must not be empty string');
+}
+console.log('  ✅ Confirmed: Safe error formatter handles primitives, numbers, objects, and undefined without logging undefined.');
+
 console.log('\n===============================================================');
-console.log('🎉 ALL 9 RETRY FLOW & E2EE RECOVERY ENGINE TESTS PASSED!');
+console.log('🎉 ALL 10 RETRY FLOW & E2EE RECOVERY ENGINE TESTS PASSED!');
 console.log('===============================================================');

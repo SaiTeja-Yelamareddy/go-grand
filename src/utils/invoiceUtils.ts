@@ -1,7 +1,13 @@
 import { type JobRecord } from './draftStorage';
 import { getStoredUpiId, getUpiEnabled } from './upiStorage';
 import { getWhatsAppBackendUrl } from '../config/apiConfig';
-import { getMessageTemplates, renderTemplate, SHOP_NAME } from './templateStorage';
+import {
+  getMessageTemplates,
+  renderTemplate,
+  formatMessageDateIST,
+  formatMessageTimeIST,
+  SHOP_NAME,
+} from './templateStorage';
 
 /**
  * Generates a consistent sequential bill number from ID/timestamp
@@ -101,6 +107,8 @@ export function formatWhatsAppBillText(record: JobRecord): string {
     amount: total,
     bill_no: billNo,
     shop_name: SHOP_NAME,
+    date: formatMessageDateIST(new Date()),
+    time: formatMessageTimeIST(new Date()),
   });
 }
 
@@ -225,7 +233,8 @@ export function formatVehicleReadyMessage(
   vehicleNumber?: string,
   amount?: string | number,
   services?: string[] | string,
-  billNo?: string
+  billNo?: string,
+  sendDate?: Date | string | number
 ): string {
   const servicesText = Array.isArray(services)
     ? services.join(', ')
@@ -240,6 +249,8 @@ export function formatVehicleReadyMessage(
     service: servicesText,
     bill_no: billNo,
     shop_name: SHOP_NAME,
+    date: formatMessageDateIST(sendDate || new Date()),
+    time: formatMessageTimeIST(sendDate || new Date()),
   });
 }
 
@@ -271,7 +282,8 @@ export async function sendVehicleReadyWhatsAppViaBackend(record: JobRecord): Pro
         record.vehicleNumber,
         finalAmount,
         record.services || record.service,
-        billNo
+        billNo,
+        new Date()
       );
 
       const idempotencyKey = record.id ? `ready_${record.id}_${Date.now()}` : undefined;
@@ -310,7 +322,8 @@ export function formatVehicleReceivedMessage(
   vehicleNumber?: string,
   services?: string[] | string,
   amount?: string | number,
-  billNo?: string
+  billNo?: string,
+  receivedAt?: Date | string | number
 ): string {
   const servicesText = Array.isArray(services)
     ? services.join(', ')
@@ -325,6 +338,8 @@ export function formatVehicleReceivedMessage(
     amount: amount,
     bill_no: billNo,
     shop_name: SHOP_NAME,
+    date: formatMessageDateIST(receivedAt || new Date()),
+    time: formatMessageTimeIST(receivedAt || new Date()),
   });
 }
 
@@ -340,9 +355,95 @@ export async function sendVehicleReceivedWhatsAppViaBackend(record: JobRecord): 
     record.vehicleNumber,
     record.services || record.service,
     finalAmount,
-    billNo
+    billNo,
+    record.createdAt || new Date()
   );
   const idempotencyKey = record.id ? `recv_${record.id}_${Date.now()}` : undefined;
   return sendWhatsAppMessageViaBackend(record.phoneNumber, msg, idempotencyKey);
+}
+
+/**
+ * Formats a promotional WhatsApp message using the configured promotional template.
+ * [Date] and [Time] represent the actual send timestamp in Asia/Kolkata timezone.
+ */
+export function formatPromotionalMessage(
+  customerName?: string,
+  vehicleName?: string,
+  vehicleNumber?: string,
+  services?: string[] | string,
+  amount?: string | number,
+  billNo?: string,
+  sendDate?: Date | string | number
+): string {
+  const servicesText = Array.isArray(services)
+    ? services.join(', ')
+    : services || 'Car Wash & Detailing';
+
+  const templates = getMessageTemplates();
+  return renderTemplate(templates.promotional, {
+    customer_name: customerName,
+    vehicle_model: vehicleName,
+    vehicle_number: vehicleNumber,
+    service: servicesText,
+    amount: amount,
+    bill_no: billNo,
+    shop_name: SHOP_NAME,
+    date: formatMessageDateIST(sendDate || new Date()),
+    time: formatMessageTimeIST(sendDate || new Date()),
+  });
+}
+
+/**
+ * Sends a promotional WhatsApp message via the backend.
+ */
+export async function sendPromotionalWhatsAppViaBackend(
+  phoneNumber: string,
+  message: string,
+  job?: JobRecord,
+  idempotencyKey?: string
+): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+  const backendUrl = getWhatsAppBackendUrl();
+  try {
+    const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
+    if (statusRes && statusRes.ok) {
+      const statusData = await statusRes.json();
+      if (!statusData.connected) {
+        return {
+          success: false,
+          method: 'backend',
+          error: 'WhatsApp is not connected. Scan QR code in WhatsApp Settings to link your phone.',
+        };
+      }
+
+      // Try dedicated promotional endpoint first
+      const promoRes = await fetch(`${backendUrl}/api/whatsapp/send-promotional`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber,
+          message,
+          customerName: job?.customerName,
+          vehicleNumber: job?.vehicleNumber,
+          jobId: job?.id,
+          idempotencyKey,
+        }),
+      }).catch(() => null);
+
+      if (promoRes && promoRes.ok) {
+        const promoData = await promoRes.json();
+        if (promoData.success) {
+          return { success: true, method: 'backend' };
+        }
+      }
+
+      // Fallback to standard backend message endpoint
+      return sendWhatsAppMessageViaBackend(phoneNumber, message, idempotencyKey);
+    }
+  } catch (err: any) {
+    console.error('Promotional WhatsApp backend send failed:', err);
+    return { success: false, method: 'backend', error: err?.message || 'WhatsApp server error' };
+  }
+
+  return { success: false, method: 'backend', error: 'WhatsApp server is offline or unreachable' };
 }
 

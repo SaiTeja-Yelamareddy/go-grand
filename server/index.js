@@ -18,6 +18,9 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   Browsers,
+  proto,
+  BufferJSON,
+  generateWAMessageContent,
 } from '@whiskeysockets/baileys';
 import { useSupabaseAuthState, getAuthStateDiagnostics } from './supabaseAuth.js';
 import {
@@ -141,6 +144,263 @@ const connectionInitMutex = new Mutex();
 const logger = pino({ level: 'silent' }); // Silent pino to prevent noisy internal logs
 const httpsAgent = new https.Agent({ keepAlive: true });
 
+// IST Date & Time Formatters (Asia/Kolkata timezone: 03 October 2026, 07:25 PM)
+function formatMessageDateIST(dateInput) {
+  try {
+    const d = dateInput ? new Date(dateInput) : new Date();
+    const validDate = isNaN(d.getTime()) ? new Date() : d;
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    }).format(validDate);
+  } catch {
+    return '03 October 2026';
+  }
+}
+
+function formatMessageTimeIST(dateInput) {
+  try {
+    const d = dateInput ? new Date(dateInput) : new Date();
+    const validDate = isNaN(d.getTime()) ? new Date() : d;
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    })
+      .format(validDate)
+      .replace(/\u202f|\u00a0/g, ' ')
+      .toUpperCase();
+  } catch {
+    return '07:25 PM';
+  }
+}
+
+// ==============================================================================
+// WHATSAPP MESSAGE RETRY / ENCRYPTION RECOVERY ENGINE (E2EE RETRY & getMessage)
+// Resolves "Waiting for this message. This may take a while. Check your phone."
+// ==============================================================================
+const sentMessagesStore = new Map();
+let saveSentMessagesDebounceTimer = null;
+
+async function loadSentMessagesStore() {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'wa_sent_messages_recovery')
+      .maybeSingle();
+
+    if (!error && data && Array.isArray(data.value)) {
+      data.value.forEach((item) => {
+        if (item && item.messageId) {
+          sentMessagesStore.set(item.messageId, item);
+        }
+      });
+      console.log(`📋 [MESSAGE RECOVERY] Loaded ${sentMessagesStore.size} recent sent message recovery records from Supabase.`);
+    }
+  } catch (err) {
+    console.warn('[MESSAGE RECOVERY] Warning loading recovery store:', err.message);
+  }
+}
+
+async function persistSentMessagesStore() {
+  try {
+    // Retain last 250 records to prevent database bloat while providing ample retry window
+    const recentRecords = Array.from(sentMessagesStore.values()).slice(-250);
+    await supabase.from('app_settings').upsert(
+      {
+        key: 'wa_sent_messages_recovery',
+        value: recentRecords,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'key' }
+    );
+  } catch (err) {
+    console.warn('[MESSAGE RECOVERY] Warning persisting recovery store:', err.message);
+  }
+}
+
+function recordSentMessage(entry) {
+  if (!entry || !entry.messageId) return;
+
+  // Clone protoMessage safely using BufferJSON replacer
+  let safeProto = null;
+  if (entry.protoMessage) {
+    try {
+      safeProto = JSON.parse(JSON.stringify(entry.protoMessage, BufferJSON.replacer));
+    } catch (e) {
+      safeProto = null;
+    }
+  }
+
+  const record = {
+    messageId: entry.messageId,
+    remoteJid: entry.remoteJid,
+    type: entry.type || 'text',
+    textMessage: entry.textMessage || '',
+    jobId: entry.jobId || entry.job?.id || null,
+    jobData: entry.job ? {
+      id: entry.job.id,
+      vehicleNumber: entry.job.vehicleNumber,
+      vehicleName: entry.job.vehicleName,
+      customerName: entry.job.customerName,
+      phoneNumber: entry.job.phoneNumber,
+      price: entry.job.price,
+      discount: entry.job.discount,
+      services: entry.job.services || entry.job.service,
+      billNo: entry.job.billNo,
+      createdAt: entry.job.createdAt,
+    } : (entry.jobData || null),
+    upiId: entry.upiId || null,
+    protoMessage: safeProto,
+    timestamp: Date.now(),
+  };
+
+  sentMessagesStore.set(entry.messageId, record);
+
+  // Evict older entries if size exceeds 300
+  if (sentMessagesStore.size > 300) {
+    const oldestKey = sentMessagesStore.keys().next().value;
+    sentMessagesStore.delete(oldestKey);
+  }
+
+  // Debounce saving to Supabase to prevent spamming on rapid sends
+  if (saveSentMessagesDebounceTimer) {
+    clearTimeout(saveSentMessagesDebounceTimer);
+  }
+  saveSentMessagesDebounceTimer = setTimeout(() => {
+    persistSentMessagesStore().catch((err) => console.warn('[MESSAGE RECOVERY] Persist warning:', err.message));
+  }, 1500);
+}
+
+async function getMessageForRetry(key) {
+  const msgId = key?.id;
+  if (!msgId) return undefined;
+
+  let entry = sentMessagesStore.get(msgId);
+
+  // Fallback to Supabase app_settings if not in memory
+  if (!entry) {
+    try {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'wa_sent_messages_recovery')
+        .maybeSingle();
+      if (!error && data && Array.isArray(data.value)) {
+        const found = data.value.find((item) => item.messageId === msgId);
+        if (found) {
+          entry = found;
+          sentMessagesStore.set(msgId, found);
+        }
+      }
+    } catch (e) {
+      console.warn('[BAILEYS RETRY] Warning looking up message in Supabase:', e.message);
+    }
+  }
+
+  if (!entry) {
+    console.warn(`[BAILEYS RETRY] ⚠️ Message ID '${msgId}' not found in recovery store.`);
+    return undefined;
+  }
+
+  console.log(`[BAILEYS RETRY] 🔄 Reconstructing message for ID '${msgId}' (Type: ${entry.type}, Target: ${entry.remoteJid || key.remoteJid})...`);
+
+  // 1. If protoMessage was cached, reconstruct directly
+  if (entry.protoMessage) {
+    try {
+      const parsedProto = JSON.parse(JSON.stringify(entry.protoMessage), BufferJSON.reviver);
+      return proto.Message.fromObject(parsedProto);
+    } catch (protoErr) {
+      console.warn('[BAILEYS RETRY] Failed reconstructing protoMessage, falling back to dynamic generator:', protoErr.message);
+    }
+  }
+
+  // 2. Dynamic reconstruction based on message type (NO PDF BINARY PERSISTED)
+  if (entry.type === 'pdf') {
+    let job = entry.jobData;
+    if (!job && entry.jobId) {
+      try {
+        const { data } = await supabase.from('jobs').select('*').eq('id', entry.jobId).maybeSingle();
+        if (data) {
+          job = {
+            id: data.id,
+            vehicleNumber: data.vehicle_number,
+            customerName: data.customer_name,
+            phoneNumber: data.phone_number,
+            vehicleName: data.vehicle_name,
+            price: data.price,
+            discount: data.discount,
+            services: data.services,
+            billNo: data.bill_no,
+            createdAt: data.created_at,
+          };
+        }
+      } catch (dbErr) {
+        console.warn('[BAILEYS RETRY] Error querying job from Supabase:', dbErr.message);
+      }
+    }
+
+    if (job) {
+      console.log(`[BAILEYS RETRY] 📄 Regenerating invoice PDF dynamically for job ${job.vehicleNumber}...`);
+      const pdfBuffer = await generateInvoicePDF(job);
+      const vehNo = (job.vehicleNumber || 'Vehicle').toUpperCase();
+      if (sock && sock.waUploadToServer) {
+        const generated = await generateWAMessageContent(
+          {
+            document: pdfBuffer,
+            mimetype: 'application/pdf',
+            fileName: `Invoice_${vehNo}_GoGrand.pdf`,
+            caption: entry.textMessage,
+          },
+          { upload: sock.waUploadToServer }
+        );
+        return proto.Message.fromObject(generated);
+      }
+    }
+
+    return proto.Message.fromObject({
+      extendedTextMessage: { text: entry.textMessage || 'Your GO GRAND Invoice is ready.' },
+    });
+  }
+
+  if (entry.type === 'image_qr') {
+    if (entry.jobData && entry.upiId) {
+      try {
+        const priceStr = String(entry.jobData.price || '0').replace(/[^0-9.]/g, '');
+        const discountStr = String(entry.jobData.discount || '0').replace(/[^0-9.]/g, '');
+        const finalAmount = Math.max(0, (parseFloat(priceStr) || 0) - (parseFloat(discountStr) || 0)).toFixed(2);
+        const payeeName = encodeURIComponent('GO GRAND Car Wash and Detailing');
+        const vehNo = (entry.jobData.vehicleNumber || 'Vehicle').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const note = encodeURIComponent(`GO GRAND Bill - ${vehNo}`);
+        const upiUri = `upi://pay?pa=${entry.upiId}&pn=${payeeName}&am=${finalAmount}&cu=INR&tn=${note}`;
+        const qrBuffer = await QRCode.toBuffer(upiUri, { type: 'png', width: 600, margin: 2 });
+        if (sock && sock.waUploadToServer) {
+          const generated = await generateWAMessageContent(
+            { image: qrBuffer, caption: entry.textMessage, mimetype: 'image/png' },
+            { upload: sock.waUploadToServer }
+          );
+          return proto.Message.fromObject(generated);
+        }
+      } catch (qrErr) {
+        console.warn('[BAILEYS RETRY] QR reconstruction warning:', qrErr.message);
+      }
+    }
+
+    return proto.Message.fromObject({
+      extendedTextMessage: { text: entry.textMessage || 'Your vehicle is ready for pickup at GO GRAND.' },
+    });
+  }
+
+  // Text message reconstruction
+  return proto.Message.fromObject({
+    extendedTextMessage: { text: entry.textMessage || '' },
+  });
+}
+
 function scheduleReconnect(reason = 'temporary connection failure') {
   if (reconnectTimer || isConnected) return;
 
@@ -154,6 +414,27 @@ function scheduleReconnect(reason = 'temporary connection failure') {
     console.log(`[BAILEYS] 🔄 Executing scheduled reconnect #${reconnectAttempts}...`);
     connectToWhatsApp().catch((err) => console.error('[BAILEYS] Reconnect initialization failed:', err.message));
   }, backoffDelay);
+}
+
+let cachedBaileysVersion = null;
+let lastVersionFetchTime = 0;
+
+async function getCachedBaileysVersion() {
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  if (cachedBaileysVersion && (Date.now() - lastVersionFetchTime < ONE_DAY)) {
+    return cachedBaileysVersion;
+  }
+  try {
+    const versionPromise = fetchLatestBaileysVersion();
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500));
+    const { version } = await Promise.race([versionPromise, timeoutPromise]);
+    cachedBaileysVersion = version;
+    lastVersionFetchTime = Date.now();
+    return version;
+  } catch (err) {
+    if (cachedBaileysVersion) return cachedBaileysVersion;
+    return [2, 3000, 1015901307];
+  }
 }
 
 async function connectToWhatsApp(force = false) {
@@ -171,7 +452,9 @@ async function connectToWhatsAppUnlocked(force = false) {
     return;
   }
 
-  if (isConnecting) {
+  if (force) {
+    isConnecting = false;
+  } else if (isConnecting) {
     console.log('[BAILEYS] ⏳ Connection already in progress. Reusing in-flight connection.');
     return;
   }
@@ -198,7 +481,7 @@ async function connectToWhatsAppUnlocked(force = false) {
     authHandle = { clearAuthState, saveCreds, getDiagnostics };
     hasPersistedCreds = hasValidCreds;
 
-    const { version } = await fetchLatestBaileysVersion();
+    const version = await getCachedBaileysVersion();
 
     const newSock = makeWASocket({
       version,
@@ -217,6 +500,23 @@ async function connectToWhatsAppUnlocked(force = false) {
         { hostname: 'mmg.whatsapp.net' },
         { hostname: 'mms.whatsapp.net' },
       ],
+      getMessage: async (key) => {
+        try {
+          const msgId = key?.id;
+          if (!msgId) return undefined;
+          console.log(`[BAILEYS RETRY] 📩 Decryption retry request received for Message ID: ${msgId} from ${key.remoteJid}`);
+          const msg = await getMessageForRetry(key);
+          if (msg) {
+            console.log(`[BAILEYS RETRY] ✅ Successfully provided message for retry ID: ${msgId}`);
+            return msg;
+          }
+          console.warn(`[BAILEYS RETRY] ⚠️ Unable to resolve message for retry ID: ${msgId}`);
+          return undefined;
+        } catch (retryErr) {
+          console.error(`[BAILEYS RETRY] ❌ Error in getMessage handler for ${key?.id}:`, retryErr.message);
+          return undefined;
+        }
+      },
     });
 
     sock = newSock;
@@ -244,8 +544,9 @@ async function connectToWhatsAppUnlocked(force = false) {
 
       if (qr) {
         try {
-          currentQrCode = await QRCode.toDataURL(qr);
+          currentQrCode = await QRCode.toDataURL(qr, { margin: 2, scale: 6 });
           isConnected = false;
+          isConnecting = false;
           connectedUser = null;
           console.log(`[BAILEYS] 📱 QR Code generated for socket generation #${currentInstance}`);
           io.emit('qr', { qrCode: currentQrCode });
@@ -351,8 +652,12 @@ app.get('/api/whatsapp/health', async (req, res) => {
 });
 
 app.get('/api/whatsapp/status', async (req, res) => {
+  const includeDiagnostics = req.query.diagnostics === 'true';
   const authDiag = getAuthStateDiagnostics();
-  const persistedAuthDiag = authHandle?.getDiagnostics ? await authHandle.getDiagnostics().catch((error) => ({ diagnostic_error: error.message })) : null;
+  let persistedAuthDiag = null;
+  if (includeDiagnostics && authHandle?.getDiagnostics) {
+    persistedAuthDiag = await authHandle.getDiagnostics().catch((error) => ({ diagnostic_error: error.message }));
+  }
   res.json({
     connected: isConnected,
     user: connectedUser,
@@ -378,12 +683,20 @@ app.get('/api/whatsapp/status', async (req, res) => {
 });
 
 app.post('/api/whatsapp/connect', requireApiAuth, (req, res) => {
-  if (!isConnected && !isConnecting) {
-    console.log('📡 [/api/whatsapp/connect] Initiating connection...');
-    connectToWhatsApp();
+  const force = Boolean(req.body?.force);
+  if (!isConnected && (!isConnecting || force)) {
+    console.log(`📡 [/api/whatsapp/connect] Initiating connection (force: ${force})...`);
+    connectToWhatsApp(force);
   } else {
     console.log(`📡 [/api/whatsapp/connect] Connection already active/in-progress (connected: ${isConnected}, isConnecting: ${isConnecting})`);
   }
+
+  // If a QR code is already available in memory, broadcast it to all clients immediately
+  if (currentQrCode) {
+    io.emit('qr', { qrCode: currentQrCode });
+    io.emit('status', { status: 'qr_ready', connected: false, qrCode: currentQrCode });
+  }
+
   res.json({
     connected: isConnected,
     user: connectedUser,
@@ -421,8 +734,16 @@ app.post('/api/whatsapp/logout', requireApiAuth, async (req, res) => {
       }
     }
 
-    io.emit('status', { status: 'logged_out', connected: false });
+    io.emit('status', { status: 'connecting', connected: false });
     res.json({ success: true, message: 'Logged out successfully' });
+
+    // CRITICAL: Immediately generate a fresh QR code for linking the new phone without delay
+    setTimeout(() => {
+      console.log('🔄 [BAILEYS] Automatically generating new QR code after unlink...');
+      connectToWhatsApp(true).catch((err) => {
+        console.error('[BAILEYS] Error generating post-unlink QR:', err.message);
+      });
+    }, 150);
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -587,6 +908,17 @@ async function processMessageQueue() {
         }
 
         console.log(`✅ [MESSAGE QUEUE] Delivered ${item.type} trigger to ${cleanPhone} (MsgID: ${sentMsg?.key?.id})`);
+        if (sentMsg?.key?.id) {
+          recordSentMessage({
+            messageId: sentMsg.key.id,
+            remoteJid: targetJid,
+            type: item.type,
+            textMessage: item.textMessage,
+            job: item.job,
+            upiId: item.upiId,
+            protoMessage: sentMsg.message,
+          });
+        }
         if (item.idempotencyKey) {
           await markTriggerDelivered(item.idempotencyKey);
         }
@@ -647,6 +979,14 @@ app.post('/api/whatsapp/send-invoice', requireApiAuth, async (req, res) => {
 
       const sentMsg = await sock.sendMessage(targetJid, { text: message });
       if (idempotencyKey) await markTriggerDelivered(idempotencyKey);
+
+      recordSentMessage({
+        messageId: sentMsg.key.id,
+        remoteJid: targetJid,
+        type: 'text',
+        textMessage: message,
+        protoMessage: sentMsg.message,
+      });
 
       return res.json({
         success: true,
@@ -739,6 +1079,16 @@ app.post('/api/whatsapp/send-vehicle-ready-qr', requireApiAuth, async (req, res)
       }
 
       if (effectiveIdempotencyKey) await markTriggerDelivered(effectiveIdempotencyKey);
+
+      recordSentMessage({
+        messageId: sentMsg.key.id,
+        remoteJid: targetJid,
+        type: qrPngBuffer ? 'image_qr' : 'text',
+        textMessage: textMessage,
+        job: job,
+        upiId: targetUpiId,
+        protoMessage: sentMsg.message,
+      });
 
       return res.json({
         success: true,
@@ -840,6 +1190,15 @@ app.post('/api/whatsapp/send-invoice-pdf', requireApiAuth, async (req, res) => {
 
       if (effectiveIdempotencyKey) await markTriggerDelivered(effectiveIdempotencyKey);
 
+      recordSentMessage({
+        messageId: sentDoc.key.id,
+        remoteJid: targetJid,
+        type: 'pdf',
+        textMessage: textMessage,
+        job: job,
+        protoMessage: sentDoc.message,
+      });
+
       return res.json({
         success: true,
         messageId: sentDoc.key.id,
@@ -870,6 +1229,71 @@ app.post('/api/whatsapp/send-invoice-pdf', requireApiAuth, async (req, res) => {
     success: true,
     queued: true,
     message: 'Invoice PDF queued for delivery',
+    queueId: queueItem.id,
+  });
+});
+
+app.post('/api/whatsapp/send-promotional', requireApiAuth, async (req, res) => {
+  const { phoneNumber, message, customerName, vehicleNumber, jobId, idempotencyKey } = req.body;
+
+  if (!phoneNumber || !message) {
+    return res.status(400).json({
+      success: false,
+      error: 'Phone number and message text are required.',
+    });
+  }
+
+  if (idempotencyKey && deliveredTriggers.has(idempotencyKey)) {
+    return res.json({ success: true, message: 'Promotional message already delivered', alreadyDelivered: true });
+  }
+
+  let cleanPhone = phoneNumber.replace(/\D/g, '');
+  if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
+  const targetJid = `${cleanPhone}@s.whatsapp.net`;
+
+  if (isConnected && sock) {
+    try {
+      const sentMsg = await sock.sendMessage(targetJid, { text: message });
+      if (idempotencyKey) await markTriggerDelivered(idempotencyKey);
+
+      recordSentMessage({
+        messageId: sentMsg.key.id,
+        remoteJid: targetJid,
+        type: 'text',
+        textMessage: message,
+        jobId: jobId || null,
+        protoMessage: sentMsg.message,
+      });
+
+      console.log(`✅ [PROMOTIONAL] Sent promotional message to ${cleanPhone} (MsgID: ${sentMsg?.key?.id})`);
+
+      return res.json({
+        success: true,
+        messageId: sentMsg.key.id,
+        recipient: cleanPhone,
+      });
+    } catch (error) {
+      console.error('Direct promotional send failed:', error.message);
+      return res.status(400).json({ success: false, error: 'WhatsApp could not send promotional message. Make sure the number is valid and on WhatsApp.' });
+    }
+  }
+
+  // Enqueue for resilient delivery if temporarily reconnecting
+  const queueItem = {
+    id: `promo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    type: 'text',
+    phoneNumber: cleanPhone,
+    textMessage: message,
+    idempotencyKey,
+    createdAt: Date.now(),
+    attempts: 0,
+  };
+  await enqueueMessage(queueItem);
+
+  res.json({
+    success: true,
+    queued: true,
+    message: 'Promotional message queued for delivery',
     queueId: queueItem.id,
   });
 });
@@ -1076,9 +1500,17 @@ io.on('connection', (socket) => {
     qrCode: currentQrCode,
   });
 
+  if (currentQrCode) {
+    socket.emit('qr', { qrCode: currentQrCode });
+  }
+
   socket.on('request_qr', () => {
-    if (!isConnected && !isConnecting) {
-      connectToWhatsApp();
+    if (currentQrCode) {
+      socket.emit('qr', { qrCode: currentQrCode });
+      socket.emit('status', { status: 'qr_ready', connected: false, qrCode: currentQrCode });
+    } else if (!isConnected && !isConnecting) {
+      console.log('📡 [SOCKET] request_qr received, starting connection...');
+      connectToWhatsApp(true);
     }
   });
 });
@@ -1087,6 +1519,7 @@ server.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Go Grand WhatsApp Server running on port ${PORT} (0.0.0.0:${PORT})`);
   await loadDeliveredTriggers();
   await loadPendingQueue();
+  await loadSentMessagesStore();
   connectToWhatsApp();
   initBackupScheduler(supabase);
 });

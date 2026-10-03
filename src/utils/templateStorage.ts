@@ -6,6 +6,7 @@ export interface MessageTemplates {
   vehicleReady: string;
   whatsAppBill: string;
   sms: string;
+  promotional: string;
 }
 
 export const DEFAULT_MESSAGE_TEMPLATES: MessageTemplates = {
@@ -15,15 +16,18 @@ Hello [Customer Name] 👋
 
 Your [Vehicle Model] ([Vehicle Number]) has been received at *GO GRAND Car Wash & Detailing, Murakambattu*.
 
-We will notify you when your vehicle is ready.`,
-  vehicleReady: `🚗 *VEHICLE READY!*
+Received on [Date] at [Time]. 🚗✨
+
+We will notify you when your vehicle is ready!`,
+  vehicleReady: `✨ *VEHICLE READY!*
 
 Hello [Customer Name] 👋
 
 Your [Vehicle Model] ([Vehicle Number]) is now ready for pickup at *GO GRAND Car Wash & Detailing, Murakambattu*.
 
-Thank you for trusting GO GRAND with your vehicle. ✨
+Ready on [Date] at [Time]. 🚗✨
 
+Thank you for trusting GO GRAND with your vehicle.
 Drive clean. Drive happy. 🚘`,
   whatsAppBill: `🧾 *INVOICE*
 
@@ -31,10 +35,21 @@ Hello [Customer Name] 👋
 
 Your invoice for [Vehicle Model] ([Vehicle Number]) from *GO GRAND Car Wash & Detailing, Murakambattu* is ready.
 
+Date: [Date] at [Time]
 *Total Amount: ₹[Amount]*
 
 Thank you for choosing GO GRAND. 🚘`,
   sms: `GO GRAND: Your [Vehicle Model] ([Vehicle Number]) is ready for pickup. Amount: ₹[Amount].`,
+  promotional: `🎉 *SPECIAL OFFER FROM GO GRAND!*
+
+Hello [Customer Name] 👋
+
+Pamper your [Vehicle Model] ([Vehicle Number]) with our premium Car Wash & Detailing services!
+
+Exclusive offer on [Date] at [Time]. ✨
+
+Visit GO GRAND Car Wash & Detailing, Murakambattu.
+Drive clean. Drive happy. 🚗✨`,
 };
 
 export const TEMPLATE_STORAGE_KEY = 'go-grand-message-templates';
@@ -48,11 +63,56 @@ export interface TemplateVariables {
   amount?: string | number;
   bill_no?: string;
   shop_name?: string;
+  date?: string;
+  time?: string;
+  created_at?: string | Date | number;
+}
+
+/**
+ * Formats a Date object or timestamp in Indian Standard Time (Asia/Kolkata):
+ * Format: 03 October 2026 (DD MMMM YYYY)
+ */
+export function formatMessageDateIST(dateInput?: Date | string | number | null): string {
+  try {
+    const d = dateInput ? new Date(dateInput) : new Date();
+    const validDate = isNaN(d.getTime()) ? new Date() : d;
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    }).format(validDate);
+  } catch {
+    return '03 October 2026';
+  }
+}
+
+/**
+ * Formats a Date object or timestamp in Indian Standard Time (Asia/Kolkata):
+ * Format: 07:25 PM (hh:mm A)
+ */
+export function formatMessageTimeIST(dateInput?: Date | string | number | null): string {
+  try {
+    const d = dateInput ? new Date(dateInput) : new Date();
+    const validDate = isNaN(d.getTime()) ? new Date() : d;
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    })
+      .format(validDate)
+      .replace(/\u202f|\u00a0/g, ' ')
+      .toUpperCase();
+  } catch {
+    return '07:25 PM';
+  }
 }
 
 /**
  * Centralized dynamic token replacement function.
- * Safely replaces both friendly tokens (e.g. [Customer Name]) and legacy {{placeholders}}.
+ * Safely replaces both friendly tokens (e.g. [Customer Name], [Date], [Time]) and legacy {{placeholders}}.
+ * Uses Indian Standard Time (Asia/Kolkata) for Date (DD MMMM YYYY) and Time (hh:mm A).
  * If no dynamic tokens are present, ordinary text entered by the Owner is preserved 100% intact.
  */
 export function renderTemplate(template: string, vars: TemplateVariables): string {
@@ -77,6 +137,10 @@ export function renderTemplate(template: string, vars: TemplateVariables): strin
 
   const billNo = vars.bill_no?.trim() || '';
 
+  // Calculate Date and Time in Asia/Kolkata IST
+  const dateStr = vars.date?.trim() || formatMessageDateIST(vars.created_at);
+  const timeStr = vars.time?.trim() || formatMessageTimeIST(vars.created_at);
+
   return template
     // Friendly tokens [Customer Name] or legacy {{customer_name}}
     .replace(/(\[\s*Customer\s*Name\s*\]|\{\{\s*customer_name\s*\}\}|\{\{\s*customerName\s*\}\})/gi, customerName)
@@ -85,7 +149,9 @@ export function renderTemplate(template: string, vars: TemplateVariables): strin
     .replace(/(\[\s*Service\s*\]|\[\s*Services\s*\]|\{\{\s*service\s*\}\}|\{\{\s*services\s*\}\})/gi, service)
     .replace(/(\[\s*Amount\s*\]|\[\s*Total\s*Amount\s*\]|\{\{\s*amount\s*\}\})/gi, amtStr)
     .replace(/(\[\s*Bill\s*Number\s*\]|\[\s*Bill\s*No\s*\]|\[\s*Invoice\s*No\s*\]|\{\{\s*bill_no\s*\}\}|\{\{\s*billNo\s*\}\})/gi, billNo)
-    .replace(/(\[\s*Shop\s*Name\s*\]|\{\{\s*shop_name\s*\}\}|\{\{\s*shopName\s*\}\})/gi, shopName);
+    .replace(/(\[\s*Shop\s*Name\s*\]|\{\{\s*shop_name\s*\}\}|\{\{\s*shopName\s*\}\})/gi, shopName)
+    .replace(/(\[\s*Date\s*\]|\{\{\s*date\s*\}\})/gi, dateStr)
+    .replace(/(\[\s*Time\s*\]|\{\{\s*time\s*\}\})/gi, timeStr);
 }
 
 /**
@@ -99,6 +165,8 @@ export const SAMPLE_PREVIEW_VARIABLES: TemplateVariables = {
   amount: 1500,
   bill_no: 'GG-1025',
   shop_name: 'GO GRAND Car Wash & Detailing',
+  date: '03 October 2026',
+  time: '07:25 PM',
 };
 
 /**
@@ -126,6 +194,10 @@ export function getMessageTemplates(): MessageTemplates {
           typeof parsed.sms === 'string' && parsed.sms.trim()
             ? parsed.sms
             : DEFAULT_MESSAGE_TEMPLATES.sms,
+        promotional:
+          typeof parsed.promotional === 'string' && parsed.promotional.trim()
+            ? parsed.promotional
+            : DEFAULT_MESSAGE_TEMPLATES.promotional,
       };
     }
   } catch (e) {
@@ -153,6 +225,7 @@ export async function syncMessageTemplatesFromSupabase(): Promise<MessageTemplat
           vehicleReady: remote.vehicleReady || DEFAULT_MESSAGE_TEMPLATES.vehicleReady,
           whatsAppBill: remote.whatsAppBill || DEFAULT_MESSAGE_TEMPLATES.whatsAppBill,
           sms: remote.sms || DEFAULT_MESSAGE_TEMPLATES.sms,
+          promotional: remote.promotional || DEFAULT_MESSAGE_TEMPLATES.promotional,
         };
         try {
           localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(merged));
@@ -195,6 +268,10 @@ export async function saveMessageTemplates(
       typeof updates.sms === 'string' && updates.sms.trim()
         ? updates.sms.trim()
         : current.sms,
+    promotional:
+      typeof updates.promotional === 'string' && updates.promotional.trim()
+        ? updates.promotional.trim()
+        : current.promotional,
   };
 
   try {

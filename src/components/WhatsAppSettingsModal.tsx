@@ -37,6 +37,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
   const [urlSaveSuccess, setUrlSaveSuccess] = useState<boolean>(false);
   const retryTimerRef = useRef<number | null>(null);
   const retryAttemptRef = useRef(0);
+  const socketRef = useRef<Socket | null>(null);
 
   const activeBackendUrl = getWhatsAppBackendUrl();
 
@@ -111,6 +112,8 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
       console.log(`[WHATSAPP HEALTH] POST ${activeBackendUrl}/api/whatsapp/connect`);
       const res = await fetch(`${activeBackendUrl}/api/whatsapp/connect`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -130,6 +133,20 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
       setIsLoading(false);
     }
   };
+
+  // Proactive fast polling while waiting for QR code to ensure instantaneous rendering
+  useEffect(() => {
+    if (!isOpen || status === 'connected' || qrCode) return;
+
+    const interval = setInterval(() => {
+      fetchStatus(true);
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('request_qr');
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [isOpen, status, qrCode, activeBackendUrl]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -155,6 +172,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
         timeout: 12000,
         transports: ['websocket', 'polling'],
       });
+      socketRef.current = socket;
 
       socket.on('connect', () => {
         console.log('[WHATSAPP SOCKET] Connected');
@@ -162,6 +180,8 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
         clearRetryTimer();
         setServerOnline(true);
         fetchStatus(true);
+        // Automatically request fresh QR code immediately upon socket connection if unlinked
+        socket?.emit('request_qr');
       });
 
       socket.on('disconnect', () => {
@@ -197,6 +217,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
 
     return () => {
       clearRetryTimer();
+      socketRef.current = null;
       if (socket) {
         socket.off('connect');
         socket.off('disconnect');
@@ -225,12 +246,17 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
   const handleLogout = async () => {
     if (!window.confirm('Are you sure you want to unlink your WhatsApp account?')) return;
     setIsLoading(true);
+    setStatus('connecting');
+    setConnectedUser(null);
+    setQrCode(null);
     try {
       const res = await fetch(`${activeBackendUrl}/api/whatsapp/logout`, { method: 'POST' });
       if (res.ok) {
-        setStatus('connecting');
-        setConnectedUser(null);
-        setQrCode(null);
+        // Immediately request fresh QR code via socket and backend trigger without waiting
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('request_qr');
+        }
+        await handleManualConnect();
       }
     } catch (err) {
       console.error('Logout error:', err);
@@ -493,7 +519,30 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
               ) : (
                 <div className="py-8 space-y-3 flex flex-col items-center text-slate-500 dark:text-slate-400">
                   <RefreshCw className="w-8 h-8 animate-spin text-emerald-500" />
-                  <p className="text-xs font-medium">Starting WhatsApp Engine...</p>
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Preparing WhatsApp Engine...
+                  </p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center max-w-xs">
+                    Generating a fresh QR code for pairing. Please hold on a moment...
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsLoading(true);
+                      try {
+                        if (socketRef.current?.connected) {
+                          socketRef.current.emit('request_qr');
+                        }
+                        await handleManualConnect();
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="mt-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Instant Refresh QR</span>
+                  </button>
                 </div>
               )}
             </div>

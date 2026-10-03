@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MoreVertical, X, Car, Search, ChevronDown, Download, User, Trash2 } from 'lucide-react';
+import { MoreVertical, X, Car, Search, ChevronDown, Download, User, Trash2, Megaphone } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { Header } from './Header';
 import { getAllJobRecords, syncJobsFromSupabase, formatNumericDateIST, deleteJobRecord, restoreJobRecord, type JobRecord } from '../utils/draftStorage';
 import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
+import { PromotionalModal } from './PromotionalModal';
 import { useNotifications } from './NotificationSystem';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend } from '../utils/invoiceUtils';
 import { getUpiEnabled } from '../utils/upiStorage';
@@ -53,6 +54,8 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showWhatsAppSettingsModal, setShowWhatsAppSettingsModal] = useState(false);
+  const [showPromotionalModal, setShowPromotionalModal] = useState(false);
+  const [promotionalTargetRecord, setPromotionalTargetRecord] = useState<JobRecord | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -257,15 +260,29 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
               Total: {filteredRecords.length} / {allRecords.length}
             </div>
             {mode === 'owner' && (
-              <button
-                onClick={handleDownloadExcel}
-                disabled={filteredRecords.length === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-neutral-200 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-black rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[34px]"
-                title="Download filtered vehicles in Excel format"
-              >
-                <Download size={14} />
-                <span>Export Excel</span>
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    setPromotionalTargetRecord(null);
+                    setShowPromotionalModal(true);
+                  }}
+                  disabled={allRecords.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[34px]"
+                  title="Send promotional WhatsApp messages to customers"
+                >
+                  <Megaphone size={14} />
+                  <span>Promotional</span>
+                </button>
+                <button
+                  onClick={handleDownloadExcel}
+                  disabled={filteredRecords.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-neutral-200 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-black rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[34px]"
+                  title="Download filtered vehicles in Excel format"
+                >
+                  <Download size={14} />
+                  <span>Export Excel</span>
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -531,6 +548,19 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
                                   VEHICLE DETAILS
                                 </button>
 
+                                {mode === 'owner' && (
+                                  <button
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      setPromotionalTargetRecord(item);
+                                      setShowPromotionalModal(true);
+                                    }}
+                                    className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
+                                  >
+                                    PROMO MESSAGE 📢
+                                  </button>
+                                )}
+
                                 <button
                                   onClick={() => {
                                     setActiveMenuId(null);
@@ -733,6 +763,17 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
       <WhatsAppSettingsModal
         isOpen={showWhatsAppSettingsModal}
         onClose={() => setShowWhatsAppSettingsModal(false)}
+      />
+
+      {/* PROMOTIONAL WHATSAPP BROADCAST MODAL */}
+      <PromotionalModal
+        isOpen={showPromotionalModal}
+        onClose={() => {
+          setShowPromotionalModal(false);
+          setPromotionalTargetRecord(null);
+        }}
+        records={filteredRecords.length > 0 ? filteredRecords : allRecords}
+        initialTargetRecord={promotionalTargetRecord}
       />
     </div>
   );

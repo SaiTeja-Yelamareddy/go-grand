@@ -21,7 +21,9 @@ import makeWASocket, {
   proto,
   BufferJSON,
   generateWAMessageContent,
+  areJidsSameUser,
 } from '@whiskeysockets/baileys';
+import NodeCache from '@cacheable/node-cache';
 import { useSupabaseAuthState, getAuthStateDiagnostics } from './supabaseAuth.js';
 import {
   getDatabaseUsageMetrics,
@@ -139,9 +141,68 @@ let lastDisconnectCode = null;
 let lastReconnectAt = null;
 let hasPersistedCreds = false;
 let authHandle = null;
-const connectionInitMutex = new Mutex();
+// Module-level persistent retry counter cache (survives socket reconnections)
+const rawRetryCache = new NodeCache({
+  stdTTL: 3600, // 1 hour TTL
+  useClones: false,
+});
 
-const logger = pino({ level: 'silent' }); // Silent pino to prevent noisy internal logs
+const msgRetryCounterCache = {
+  get: (key) => {
+    const val = rawRetryCache.get(key);
+    if (val !== undefined) {
+      console.log(`[RETRY CACHE] 🔍 GET ${key} => Count: ${val}`);
+    }
+    return val;
+  },
+  set: (key, val) => {
+    console.log(`[RETRY CACHE] 📝 SET ${key} => Count: ${val}`);
+    return rawRetryCache.set(key, val);
+  },
+  del: (key) => {
+    console.log(`[RETRY CACHE] 🗑️ DEL ${key}`);
+    return rawRetryCache.del(key);
+  },
+  flushAll: () => {
+    console.log(`[RETRY CACHE] 🧹 flushAll called`);
+    return rawRetryCache.flushAll();
+  },
+};
+
+// In-flight retry resend tracker for deduplication
+const inflightRetryResends = new Set();
+
+// Safe diagnostic logger for Baileys: captures retry & crypto logs without credentials/keys
+const logger = pino({
+  level: process.env.BAILEYS_LOG_LEVEL || 'info',
+  hooks: {
+    logMethod(inputArgs, method) {
+      const firstArg = inputArgs[0];
+      // Never log private cryptographic credentials or noise keys
+      if (typeof firstArg === 'object' && firstArg !== null) {
+        if (firstArg.noiseKey || firstArg.signedIdentityKey || firstArg.signedPreKey || firstArg.creds) {
+          return;
+        }
+      }
+
+      // Filter and log only relevant protocol events (retries, decryption, sessions, errors)
+      const text = typeof firstArg === 'string'
+        ? firstArg
+        : (firstArg?.msg || JSON.stringify(firstArg || {}));
+
+      if (
+        text.includes('retry') ||
+        text.includes('session') ||
+        text.includes('decrypt') ||
+        text.includes('receipt') ||
+        text.includes('error') ||
+        text.includes('fail')
+      ) {
+        return method.apply(this, inputArgs);
+      }
+    },
+  },
+});
 const httpsAgent = new https.Agent({ keepAlive: true });
 
 // IST Date & Time Formatters (Asia/Kolkata timezone: 03 October 2026, 07:25 PM)
@@ -196,7 +257,16 @@ async function loadSentMessagesStore() {
     if (!error && data && Array.isArray(data.value)) {
       data.value.forEach((item) => {
         if (item && item.messageId) {
-          sentMessagesStore.set(item.messageId, item);
+          let revivedProto = item.protoMessage;
+          if (revivedProto) {
+            try {
+              revivedProto = JSON.parse(JSON.stringify(revivedProto), BufferJSON.reviver);
+            } catch (e) {}
+          }
+          sentMessagesStore.set(item.messageId, {
+            ...item,
+            protoMessage: revivedProto,
+          });
         }
       });
       console.log(`📋 [MESSAGE RECOVERY] Loaded ${sentMessagesStore.size} recent sent message recovery records from Supabase.`);
@@ -209,7 +279,21 @@ async function loadSentMessagesStore() {
 async function persistSentMessagesStore() {
   try {
     // Retain last 250 records to prevent database bloat while providing ample retry window
-    const recentRecords = Array.from(sentMessagesStore.values()).slice(-250);
+    const recentRecords = Array.from(sentMessagesStore.values()).slice(-250).map((rec) => {
+      let safeProto = null;
+      if (rec.protoMessage) {
+        try {
+          safeProto = JSON.parse(JSON.stringify(rec.protoMessage, BufferJSON.replacer));
+        } catch (e) {
+          safeProto = null;
+        }
+      }
+      return {
+        ...rec,
+        protoMessage: safeProto,
+      };
+    });
+
     await supabase.from('app_settings').upsert(
       {
         key: 'wa_sent_messages_recovery',
@@ -223,18 +307,36 @@ async function persistSentMessagesStore() {
   }
 }
 
+async function lookupMessageInSupabase(msgId) {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'wa_sent_messages_recovery')
+      .maybeSingle();
+
+    if (!error && data && Array.isArray(data.value)) {
+      const found = data.value.find((item) => item.messageId === msgId);
+      if (found) {
+        let revivedProto = found.protoMessage;
+        if (revivedProto) {
+          try {
+            revivedProto = JSON.parse(JSON.stringify(revivedProto), BufferJSON.reviver);
+          } catch (e) {}
+        }
+        const record = { ...found, protoMessage: revivedProto };
+        sentMessagesStore.set(msgId, record);
+        return record;
+      }
+    }
+  } catch (e) {
+    console.warn('[BAILEYS RETRY] Warning looking up message in Supabase:', e.message);
+  }
+  return null;
+}
+
 function recordSentMessage(entry) {
   if (!entry || !entry.messageId) return;
-
-  // Clone protoMessage safely using BufferJSON replacer
-  let safeProto = null;
-  if (entry.protoMessage) {
-    try {
-      safeProto = JSON.parse(JSON.stringify(entry.protoMessage, BufferJSON.replacer));
-    } catch (e) {
-      safeProto = null;
-    }
-  }
 
   const record = {
     messageId: entry.messageId,
@@ -255,7 +357,7 @@ function recordSentMessage(entry) {
       createdAt: entry.job.createdAt,
     } : (entry.jobData || null),
     upiId: entry.upiId || null,
-    protoMessage: safeProto,
+    protoMessage: entry.protoMessage || null, // Live object retained in memory for zero-loss instant retry
     timestamp: Date.now(),
   };
 
@@ -273,7 +375,7 @@ function recordSentMessage(entry) {
   }
   saveSentMessagesDebounceTimer = setTimeout(() => {
     persistSentMessagesStore().catch((err) => console.warn('[MESSAGE RECOVERY] Persist warning:', err.message));
-  }, 1500);
+  }, 1000);
 }
 
 async function getMessageForRetry(key) {
@@ -281,30 +383,13 @@ async function getMessageForRetry(key) {
   if (!msgId) return undefined;
 
   let entry = sentMessagesStore.get(msgId);
-
-  // Fallback to Supabase app_settings if not in memory
   if (!entry) {
-    try {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'wa_sent_messages_recovery')
-        .maybeSingle();
-      if (!error && data && Array.isArray(data.value)) {
-        const found = data.value.find((item) => item.messageId === msgId);
-        if (found) {
-          entry = found;
-          sentMessagesStore.set(msgId, found);
-        }
-      }
-    } catch (e) {
-      console.warn('[BAILEYS RETRY] Warning looking up message in Supabase:', e.message);
-    }
+    entry = await lookupMessageInSupabase(msgId);
   }
 
   if (!entry) {
     console.warn(`[BAILEYS RETRY] ⚠️ Message ID '${msgId}' not found in recovery store.`);
-    return undefined;
+    return undefined; // Must return undefined, never empty object {}
   }
 
   console.log(`[BAILEYS RETRY] 🔄 Reconstructing message for ID '${msgId}' (Type: ${entry.type}, Target: ${entry.remoteJid || key.remoteJid})...`);
@@ -312,8 +397,9 @@ async function getMessageForRetry(key) {
   // 1. If protoMessage was cached, reconstruct directly
   if (entry.protoMessage) {
     try {
-      const parsedProto = JSON.parse(JSON.stringify(entry.protoMessage), BufferJSON.reviver);
-      return proto.Message.fromObject(parsedProto);
+      const msgObj = proto.Message.fromObject(entry.protoMessage);
+      console.log(`[BAILEYS RETRY] ✅ Successfully reconstructed protoMessage from cache for ${msgId}`);
+      return msgObj;
     } catch (protoErr) {
       console.warn('[BAILEYS RETRY] Failed reconstructing protoMessage, falling back to dynamic generator:', protoErr.message);
     }
@@ -488,6 +574,7 @@ async function connectToWhatsAppUnlocked(force = false) {
       auth: state,
       printQRInTerminal: true,
       logger,
+      msgRetryCounterCache,
       browser: Browsers.ubuntu('Chrome'), // Standard Ubuntu Chrome tuple prevents 4-hour token invalidation
       keepAliveIntervalMs: 25000,         // Keep-alive ping every 25s prevents proxy/cloud idle drop
       connectTimeoutMs: 60000,
@@ -504,14 +591,20 @@ async function connectToWhatsAppUnlocked(force = false) {
         try {
           const msgId = key?.id;
           if (!msgId) return undefined;
-          console.log(`[BAILEYS RETRY] 📩 Decryption retry request received for Message ID: ${msgId} from ${key.remoteJid}`);
+          console.log(`[BAILEYS RETRY] 📩 Decryption retry request received by Baileys internal engine:
+            • Message ID: ${msgId}
+            • Remote JID: ${key.remoteJid}
+            • fromMe: ${key.fromMe}
+            • Participant: ${key.participant || 'none'}
+            • Timestamp: ${new Date().toISOString()}
+          `);
           const msg = await getMessageForRetry(key);
           if (msg) {
-            console.log(`[BAILEYS RETRY] ✅ Successfully provided message for retry ID: ${msgId}`);
+            console.log(`[BAILEYS RETRY] ✅ Successfully reconstructed and returned message for retry ID: ${msgId}`);
             return msg;
           }
           console.warn(`[BAILEYS RETRY] ⚠️ Unable to resolve message for retry ID: ${msgId}`);
-          return undefined;
+          return undefined; // Must return undefined, never empty object {}
         } catch (retryErr) {
           console.error(`[BAILEYS RETRY] ❌ Error in getMessage handler for ${key?.id}:`, retryErr.message);
           return undefined;
@@ -593,6 +686,102 @@ async function connectToWhatsAppUnlocked(force = false) {
         } else if (shouldReconnect) {
           scheduleReconnect(`socket closed with status ${statusCode || 'unknown'}`);
         }
+      }
+    });
+
+    // ==============================================================================
+    // RETRY RECEIPT INTERCEPTOR & RESCUE ENGINE
+    // Bypasses Baileys 6.7.24 fromMe=false bug on companion routing stanzas
+    // Ensures "Waiting for this message" is immediately decrypted and resolved!
+    // ==============================================================================
+    newSock.ws.on('CB:receipt', async (node) => {
+      if (currentInstance !== socketInstanceId) return;
+      try {
+        const { attrs, content } = node || {};
+        if (attrs?.type !== 'retry') return;
+
+        const msgId = attrs.id;
+        const remoteJid = attrs.from;
+        const participant = attrs.participant || remoteJid;
+        const recipient = attrs.recipient;
+        const retryNode = Array.isArray(content) ? content.find((c) => c?.tag === 'retry') : null;
+        const retryCount = parseInt(retryNode?.attrs?.count || '1', 10);
+
+        console.log(`[BAILEYS RETRY RECEIPT] 📩 Incoming Retry Receipt:
+          • Timestamp: ${new Date().toISOString()}
+          • Message ID: ${msgId}
+          • Remote JID: ${remoteJid}
+          • Participant: ${participant}
+          • Stanza Recipient: ${recipient || 'none'}
+          • Retry Counter: ${retryCount}
+        `);
+
+        // Check if message was sent by our application
+        let entry = sentMessagesStore.get(msgId);
+        if (!entry) {
+          entry = await lookupMessageInSupabase(msgId);
+        }
+
+        if (!entry) {
+          console.warn(`[BAILEYS RETRY RECEIPT] ⚠️ Message ID '${msgId}' was not found in sent recovery store.`);
+          return;
+        }
+
+        console.log(`[BAILEYS RETRY RECEIPT] 🎯 Verified message in recovery store. Type: ${entry.type}, Target: ${entry.remoteJid}`);
+
+        // Deduplication check: prevent duplicate resends if both Baileys internal and interceptor trigger
+        const retryDedupeKey = `${msgId}:${participant}:${retryCount}`;
+        if (inflightRetryResends.has(retryDedupeKey)) {
+          console.log(`[BAILEYS RETRY RECEIPT] ⏳ Retry resend already in progress for ${retryDedupeKey}.`);
+          return;
+        }
+        inflightRetryResends.add(retryDedupeKey);
+        setTimeout(() => inflightRetryResends.delete(retryDedupeKey), 6000);
+
+        // Check if Baileys internal handleReceipt will skip this due to fromMe bug
+        const meId = newSock.authState?.creds?.me?.id;
+        const isLid = remoteJid.includes('lid');
+        const meLid = newSock.authState?.creds?.me?.lid;
+        const isNodeFromMe = areJidsSameUser(participant || remoteJid, isLid ? meLid : meId);
+        const baileysCalculatedFromMe = !recipient || isNodeFromMe;
+
+        if (!baileysCalculatedFromMe) {
+          console.warn(`[BAILEYS RETRY RECEIPT] 🚨 Baileys internal fromMe evaluated to FALSE due to stanza recipient ('${recipient}'). Baileys would drop this retry. Rescuing via direct resend!`);
+        }
+
+        // Always ensure session is asserted and fresh
+        console.log(`[BAILEYS RETRY RECEIPT] 🔐 Asserting fresh Signal session for participant: ${participant}...`);
+        await newSock.assertSessions([participant], true);
+
+        // Reconstruct message
+        const reconstructedMsg = await getMessageForRetry({
+          id: msgId,
+          remoteJid,
+          fromMe: true,
+          participant,
+        });
+
+        if (!reconstructedMsg) {
+          console.error(`[BAILEYS RETRY RECEIPT] ❌ Could not reconstruct message for ID: ${msgId}`);
+          return;
+        }
+
+        console.log(`[BAILEYS RETRY RECEIPT] 🚀 Relaying re-encrypted message to ${remoteJid} (MsgID: ${msgId}, Retry: ${retryCount})...`);
+
+        const msgRelayOpts = {
+          messageId: msgId,
+          participant: {
+            jid: participant,
+            count: retryCount,
+          },
+        };
+
+        await newSock.relayMessage(remoteJid, reconstructedMsg, msgRelayOpts);
+        msgRetryCounterCache.set(`${msgId}:${participant}`, retryCount);
+
+        console.log(`[BAILEYS RETRY RECEIPT] ✅ Successfully re-sent message for retry ID: ${msgId} to ${remoteJid}`);
+      } catch (interceptErr) {
+        console.error(`[BAILEYS RETRY RECEIPT] ❌ Error in retry receipt interceptor:`, interceptErr.message);
       }
     });
   } catch (error) {
@@ -679,6 +868,24 @@ app.get('/api/whatsapp/status', async (req, res) => {
       persisted_auth: persistedAuthDiag,
       uptime: Math.floor(process.uptime()),
     },
+  });
+});
+
+app.get('/api/whatsapp/diagnostics/retries', requireApiAuth, (req, res) => {
+  res.json({
+    success: true,
+    sentMessagesStoreSize: sentMessagesStore.size,
+    recentMessages: Array.from(sentMessagesStore.values()).slice(-10).map((m) => ({
+      messageId: m.messageId,
+      remoteJid: m.remoteJid,
+      type: m.type,
+      timestamp: new Date(m.timestamp).toISOString(),
+      hasProtoMessage: Boolean(m.protoMessage),
+    })),
+    connected: isConnected,
+    connectedUser,
+    inflightRetryCount: inflightRetryResends.size,
+    timestamp: new Date().toISOString(),
   });
 });
 

@@ -35,16 +35,15 @@ function escapeSqlValue(val) {
  */
 export async function getDatabaseUsageMetrics(supabase) {
   try {
-    const [jobsRes, staffRes, activeStaffRes, servicesRes, settingsRes, waAuthRes] = await Promise.all([
+    const [jobsRes, staffRes, activeStaffRes, servicesRes, settingsRes] = await Promise.all([
       supabase.from('jobs').select('id, created_at', { count: 'exact', head: false }),
       supabase.from('staff_profiles').select('id', { count: 'exact', head: true }),
       supabase.from('staff_profiles').select('id', { count: 'exact', head: true }).eq('active', true),
       supabase.from('service_sections').select('id, services', { count: 'exact', head: false }),
-      supabase.from('app_settings').select('key', { count: 'exact', head: true }),
-      supabase.from('whatsapp_auth_state').select('key_id', { count: 'exact', head: true }),
+      supabase.from('app_settings').select('key', { count: 'exact', head: false }),
     ]);
 
-    const usageResponses = [jobsRes, staffRes, activeStaffRes, servicesRes, settingsRes, waAuthRes];
+    const usageResponses = [jobsRes, staffRes, activeStaffRes, servicesRes, settingsRes];
     const failedResponse = usageResponses.find((response) => response.error);
     if (failedResponse) {
       throw new Error(`Database usage query failed: ${failedResponse.error.message}`);
@@ -59,19 +58,35 @@ export async function getDatabaseUsageMetrics(supabase) {
       0
     );
     const serviceSectionCount = servicesRes.count || serviceSections.length;
-    const settingsCount = settingsRes.count || 0;
-    const waAuthCount = waAuthRes.count || 0;
+    const allSettings = settingsRes.data || [];
+    const settingsCount = settingsRes.count || allSettings.length;
+    
+    // In current architecture, WhatsApp authentication/session records are stored in app_settings with 'wa_auth:' prefix
+    const waAuthCountInSettings = allSettings.filter((s) => s.key && s.key.startsWith('wa_auth:')).length;
 
-    // Measured PostgreSQL storage per row including 4 B-tree indexes and 8KB page alignment:
+    // Optional legacy/alternative table check: handle absence gracefully without failing
+    let optionalWaAuthCount = 0;
+    try {
+      const { count, error } = await supabase.from('whatsapp_auth_state').select('key_id', { count: 'exact', head: true });
+      if (!error && typeof count === 'number') {
+        optionalWaAuthCount = count;
+      }
+    } catch {
+      // Optional table not present; safely ignored
+    }
+
+    const totalWaAuthRecords = waAuthCountInSettings + optionalWaAuthCount;
+    const waAuthCount = totalWaAuthRecords;
+
+    // Measured PostgreSQL storage per row including indexes and page alignment:
     // Real measured jobs row + indexes: 392.1 bytes (~0.383 KB)
     // staff_profiles: ~450 bytes
     // service_sections: ~800 bytes
-    // app_settings: ~600 bytes
-    // whatsapp_auth_state / keys: ~1.2 KB
+    // app_settings: ~600 bytes (with JSONB auth state records ~1.2 KB)
     // Base Postgres schema + system catalog overhead: ~15 MB
     const baseCatalogBytes = 15 * 1024 * 1024;
     const estimatedJobsBytes = jobsCount * 392.1;
-    const estimatedOtherBytes = (staffCount * 450) + (servicesCount * 800) + (settingsCount * 600) + (waAuthCount * 1200);
+    const estimatedOtherBytes = (staffCount * 450) + (servicesCount * 800) + (settingsCount * 800);
     const totalEstimatedBytes = baseCatalogBytes + estimatedJobsBytes + estimatedOtherBytes;
 
     const usedMb = totalEstimatedBytes / (1024 * 1024);
@@ -147,31 +162,51 @@ export async function createDatabaseBackup(supabase) {
   console.log(`📦 [DATABASE BACKUP] Starting database dump to '${filename}'...`);
 
   try {
-    const [jobsRes, staffRes, servicesRes, settingsRes, whatsappAuthRes] = await Promise.all([
+    // 1. Fetch live production tables from Supabase:
+    // Core tables: jobs, staff_profiles, service_sections, app_settings
+    // (Note: WhatsApp auth state, session keys, and recovery data are stored in app_settings with 'wa_auth:' prefix)
+    const [jobsRes, staffRes, servicesRes, settingsRes] = await Promise.all([
       supabase.from('jobs').select('*').order('created_at', { ascending: true }),
       supabase.from('staff_profiles').select('*').order('created_at', { ascending: true }),
       supabase.from('service_sections').select('*').order('created_at', { ascending: true }),
-      supabase.from('app_settings').select('*'),
-      supabase.from('whatsapp_auth_state').select('*').order('updated_at', { ascending: true }),
+      supabase.from('app_settings').select('*').order('key', { ascending: true }),
     ]);
 
-    const responses = [jobsRes, staffRes, servicesRes, settingsRes, whatsappAuthRes];
-    const failedResponse = responses.find((response) => response.error);
+    const coreResponses = [
+      { name: 'jobs', res: jobsRes },
+      { name: 'staff_profiles', res: staffRes },
+      { name: 'service_sections', res: servicesRes },
+      { name: 'app_settings', res: settingsRes },
+    ];
+    const failedResponse = coreResponses.find((item) => item.res.error);
     if (failedResponse) {
-      throw new Error(`Backup source query failed: ${failedResponse.error.message}`);
+      throw new Error(`Backup source query failed for '${failedResponse.name}': ${failedResponse.res.error.message}`);
     }
 
     const jobs = jobsRes.data || [];
     const staff = staffRes.data || [];
     const services = servicesRes.data || [];
     const settings = settingsRes.data || [];
-    const whatsappAuth = whatsappAuthRes.data || [];
+
+    // Optional legacy/alternative table check: handle absence gracefully without failing
+    let optionalWhatsappAuth = [];
+    try {
+      const { data, error } = await supabase.from('whatsapp_auth_state').select('*').order('updated_at', { ascending: true });
+      if (!error && Array.isArray(data)) {
+        optionalWhatsappAuth = data;
+      }
+    } catch {
+      // Optional table not present in current schema; safely ignored
+    }
+
+    const waAuthInSettingsCount = settings.filter((s) => s.key && s.key.startsWith('wa_auth:')).length;
+    const totalWaAuthCount = waAuthInSettingsCount + optionalWhatsappAuth.length;
 
     const lines = [];
     lines.push('-- ==============================================================================');
     lines.push(`-- GO GRAND CAR WASH & DETAILING - FULL DATABASE BACKUP`);
     lines.push(`-- Generated At: ${new Date().toISOString()}`);
-    lines.push(`-- Records: ${jobs.length} Jobs, ${staff.length} Staff, ${services.length} Sections, ${settings.length} Settings, ${whatsappAuth.length} WhatsApp Auth Records`);
+    lines.push(`-- Records: ${jobs.length} Jobs, ${staff.length} Staff, ${services.length} Sections, ${settings.length} Settings (${waAuthInSettingsCount} WhatsApp Auth Records in app_settings)`);
     lines.push('-- ==============================================================================\n');
     lines.push('SET statement_timeout = 0;');
     lines.push('SET client_encoding = \'UTF8\';\n');
@@ -284,23 +319,23 @@ export async function createDatabaseBackup(supabase) {
       lines.push(settingRows.join(',\n') + '\nON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at;\n');
     }
 
-    // 5. Table: whatsapp_auth_state (Baileys credentials and Signal keys)
-    lines.push('-- Table: public.whatsapp_auth_state');
-    lines.push('CREATE TABLE IF NOT EXISTS public.whatsapp_auth_state (');
-    lines.push('    session_id TEXT NOT NULL DEFAULT \'default\',');
-    lines.push('    key_id TEXT NOT NULL,');
-    lines.push('    value JSONB,');
-    lines.push('    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone(\'utc\'::text, now()),');
-    lines.push('    PRIMARY KEY (session_id, key_id)');
-    lines.push(');');
-    lines.push('ALTER TABLE public.whatsapp_auth_state ENABLE ROW LEVEL SECURITY;');
-    lines.push('DROP POLICY IF EXISTS "Allow server backend operations for whatsapp_auth_state" ON public.whatsapp_auth_state;');
-    lines.push('CREATE POLICY "Allow server backend operations for whatsapp_auth_state" ON public.whatsapp_auth_state FOR ALL USING (true) WITH CHECK (true);');
-    lines.push('CREATE INDEX IF NOT EXISTS idx_whatsapp_auth_state_lookup ON public.whatsapp_auth_state (session_id, key_id);\n');
+    // 5. Optional Table: whatsapp_auth_state (only generated if present in database)
+    if (optionalWhatsappAuth.length > 0) {
+      lines.push('-- Table: public.whatsapp_auth_state (Optional legacy/dedicated store)');
+      lines.push('CREATE TABLE IF NOT EXISTS public.whatsapp_auth_state (');
+      lines.push('    session_id TEXT NOT NULL DEFAULT \'default\',');
+      lines.push('    key_id TEXT NOT NULL,');
+      lines.push('    value JSONB,');
+      lines.push('    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone(\'utc\'::text, now()),');
+      lines.push('    PRIMARY KEY (session_id, key_id)');
+      lines.push(');');
+      lines.push('ALTER TABLE public.whatsapp_auth_state ENABLE ROW LEVEL SECURITY;');
+      lines.push('DROP POLICY IF EXISTS "Allow server backend operations for whatsapp_auth_state" ON public.whatsapp_auth_state;');
+      lines.push('CREATE POLICY "Allow server backend operations for whatsapp_auth_state" ON public.whatsapp_auth_state FOR ALL USING (true) WITH CHECK (true);');
+      lines.push('CREATE INDEX IF NOT EXISTS idx_whatsapp_auth_state_lookup ON public.whatsapp_auth_state (session_id, key_id);\n');
 
-    if (whatsappAuth.length > 0) {
       lines.push('INSERT INTO public.whatsapp_auth_state (session_id, key_id, value, updated_at) VALUES');
-      const authRows = whatsappAuth.map((record) => {
+      const authRows = optionalWhatsappAuth.map((record) => {
         return `  (${escapeSqlValue(record.session_id)}, ${escapeSqlValue(record.key_id)}, ${escapeSqlValue(record.value)}, ${escapeSqlValue(record.updated_at)})`;
       });
       lines.push(authRows.join(',\n') + '\nON CONFLICT (session_id, key_id) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at;\n');
@@ -346,7 +381,7 @@ export async function createDatabaseBackup(supabase) {
         staff: staff.length,
         serviceSections: services.length,
         appSettings: settings.length,
-        whatsappAuthRecords: whatsappAuth.length,
+        whatsappAuthRecords: totalWaAuthCount,
       },
       googleDrive: googleDriveResult,
       createdAt: new Date().toISOString(),

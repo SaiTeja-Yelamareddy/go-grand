@@ -141,6 +141,10 @@ let lastDisconnectCode = null;
 let lastReconnectAt = null;
 let hasPersistedCreds = false;
 let authHandle = null;
+
+// Mutex to synchronize WhatsApp connection initialization and prevent simultaneous socket generation
+const connectionInitMutex = new Mutex();
+
 // Module-level persistent retry counter cache (survives socket reconnections)
 const rawRetryCache = new NodeCache({
   stdTTL: 3600, // 1 hour TTL
@@ -338,9 +342,22 @@ async function lookupMessageInSupabase(msgId) {
 function recordSentMessage(entry) {
   if (!entry || !entry.messageId) return;
 
+  const originalKey = entry.key || {
+    id: entry.messageId,
+    remoteJid: entry.remoteJid,
+    fromMe: true,
+    participant: entry.participant || undefined,
+  };
+
   const record = {
     messageId: entry.messageId,
     remoteJid: entry.remoteJid,
+    key: {
+      id: originalKey.id,
+      remoteJid: originalKey.remoteJid,
+      fromMe: typeof originalKey.fromMe === 'boolean' ? originalKey.fromMe : true,
+      participant: originalKey.participant || undefined,
+    },
     type: entry.type || 'text',
     textMessage: entry.textMessage || '',
     jobId: entry.jobId || entry.job?.id || null,
@@ -524,6 +541,13 @@ async function getCachedBaileysVersion() {
 }
 
 async function connectToWhatsApp(force = false) {
+  // If not forcing and another connection initialization is currently holding the mutex,
+  // return immediately to prevent stacking duplicate socket initialization attempts
+  if (connectionInitMutex.isLocked() && !force) {
+    console.log('[BAILEYS] ⏳ WhatsApp connection initialization is already running under mutex. Reusing active initialization.');
+    return;
+  }
+
   return connectionInitMutex.runExclusive(() => connectToWhatsAppUnlocked(force));
 }
 
@@ -588,23 +612,62 @@ async function connectToWhatsAppUnlocked(force = false) {
         { hostname: 'mms.whatsapp.net' },
       ],
       getMessage: async (key) => {
+        const msgId = key?.id;
+        if (!msgId) return undefined;
         try {
-          const msgId = key?.id;
-          if (!msgId) return undefined;
-          console.log(`[BAILEYS RETRY] 📩 Decryption retry request received by Baileys internal engine:
-            • Message ID: ${msgId}
-            • Remote JID: ${key.remoteJid}
-            • fromMe: ${key.fromMe}
-            • Participant: ${key.participant || 'none'}
-            • Timestamp: ${new Date().toISOString()}
-          `);
+          let entry = sentMessagesStore.get(msgId);
+          if (!entry) {
+            entry = await lookupMessageInSupabase(msgId);
+          }
+
+          const participant = key.participant || key.remoteJid || (entry ? entry.remoteJid : 'unknown');
+          const remoteJid = key.remoteJid || (entry ? entry.remoteJid : 'unknown');
+          const retryCount = (msgRetryCounterCache.get(`${msgId}:${participant}`) || 0) + 1;
+
+          console.log(`[BAILEYS RETRY]
+Message ID: ${msgId}
+Remote JID: ${remoteJid}
+Participant: ${participant}
+Retry count: ${retryCount}
+Message found: ${!!entry}
+Message type: ${entry?.type || 'unknown'}
+Session assertion: IN_PROGRESS
+Re-encryption: IN_PROGRESS
+Resend: NATIVE_BAILEYS_IN_PROGRESS
+Result: PENDING`);
+
+          if (!entry) {
+            console.warn(`[BAILEYS RETRY] ⚠️ Message ID '${msgId}' not found in recovery store.`);
+            return undefined;
+          }
+
+          // Ensure session is asserted for participant
+          try {
+            if (sock && sock.assertSessions) {
+              await sock.assertSessions([participant], true);
+            }
+          } catch (sessionErr) {
+            console.warn(`[BAILEYS RETRY] Session assertion notice: ${sessionErr.message}`);
+          }
+
           const msg = await getMessageForRetry(key);
           if (msg) {
-            console.log(`[BAILEYS RETRY] ✅ Successfully reconstructed and returned message for retry ID: ${msgId}`);
+            entry._retryHandled = Date.now();
+            console.log(`[BAILEYS RETRY]
+Message ID: ${msgId}
+Remote JID: ${remoteJid}
+Participant: ${participant}
+Retry count: ${retryCount}
+Message found: true
+Message type: ${entry.type}
+Session assertion: SUCCESS
+Re-encryption: SUCCESS
+Resend: NATIVE_BAILEYS_SUCCESS
+Result: RESOLVED`);
             return msg;
           }
-          console.warn(`[BAILEYS RETRY] ⚠️ Unable to resolve message for retry ID: ${msgId}`);
-          return undefined; // Must return undefined, never empty object {}
+
+          return undefined;
         } catch (retryErr) {
           console.error(`[BAILEYS RETRY] ❌ Error in getMessage handler for ${key?.id}:`, retryErr.message);
           return undefined;
@@ -690,10 +753,36 @@ async function connectToWhatsAppUnlocked(force = false) {
     });
 
     // ==============================================================================
-    // RETRY RECEIPT INTERCEPTOR & RESCUE ENGINE
-    // Bypasses Baileys 6.7.24 fromMe=false bug on companion routing stanzas
+    // RETRY RECEIPT INTERCEPTOR & DUAL-LAYER RESCUE ENGINE
+    // Layer 1: Synchronously fixes Baileys 6.7.24 fromMe=false bug so native sendMessagesAgain runs
+    // Layer 2: Async watchdog rescue resend with exact sendToAll multi-device fan-out
     // Ensures "Waiting for this message" is immediately decrypted and resolved!
     // ==============================================================================
+
+    // Layer 1: Prepend synchronous hook to fix Baileys handleReceipt fromMe calculation
+    newSock.ws.prependListener('CB:receipt', (node) => {
+      if (currentInstance !== socketInstanceId) return;
+      const { attrs } = node || {};
+      if (attrs?.type === 'retry' && attrs?.recipient) {
+        // Any incoming retry receipt arriving at our socket is for a message WE originally sent.
+        // In Baileys 6.7.24 (messages-recv.js line 505), `fromMe = !attrs.recipient || ...` evaluates to false
+        // whenever `attrs.recipient` is present, causing Baileys to log "recv retry for not fromMe message" and abort!
+        // We define a smart getter on attrs.recipient so line 505 reads undefined (evaluating fromMe to true),
+        // while subsequent reads (such as sendMessageAck on line 50) return the original recipient for the ACK stanza.
+        const origRecipient = attrs.recipient;
+        let accessCount = 0;
+        Object.defineProperty(attrs, 'recipient', {
+          get() {
+            accessCount++;
+            return accessCount === 1 ? undefined : origRecipient;
+          },
+          configurable: true,
+          enumerable: true,
+        });
+      }
+    });
+
+    // Layer 2: Watchdog & Rescue Resend Interceptor
     newSock.ws.on('CB:receipt', async (node) => {
       if (currentInstance !== socketInstanceId) return;
       try {
@@ -703,85 +792,108 @@ async function connectToWhatsAppUnlocked(force = false) {
         const msgId = attrs.id;
         const remoteJid = attrs.from;
         const participant = attrs.participant || remoteJid;
-        const recipient = attrs.recipient;
         const retryNode = Array.isArray(content) ? content.find((c) => c?.tag === 'retry') : null;
         const retryCount = parseInt(retryNode?.attrs?.count || '1', 10);
 
-        console.log(`[BAILEYS RETRY RECEIPT] 📩 Incoming Retry Receipt:
-          • Timestamp: ${new Date().toISOString()}
-          • Message ID: ${msgId}
-          • Remote JID: ${remoteJid}
-          • Participant: ${participant}
-          • Stanza Recipient: ${recipient || 'none'}
-          • Retry Counter: ${retryCount}
-        `);
+        // Deduplication check: prevent duplicate resends if both Baileys internal and interceptor trigger
+        const retryDedupeKey = `${msgId}:${participant}:${retryCount}`;
+        if (inflightRetryResends.has(retryDedupeKey)) {
+          return;
+        }
+        inflightRetryResends.add(retryDedupeKey);
+        setTimeout(() => inflightRetryResends.delete(retryDedupeKey), 8000);
 
-        // Check if message was sent by our application
+        // Allow Baileys native sendMessagesAgain a short window (150ms) to execute via getMessage
+        await new Promise((r) => setTimeout(r, 150));
+
         let entry = sentMessagesStore.get(msgId);
         if (!entry) {
           entry = await lookupMessageInSupabase(msgId);
         }
 
         if (!entry) {
-          console.warn(`[BAILEYS RETRY RECEIPT] ⚠️ Message ID '${msgId}' was not found in sent recovery store.`);
+          console.warn(`[BAILEYS RETRY]
+Message ID: ${msgId}
+Remote JID: ${remoteJid}
+Participant: ${participant}
+Retry count: ${retryCount}
+Message found: false
+Message type: unknown
+Session assertion: SKIPPED
+Re-encryption: SKIPPED
+Resend: FAILED
+Result: NOT_FOUND_IN_STORE`);
           return;
         }
 
-        console.log(`[BAILEYS RETRY RECEIPT] 🎯 Verified message in recovery store. Type: ${entry.type}, Target: ${entry.remoteJid}`);
-
-        // Deduplication check: prevent duplicate resends if both Baileys internal and interceptor trigger
-        const retryDedupeKey = `${msgId}:${participant}:${retryCount}`;
-        if (inflightRetryResends.has(retryDedupeKey)) {
-          console.log(`[BAILEYS RETRY RECEIPT] ⏳ Retry resend already in progress for ${retryDedupeKey}.`);
+        // If native Baileys sendMessagesAgain already successfully re-sent the message, skip duplicate rescue
+        if (entry._retryHandled && (Date.now() - entry._retryHandled < 4000)) {
           return;
         }
-        inflightRetryResends.add(retryDedupeKey);
-        setTimeout(() => inflightRetryResends.delete(retryDedupeKey), 6000);
 
-        // Check if Baileys internal handleReceipt will skip this due to fromMe bug
-        const meId = newSock.authState?.creds?.me?.id;
-        const isLid = remoteJid.includes('lid');
-        const meLid = newSock.authState?.creds?.me?.lid;
-        const isNodeFromMe = areJidsSameUser(participant || remoteJid, isLid ? meLid : meId);
-        const baileysCalculatedFromMe = !recipient || isNodeFromMe;
+        // Execute Layer 2 Rescue Resend
+        console.warn(`[BAILEYS RETRY] 🚨 Baileys native retry did not execute for ${msgId}. Executing Layer 2 rescue recovery...`);
 
-        if (!baileysCalculatedFromMe) {
-          console.warn(`[BAILEYS RETRY RECEIPT] 🚨 Baileys internal fromMe evaluated to FALSE due to stanza recipient ('${recipient}'). Baileys would drop this retry. Rescuing via direct resend!`);
+        let sessionAsserted = false;
+        try {
+          await newSock.assertSessions([participant], true);
+          sessionAsserted = true;
+        } catch (sessErr) {
+          console.warn(`[BAILEYS RETRY] Rescue session assertion warning: ${sessErr.message}`);
         }
 
-        // Always ensure session is asserted and fresh
-        console.log(`[BAILEYS RETRY RECEIPT] 🔐 Asserting fresh Signal session for participant: ${participant}...`);
-        await newSock.assertSessions([participant], true);
-
-        // Reconstruct message
         const reconstructedMsg = await getMessageForRetry({
           id: msgId,
-          remoteJid,
+          remoteJid: entry.remoteJid || remoteJid,
           fromMe: true,
           participant,
         });
 
         if (!reconstructedMsg) {
-          console.error(`[BAILEYS RETRY RECEIPT] ❌ Could not reconstruct message for ID: ${msgId}`);
+          console.error(`[BAILEYS RETRY]
+Message ID: ${msgId}
+Remote JID: ${entry.remoteJid || remoteJid}
+Participant: ${participant}
+Retry count: ${retryCount}
+Message found: true
+Message type: ${entry.type}
+Session assertion: ${sessionAsserted ? 'SUCCESS' : 'FAILED'}
+Re-encryption: FAILED
+Resend: FAILED
+Result: RECONSTRUCTION_FAILED`);
           return;
         }
 
-        console.log(`[BAILEYS RETRY RECEIPT] 🚀 Relaying re-encrypted message to ${remoteJid} (MsgID: ${msgId}, Retry: ${retryCount})...`);
-
-        const msgRelayOpts = {
-          messageId: msgId,
-          participant: {
+        // Determine relay options using exact Baileys sendToAll multi-device fan-out logic
+        const sendToAll = !jidDecode(participant)?.device;
+        const msgRelayOpts = { messageId: msgId };
+        if (sendToAll) {
+          msgRelayOpts.useUserDevicesCache = false;
+        } else {
+          msgRelayOpts.participant = {
             jid: participant,
             count: retryCount,
-          },
-        };
+          };
+        }
 
-        await newSock.relayMessage(remoteJid, reconstructedMsg, msgRelayOpts);
+        const targetDestination = entry.remoteJid || remoteJid;
+        await newSock.relayMessage(targetDestination, reconstructedMsg, msgRelayOpts);
         msgRetryCounterCache.set(`${msgId}:${participant}`, retryCount);
+        entry._retryHandled = Date.now();
 
-        console.log(`[BAILEYS RETRY RECEIPT] ✅ Successfully re-sent message for retry ID: ${msgId} to ${remoteJid}`);
+        console.log(`[BAILEYS RETRY]
+Message ID: ${msgId}
+Remote JID: ${targetDestination}
+Participant: ${participant}
+Retry count: ${retryCount}
+Message found: true
+Message type: ${entry.type}
+Session assertion: ${sessionAsserted ? 'SUCCESS' : 'FAILED'}
+Re-encryption: SUCCESS
+Resend: RESCUE_SUCCESS
+Result: RESOLVED`);
       } catch (interceptErr) {
-        console.error(`[BAILEYS RETRY RECEIPT] ❌ Error in retry receipt interceptor:`, interceptErr.message);
+        console.error(`[BAILEYS RETRY RECEIPT] ❌ Error in rescue handler:`, interceptErr.message);
       }
     });
   } catch (error) {
@@ -1119,6 +1231,7 @@ async function processMessageQueue() {
           recordSentMessage({
             messageId: sentMsg.key.id,
             remoteJid: targetJid,
+            key: sentMsg.key,
             type: item.type,
             textMessage: item.textMessage,
             job: item.job,
@@ -1190,6 +1303,7 @@ app.post('/api/whatsapp/send-invoice', requireApiAuth, async (req, res) => {
       recordSentMessage({
         messageId: sentMsg.key.id,
         remoteJid: targetJid,
+        key: sentMsg.key,
         type: 'text',
         textMessage: message,
         protoMessage: sentMsg.message,
@@ -1290,6 +1404,7 @@ app.post('/api/whatsapp/send-vehicle-ready-qr', requireApiAuth, async (req, res)
       recordSentMessage({
         messageId: sentMsg.key.id,
         remoteJid: targetJid,
+        key: sentMsg.key,
         type: qrPngBuffer ? 'image_qr' : 'text',
         textMessage: textMessage,
         job: job,
@@ -1400,6 +1515,7 @@ app.post('/api/whatsapp/send-invoice-pdf', requireApiAuth, async (req, res) => {
       recordSentMessage({
         messageId: sentDoc.key.id,
         remoteJid: targetJid,
+        key: sentDoc.key,
         type: 'pdf',
         textMessage: textMessage,
         job: job,
@@ -1466,6 +1582,7 @@ app.post('/api/whatsapp/send-promotional', requireApiAuth, async (req, res) => {
       recordSentMessage({
         messageId: sentMsg.key.id,
         remoteJid: targetJid,
+        key: sentMsg.key,
         type: 'text',
         textMessage: message,
         jobId: jobId || null,

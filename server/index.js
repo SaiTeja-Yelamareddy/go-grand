@@ -22,6 +22,7 @@ import makeWASocket, {
   BufferJSON,
   generateWAMessageContent,
   areJidsSameUser,
+  jidDecode,
 } from '@whiskeysockets/baileys';
 import NodeCache from '@cacheable/node-cache';
 import { useSupabaseAuthState, getAuthStateDiagnostics } from './supabaseAuth.js';

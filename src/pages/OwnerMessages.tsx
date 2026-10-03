@@ -297,7 +297,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors cursor-pointer py-1"
                 >
                   <Plus size={14} />
-                  <span>+ Add customer details</span>
+                  <span>Add customer details</span>
                 </button>
 
                 {/* COMPACT DETAIL DROPDOWN MENU */}

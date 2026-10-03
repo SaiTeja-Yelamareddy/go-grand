@@ -301,7 +301,7 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer py-1 disabled:opacity-50"
             >
               <Plus size={14} />
-              <span>+ Add customer details</span>
+              <span>Add customer details</span>
             </button>
 
             {showDetailMenu && (

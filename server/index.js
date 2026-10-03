@@ -179,7 +179,7 @@ const inflightRetryResends = new Set();
 
 // Safe diagnostic logger for Baileys: captures retry & crypto logs without credentials/keys
 const logger = pino({
-  level: process.env.BAILEYS_LOG_LEVEL || 'info',
+  level: process.env.BAILEYS_LOG_LEVEL || 'debug',
   hooks: {
     logMethod(inputArgs, method) {
       const firstArg = inputArgs[0];
@@ -201,7 +201,8 @@ const logger = pino({
         text.includes('decrypt') ||
         text.includes('receipt') ||
         text.includes('error') ||
-        text.includes('fail')
+        text.includes('fail') ||
+        text.includes('ack')
       ) {
         return method.apply(this, inputArgs);
       }
@@ -617,10 +618,35 @@ async function connectToWhatsAppUnlocked(force = false) {
         if (!msgId) return undefined;
         let entry = null;
         try {
-          entry = sentMessagesStore.get(msgId);
+          console.log(`[BAILEYS NATIVE RETRY] 🔍 getMessage called by native Baileys:
+  Key ID: ${key?.id}
+  Key RemoteJID: ${key?.remoteJid}
+  Key fromMe: ${key?.fromMe}
+  Key Participant: ${key?.participant || 'none'}
+  Socket state: isOpen=${Boolean(sock && sock.ws && sock.ws.isOpen)}`);
+
+          const memEntry = sentMessagesStore.get(msgId);
+          entry = memEntry;
+          const foundInMemory = Boolean(memEntry);
           if (!entry) {
             entry = await lookupMessageInSupabase(msgId);
           }
+          const foundInSupabase = Boolean(!foundInMemory && entry);
+          const foundSource = foundInMemory ? 'memory' : (foundInSupabase ? 'supabase' : 'none');
+
+          console.log(`[BAILEYS NATIVE RETRY] 📦 Message lookup result for ${msgId}:
+  Found: ${Boolean(entry)} (source: ${foundSource})
+  Type: ${entry?.type || 'unknown'}
+  Has ProtoMessage: ${Boolean(entry?.protoMessage)}
+  Socket state: isOpen=${Boolean(sock && sock.ws && sock.ws.isOpen)}`);
+
+          if (!entry) {
+            console.warn(`[BAILEYS RETRY] ⚠️ Message ID '${msgId}' not found in recovery store.`);
+            return undefined;
+          }
+
+          // Mark retry in-progress so Layer-2 watchdog cooperates and yields to native Baileys
+          entry._retryInProgress = true;
 
           const participant = key.participant || key.remoteJid || (entry ? entry.remoteJid : 'unknown');
           const remoteJid = key.remoteJid || (entry ? entry.remoteJid : 'unknown');
@@ -631,20 +657,12 @@ Message ID: ${msgId}
 Remote JID: ${remoteJid}
 Participant: ${participant}
 Retry count: ${retryCount}
-Message found: ${!!entry}
-Message type: ${entry?.type || 'unknown'}
-Session assertion: IN_PROGRESS
+Message found: true
+Message type: ${entry.type}
+Session assertion: DELEGATED_TO_NATIVE_BAILEYS
 Re-encryption: IN_PROGRESS
 Resend: NATIVE_BAILEYS_IN_PROGRESS
-Result: PENDING`);
-
-          if (!entry) {
-            console.warn(`[BAILEYS RETRY] ⚠️ Message ID '${msgId}' not found in recovery store.`);
-            return undefined;
-          }
-
-          // Mark retry in-progress so Layer-2 watchdog cooperates and yields to native Baileys
-          entry._retryInProgress = true;
+Result: PENDING_NATIVE_RELAY`);
 
           const msg = await getMessageForRetry(key);
           if (msg) {
@@ -656,7 +674,7 @@ Participant: ${participant}
 Retry count: ${retryCount}
 Message found: true
 Message type: ${entry.type}
-Session assertion: SUCCESS
+Session assertion: DELEGATED_TO_NATIVE_BAILEYS
 Re-encryption: SUCCESS
 Resend: NATIVE_BAILEYS_SUCCESS
 Result: RESOLVED`);
@@ -677,6 +695,61 @@ Result: RESOLVED`);
     });
 
     sock = newSock;
+
+    // Wrap socket native retry methods with detailed safe diagnostics
+    const origAssertSessions = newSock.assertSessions;
+    newSock.assertSessions = async (jids, force) => {
+      const safeJids = (jids || []).map((j) => String(j || ''));
+      console.log(`[BAILEYS NATIVE RETRY] 🔑 assertSessions started for: ${safeJids.join(', ')} (force: ${force}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+      const startTime = Date.now();
+      try {
+        const res = await origAssertSessions.call(newSock, jids, force);
+        console.log(`[BAILEYS NATIVE RETRY] ✅ assertSessions completed for: ${safeJids.join(', ')} in ${Date.now() - startTime}ms (didFetchNewSession: ${res}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+        return res;
+      } catch (err) {
+        console.error(`[BAILEYS NATIVE RETRY] ❌ assertSessions failed for: ${safeJids.join(', ')} in ${Date.now() - startTime}ms:`, err?.message || err);
+        throw err;
+      }
+    };
+
+    const origRelayMessage = newSock.relayMessage;
+    newSock.relayMessage = async (jid, message, opts) => {
+      const msgId = opts?.messageId || 'unknown';
+      const participantJid = opts?.participant?.jid || 'none';
+      const retryCount = opts?.participant?.count || 'none';
+      console.log(`[BAILEYS NATIVE RETRY] 📤 relayMessage started for MsgID: ${msgId} to ${jid} (participant: ${participantJid}, retryCount: ${retryCount}, useUserDevicesCache: ${opts?.useUserDevicesCache}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+      const startTime = Date.now();
+      try {
+        const res = await origRelayMessage.call(newSock, jid, message, opts);
+        console.log(`[BAILEYS NATIVE RETRY] ✅ relayMessage completed for MsgID: ${msgId} to ${jid} in ${Date.now() - startTime}ms | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+        return res;
+      } catch (err) {
+        console.error(`[BAILEYS NATIVE RETRY] ❌ relayMessage failed for MsgID: ${msgId} to ${jid} in ${Date.now() - startTime}ms:`, err?.message || err);
+        throw err;
+      }
+    };
+
+    const origSendNode = newSock.sendNode;
+    newSock.sendNode = async (node) => {
+      const isAck = node?.tag === 'ack';
+      if (isAck) {
+        const ackAttrs = node?.attrs || {};
+        console.log(`[BAILEYS NATIVE RETRY] 📨 Retry ACK attempted for ID: ${ackAttrs.id} (to: ${ackAttrs.to}, class: ${ackAttrs.class}, type: ${ackAttrs.type}, recipient: ${ackAttrs.recipient || 'none'}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+      }
+      try {
+        const res = await origSendNode.call(newSock, node);
+        if (isAck) {
+          console.log(`[BAILEYS NATIVE RETRY] ✅ Retry ACK completed for ID: ${node?.attrs?.id} | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+        }
+        return res;
+      } catch (err) {
+        if (isAck) {
+          console.error(`[BAILEYS NATIVE RETRY] ❌ Retry ACK failed for ID: ${node?.attrs?.id}:`, err?.message || err);
+        }
+        throw err;
+      }
+    };
+
     console.log(`[BAILEYS] 🚀 Socket #${currentInstance} created. Awaiting handshake...`);
 
     newSock.ev.on('creds.update', async () => {
@@ -760,33 +833,65 @@ Result: RESOLVED`);
     // Ensures "Waiting for this message" is immediately decrypted and resolved!
     // ==============================================================================
 
-    // Layer 1: Prepend synchronous hook to fix Baileys handleReceipt fromMe calculation
+    // Layer 1: Prepend synchronous hook to fix Baileys handleReceipt fromMe calculation & log safe receipt diagnostics
     newSock.ws.prependListener('CB:receipt', (node) => {
       if (currentInstance !== socketInstanceId) return;
-      const { attrs } = node || {};
-      if (attrs?.type === 'retry' && attrs?.recipient) {
-        // Any incoming retry receipt arriving at our socket is for a message WE originally sent.
-        // In Baileys 6.7.24 (messages-recv.js line 505), `fromMe = !attrs.recipient || ...` evaluates to false
-        // whenever `attrs.recipient` is present, causing Baileys to log "recv retry for not fromMe message" and abort!
-        // We define a smart getter on attrs.recipient so line 505 reads undefined (evaluating fromMe to true),
-        // while subsequent reads (such as sendMessageAck on line 50) return the original recipient for the ACK stanza.
-        const origRecipient = attrs.recipient;
-        let accessCount = 0;
-        Object.defineProperty(attrs, 'recipient', {
-          get() {
-            accessCount++;
-            return accessCount === 1 ? undefined : origRecipient;
-          },
-          configurable: true,
-          enumerable: true,
-        });
+      const { attrs, content } = node || {};
+      if (attrs?.type === 'retry') {
+        const msgId = attrs.id;
+        const from = attrs.from;
+        const participant = attrs.participant || 'none';
+        const recipient = attrs.recipient || 'none';
+        const type = attrs.type;
+        const retryNode = Array.isArray(content) ? content.find((c) => c?.tag === 'retry') : null;
+        const retryCount = retryNode?.attrs?.count || '1';
+        const timestampT = attrs.t || retryNode?.attrs?.t || 'unknown';
+
+        const isLid = (attrs.from || '').includes('lid');
+        const myJid = isLid ? newSock.authState?.creds?.me?.lid : newSock.authState?.creds?.me?.id;
+        const isNodeFromMe = areJidsSameUser(attrs.participant || attrs.from, myJid);
+        const rawFromMe = !attrs.recipient || ((attrs.type === 'retry' || attrs.type === 'sender') && isNodeFromMe);
+
+        console.log(`[BAILEYS NATIVE RETRY] 📥 Retry receipt stanza received:
+  ID: ${msgId}
+  From: ${from}
+  Participant: ${participant}
+  Recipient: ${recipient}
+  Type: ${type}
+  Retry count: ${retryCount}
+  Timestamp (t): ${timestampT}
+  IsNodeFromMe: ${isNodeFromMe}
+  Raw fromMe (unpatched): ${rawFromMe}
+  Patched fromMe: true
+  Socket state: isOpen=${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+
+        if (attrs.recipient) {
+          // Any incoming retry receipt arriving at our socket is for a message WE originally sent.
+          // In Baileys 6.7.24 (messages-recv.js line 505), `fromMe = !attrs.recipient || ...` evaluates to false
+          // whenever `attrs.recipient` is present, causing Baileys to log "recv retry for not fromMe message" and abort!
+          // We define a smart getter on attrs.recipient so line 505 reads undefined (evaluating fromMe to true),
+          // while subsequent reads (such as sendMessageAck on line 50) return the original recipient for the ACK stanza.
+          const origRecipient = attrs.recipient;
+          let accessCount = 0;
+          Object.defineProperty(attrs, 'recipient', {
+            get() {
+              accessCount++;
+              return accessCount === 1 ? undefined : origRecipient;
+            },
+            configurable: true,
+            enumerable: true,
+          });
+        }
       }
     });
 
     // Helper to verify socket is open and actively connected
     const isSocketActive = () => Boolean(newSock && newSock.ws && newSock.ws.isOpen && !newSock.ws.isClosed);
 
-    // Layer 2: Watchdog & Rescue Resend Interceptor (Cooperative Fallback)
+    // Layer-2 rescue resend temporarily disabled to isolate native Baileys 6.7.24 retry flow
+    const ENABLE_LAYER_2_RESCUE_RESEND = false;
+
+    // Layer 2: Watchdog & Rescue Resend Interceptor (Cooperative Fallback - Temporarily Disabled)
     newSock.ws.on('CB:receipt', async (node) => {
       if (currentInstance !== socketInstanceId) return;
       let msgId = null;
@@ -809,6 +914,11 @@ Result: RESOLVED`);
         }
         inflightRetryResends.add(msgId);
         setTimeout(() => inflightRetryResends.delete(msgId), 10000);
+
+        if (!ENABLE_LAYER_2_RESCUE_RESEND) {
+          console.log(`[BAILEYS RETRY] ℹ️ Layer-2 rescue resend is temporarily disabled to isolate native Baileys retry flow. Bypassing rescue for ${msgId}.`);
+          return;
+        }
 
         // Pre-check: if socket is already closed or shutting down, exit cleanly without attempting sends
         if (!isSocketActive() || currentInstance !== socketInstanceId) {

@@ -865,12 +865,14 @@ Result: RESOLVED`);
   Patched fromMe: true
   Socket state: isOpen=${Boolean(newSock.ws && newSock.ws.isOpen)}`);
 
-        if (attrs.recipient) {
-          // Any incoming retry receipt arriving at our socket is for a message WE originally sent.
+        if (!isNodeFromMe && attrs.recipient) {
+          // Any incoming customer retry receipt arriving at our socket is for a message WE originally sent.
           // In Baileys 6.7.24 (messages-recv.js line 505), `fromMe = !attrs.recipient || ...` evaluates to false
-          // whenever `attrs.recipient` is present, causing Baileys to log "recv retry for not fromMe message" and abort!
-          // We define a smart getter on attrs.recipient so line 505 reads undefined (evaluating fromMe to true),
+          // whenever `attrs.recipient` is present and !isNodeFromMe, causing Baileys to log "recv retry for not fromMe message" and abort!
+          // We define a smart getter ONLY when !isNodeFromMe so line 505 reads undefined (evaluating fromMe to true),
           // while subsequent reads (such as sendMessageAck on line 50) return the original recipient for the ACK stanza.
+          // When isNodeFromMe is true, Baileys already evaluates fromMe to true natively, and line 504
+          // uses attrs.recipient to compute remoteJid, so attrs.recipient must NOT be shadowed!
           const origRecipient = attrs.recipient;
           let accessCount = 0;
           Object.defineProperty(attrs, 'recipient', {
@@ -881,6 +883,13 @@ Result: RESOLVED`);
             configurable: true,
             enumerable: true,
           });
+        } else if (isNodeFromMe && !attrs.recipient) {
+          // For companion/self-sent retries where attrs.recipient is missing, populate from recovery store
+          // so line 504 of Baileys handleReceipt always computes a valid remoteJid instead of undefined
+          const entry = sentMessagesStore.get(msgId);
+          if (entry?.remoteJid) {
+            attrs.recipient = entry.remoteJid;
+          }
         }
       }
     });

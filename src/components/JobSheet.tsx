@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   RotateCcw,
@@ -95,6 +95,8 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const [savedVehNum, setSavedVehNum] = useState('');
   
   const [lastLookedUp, setLastLookedUp] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const isSendingRef = useRef(false);
 
 
   // Two-step Vehicle Selection States
@@ -488,19 +490,26 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   };
 
   const handleBillWhatsApp = async () => {
+    if (isSending || isSendingRef.current) return;
     if (!validateForm()) return;
 
-    const saved = await handleSaveDraft(undefined, 'billed');
-    if (saved) {
-      const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
-      const res = await sendWhatsAppBillViaBackend(saved);
-      dismiss(notifId);
-      if (res && res.success) {
-        notify({ type: 'success', title: 'Sent ✓', message: 'Invoice has been sent via WhatsApp.' });
-      } else {
-        notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
-        
+    isSendingRef.current = true;
+    setIsSending(true);
+    try {
+      const saved = await handleSaveDraft(undefined, 'billed');
+      if (saved) {
+        const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
+        const res = await sendWhatsAppBillViaBackend(saved);
+        dismiss(notifId);
+        if (res && res.success) {
+          notify({ type: 'success', title: 'Sent ✓', message: 'Invoice has been sent via WhatsApp.' });
+        } else {
+          notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
+        }
       }
+    } finally {
+      isSendingRef.current = false;
+      setIsSending(false);
     }
   };
 
@@ -1116,15 +1125,20 @@ export const JobSheet: React.FC<JobSheetProps> = ({
               <button
                 type="button"
                 onClick={handleBillWhatsApp}
-                className="relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-lg transition-all active:scale-[0.96] group border-2 border-[#86EFAC] bg-[#25D366] hover:bg-[#1EBE5D] text-left cursor-pointer"
+                disabled={isSending}
+                className={`relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-lg transition-all border-2 border-[#86EFAC] text-left ${
+                  isSending
+                    ? 'bg-[#1EBE5D] opacity-75 cursor-not-allowed'
+                    : 'bg-[#25D366] hover:bg-[#1EBE5D] active:scale-[0.96] group cursor-pointer'
+                }`}
                 title="Send Bill on WhatsApp"
               >
-                <div className="w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-sm">
+                <div className={`w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center shrink-0 shadow-sm ${!isSending ? 'group-hover:scale-110 transition-transform' : ''}`}>
                   <WhatsAppIcon className="w-6 h-6 text-white drop-shadow-md" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-white">
-                    Send Bill
+                    {isSending ? 'Sending...' : 'Send Bill'}
                   </span>
                   <span className="block text-[10px] font-black text-emerald-100 uppercase tracking-tight mt-0.5">
                     {getSendPdfWithMessage() ? 'PDF Tax Invoice' : 'WhatsApp Message'}

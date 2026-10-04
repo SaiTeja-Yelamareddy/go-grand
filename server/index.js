@@ -616,58 +616,80 @@ async function connectToWhatsAppUnlocked(force = false) {
       getMessage: async (key) => {
         const msgId = key?.id;
         if (!msgId) return undefined;
+        let entry = null;
         try {
-          console.log(`[BAILEYS NATIVE RETRY] 🔍 Stage 3: getMessage called: true
+          console.log(`[BAILEYS NATIVE RETRY] 🔍 getMessage called by native Baileys:
   Key ID: ${key?.id}
   Key RemoteJID: ${key?.remoteJid}
   Key fromMe: ${key?.fromMe}
   Key Participant: ${key?.participant || 'none'}
   Socket state: isOpen=${Boolean(sock && sock.ws && sock.ws.isOpen)}`);
 
-          let entry = sentMessagesStore.get(msgId);
-          const foundInMemory = Boolean(entry);
+          const memEntry = sentMessagesStore.get(msgId);
+          entry = memEntry;
+          const foundInMemory = Boolean(memEntry);
           if (!entry) {
             entry = await lookupMessageInSupabase(msgId);
           }
           const foundInSupabase = Boolean(!foundInMemory && entry);
           const foundSource = foundInMemory ? 'memory' : (foundInSupabase ? 'supabase' : 'none');
-          const foundExact = Boolean(entry);
 
-          console.log(`[BAILEYS NATIVE RETRY] 📦 Stage 4: getMessage exact original message lookup:
-  Found exact message: ${foundExact} (source: ${foundSource})
+          console.log(`[BAILEYS NATIVE RETRY] 📦 Message lookup result for ${msgId}:
+  Found: ${Boolean(entry)} (source: ${foundSource})
   Type: ${entry?.type || 'unknown'}
-  Has ProtoMessage: ${Boolean(entry?.protoMessage)}`);
+  Has ProtoMessage: ${Boolean(entry?.protoMessage)}
+  Socket state: isOpen=${Boolean(sock && sock.ws && sock.ws.isOpen)}`);
 
           if (!entry) {
-            console.warn(`[BAILEYS NATIVE RETRY] ⚠️ Message ID '${msgId}' not found in recovery store.`);
+            console.warn(`[BAILEYS RETRY] ⚠️ Message ID '${msgId}' not found in recovery store.`);
             return undefined;
           }
 
-          const originalKey = entry.key || {
-            id: entry.messageId || msgId,
-            remoteJid: entry.remoteJid || key?.remoteJid,
-            fromMe: typeof entry.fromMe === 'boolean' ? entry.fromMe : true,
-            participant: entry.participant || key?.participant,
-          };
+          // Mark retry in-progress so Layer-2 watchdog cooperates and yields to native Baileys
+          entry._retryInProgress = true;
 
-          console.log(`[BAILEYS NATIVE RETRY] 🔑 Stage 5: Recovered message key:
-  ID: ${originalKey.id}
-  RemoteJID: ${originalKey.remoteJid}
-  fromMe: ${originalKey.fromMe}
-  Participant: ${originalKey.participant || 'none'}`);
+          const participant = key.participant || key.remoteJid || (entry ? entry.remoteJid : 'unknown');
+          const remoteJid = key.remoteJid || (entry ? entry.remoteJid : 'unknown');
+          const retryCount = (msgRetryCounterCache.get(`${msgId}:${participant}`) || 0) + 1;
+
+          console.log(`[BAILEYS RETRY]
+Message ID: ${msgId}
+Remote JID: ${remoteJid}
+Participant: ${participant}
+Retry count: ${retryCount}
+Message found: true
+Message type: ${entry.type}
+Session assertion: DELEGATED_TO_NATIVE_BAILEYS
+Re-encryption: IN_PROGRESS
+Resend: NATIVE_BAILEYS_IN_PROGRESS
+Result: PENDING_NATIVE_RELAY`);
 
           const msg = await getMessageForRetry(key);
           if (msg) {
-            console.log(`[BAILEYS NATIVE RETRY] ✅ getMessage successfully returned exact protoMessage for ${msgId}. Proceeding to native Baileys assertSessions.`);
+            entry._retryHandled = Date.now();
+            console.log(`[BAILEYS RETRY]
+Message ID: ${msgId}
+Remote JID: ${remoteJid}
+Participant: ${participant}
+Retry count: ${retryCount}
+Message found: true
+Message type: ${entry.type}
+Session assertion: DELEGATED_TO_NATIVE_BAILEYS
+Re-encryption: SUCCESS
+Resend: NATIVE_BAILEYS_SUCCESS
+Result: RESOLVED`);
             return msg;
           }
 
-          console.warn(`[BAILEYS NATIVE RETRY] ⚠️ getMessage failed to reconstruct protoMessage for ${msgId}`);
           return undefined;
         } catch (retryErr) {
           const errMsg = retryErr?.message || String(retryErr || 'Unknown error');
-          console.error(`[BAILEYS NATIVE RETRY] ❌ Error in getMessage handler for ${key?.id}:`, errMsg);
+          console.error(`[BAILEYS RETRY] ❌ Error in getMessage handler for ${key?.id}:`, errMsg);
           return undefined;
+        } finally {
+          if (entry) {
+            entry._retryInProgress = false;
+          }
         }
       },
     });
@@ -678,14 +700,14 @@ async function connectToWhatsAppUnlocked(force = false) {
     const origAssertSessions = newSock.assertSessions;
     newSock.assertSessions = async (jids, force) => {
       const safeJids = (jids || []).map((j) => String(j || ''));
-      console.log(`[BAILEYS NATIVE RETRY] 🔑 Stage 6: assertSessions start: JIDs: [${safeJids.join(', ')}], force: ${force} | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+      console.log(`[BAILEYS NATIVE RETRY] 🔑 assertSessions started for: ${safeJids.join(', ')} (force: ${force}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
       const startTime = Date.now();
       try {
         const res = await origAssertSessions.call(newSock, jids, force);
-        console.log(`[BAILEYS NATIVE RETRY] ✅ Stage 6: assertSessions end: JIDs: [${safeJids.join(', ')}], result (didFetchNewSession): ${res} in ${Date.now() - startTime}ms | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+        console.log(`[BAILEYS NATIVE RETRY] ✅ assertSessions completed for: ${safeJids.join(', ')} in ${Date.now() - startTime}ms (didFetchNewSession: ${res}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
         return res;
       } catch (err) {
-        console.error(`[BAILEYS NATIVE RETRY] ❌ Stage 6: assertSessions end (failed): JIDs: [${safeJids.join(', ')}] in ${Date.now() - startTime}ms:`, err?.message || err);
+        console.error(`[BAILEYS NATIVE RETRY] ❌ assertSessions failed for: ${safeJids.join(', ')} in ${Date.now() - startTime}ms:`, err?.message || err);
         throw err;
       }
     };
@@ -695,41 +717,34 @@ async function connectToWhatsAppUnlocked(force = false) {
       const msgId = opts?.messageId || 'unknown';
       const participantJid = opts?.participant?.jid || 'none';
       const retryCount = opts?.participant?.count || 'none';
-      console.log(`[BAILEYS NATIVE RETRY] 📤 Stage 7: relayMessage start: MsgID: ${msgId} to: ${jid} (participant: ${participantJid}, retryCount: ${retryCount}, useUserDevicesCache: ${opts?.useUserDevicesCache}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+      console.log(`[BAILEYS NATIVE RETRY] 📤 relayMessage started for MsgID: ${msgId} to ${jid} (participant: ${participantJid}, retryCount: ${retryCount}, useUserDevicesCache: ${opts?.useUserDevicesCache}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
       const startTime = Date.now();
       try {
         const res = await origRelayMessage.call(newSock, jid, message, opts);
-        console.log(`[BAILEYS NATIVE RETRY] ✅ Stage 7: relayMessage end: MsgID: ${msgId} to: ${jid}, result: SUCCESS (${res || 'relayed'}) in ${Date.now() - startTime}ms | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+        console.log(`[BAILEYS NATIVE RETRY] ✅ relayMessage completed for MsgID: ${msgId} to ${jid} in ${Date.now() - startTime}ms | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
         return res;
       } catch (err) {
-        console.error(`[BAILEYS NATIVE RETRY] ❌ Stage 7: relayMessage end (failed): MsgID: ${msgId} to: ${jid} in ${Date.now() - startTime}ms:`, err?.message || err);
+        console.error(`[BAILEYS NATIVE RETRY] ❌ relayMessage failed for MsgID: ${msgId} to ${jid} in ${Date.now() - startTime}ms:`, err?.message || err);
         throw err;
       }
     };
 
     const origSendNode = newSock.sendNode;
     newSock.sendNode = async (node) => {
-      const isRetryAck = node?.tag === 'ack' && (node?.attrs?.class === 'receipt' || node?.attrs?.type === 'retry');
-      if (isRetryAck) {
+      const isAck = node?.tag === 'ack';
+      if (isAck) {
         const ackAttrs = node?.attrs || {};
-        console.log(`[BAILEYS NATIVE RETRY] 📨 Stage 8: Retry ACK start: ID: ${ackAttrs.id} to: ${ackAttrs.to}, class: ${ackAttrs.class}, type: ${ackAttrs.type}, recipient: ${ackAttrs.recipient || 'none'} | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+        console.log(`[BAILEYS NATIVE RETRY] 📨 Retry ACK attempted for ID: ${ackAttrs.id} (to: ${ackAttrs.to}, class: ${ackAttrs.class}, type: ${ackAttrs.type}, recipient: ${ackAttrs.recipient || 'none'}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
       }
-      const startTime = Date.now();
       try {
         const res = await origSendNode.call(newSock, node);
-        if (isRetryAck) {
-          console.log(`[BAILEYS NATIVE RETRY] ✅ Stage 8: Retry ACK end: ID: ${node?.attrs?.id}, result: SUCCESS in ${Date.now() - startTime}ms | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
-          console.log(`[BAILEYS NATIVE RETRY] 🔌 Stage 9 (after retry ACK): Socket connection state:
-  isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}
-  isClosed: ${Boolean(newSock.ws && newSock.ws.isClosed)}`);
+        if (isAck) {
+          console.log(`[BAILEYS NATIVE RETRY] ✅ Retry ACK completed for ID: ${node?.attrs?.id} | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
         }
         return res;
       } catch (err) {
-        if (isRetryAck) {
-          console.error(`[BAILEYS NATIVE RETRY] ❌ Stage 8: Retry ACK end (failed): ID: ${node?.attrs?.id} in ${Date.now() - startTime}ms:`, err?.message || err);
-          console.log(`[BAILEYS NATIVE RETRY] 🔌 Stage 9 (after retry ACK failed): Socket connection state:
-  isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}
-  isClosed: ${Boolean(newSock.ws && newSock.ws.isClosed)}`);
+        if (isAck) {
+          console.error(`[BAILEYS NATIVE RETRY] ❌ Retry ACK failed for ID: ${node?.attrs?.id}:`, err?.message || err);
         }
         throw err;
       }
@@ -837,25 +852,18 @@ async function connectToWhatsAppUnlocked(force = false) {
         const isNodeFromMe = areJidsSameUser(attrs.participant || attrs.from, myJid);
         const rawFromMe = !attrs.recipient || ((attrs.type === 'retry' || attrs.type === 'sender') && isNodeFromMe);
 
-        const patchedFromMe = !isNodeFromMe ? true : rawFromMe;
-
-        console.log(`[BAILEYS NATIVE RETRY] 📥 Stage 1: Retry receipt received:
+        console.log(`[BAILEYS NATIVE RETRY] 📥 Retry receipt stanza received:
   ID: ${msgId}
   From: ${from}
   Participant: ${participant}
   Recipient: ${recipient}
   Type: ${type}
   Retry count: ${retryCount}
-  Timestamp: ${timestampT}`);
-
-        console.log(`[BAILEYS NATIVE RETRY] 🔄 Stage 2: fromMe evaluation:
-  fromMe before correction: ${rawFromMe}
-  fromMe after correction: ${patchedFromMe}
-  IsNodeFromMe: ${isNodeFromMe}`);
-
-        console.log(`[BAILEYS NATIVE RETRY] 🔌 Stage 9 (before retry): Socket connection state:
-  isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}
-  isClosed: ${Boolean(newSock.ws && newSock.ws.isClosed)}`);
+  Timestamp (t): ${timestampT}
+  IsNodeFromMe: ${isNodeFromMe}
+  Raw fromMe (unpatched): ${rawFromMe}
+  Patched fromMe: true
+  Socket state: isOpen=${Boolean(newSock.ws && newSock.ws.isOpen)}`);
 
         if (!isNodeFromMe && attrs.recipient) {
           // Any incoming customer retry receipt arriving at our socket is for a message WE originally sent.

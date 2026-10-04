@@ -143,9 +143,6 @@ let lastReconnectAt = null;
 let hasPersistedCreds = false;
 let authHandle = null;
 
-// Per-connection set of destination JIDs whose Signal sessions have been confirmed fresh
-const healthySessionJids = new Set();
-
 // Mutex to synchronize WhatsApp connection initialization and prevent simultaneous socket generation
 const connectionInitMutex = new Mutex();
 
@@ -576,7 +573,6 @@ async function connectToWhatsAppUnlocked(force = false) {
 
   isConnecting = true;
   const currentInstance = ++socketInstanceId;
-  healthySessionJids.clear();
   console.log(`[BAILEYS] 🔌 Initializing WhatsApp Baileys socket (Generation #${currentInstance})...`);
   io.emit('status', { status: 'connecting', connected: false });
 
@@ -722,27 +718,6 @@ Result: RESOLVED`);
       const participantJid = opts?.participant?.jid || 'none';
       const retryCount = opts?.participant?.count || 'none';
       console.log(`[BAILEYS NATIVE RETRY] 📤 relayMessage started for MsgID: ${msgId} to ${jid} (participant: ${participantJid}, retryCount: ${retryCount}, useUserDevicesCache: ${opts?.useUserDevicesCache}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
-
-      // Per-connection Signal session freshness check:
-      // On the first message sent to a JID after a reconnect/restart, force a fresh Signal pre-key exchange.
-      // Once healthy, mark the JID so subsequent sends use normal symmetric ratcheting without extra network overhead.
-      const targetJid = opts?.participant?.jid || jid;
-      const isEligibleChat = typeof targetJid === 'string' &&
-        !targetJid.includes('@broadcast') &&
-        !targetJid.includes('newsletter') &&
-        (targetJid.endsWith('@s.whatsapp.net') || targetJid.endsWith('@g.us') || targetJid.endsWith('@lid'));
-
-      if (isEligibleChat && !healthySessionJids.has(targetJid)) {
-        console.log(`[SIGNAL SESSION] 🔄 First message to ${targetJid} after reconnect/startup. Forcing fresh Signal pre-key session...`);
-        try {
-          await newSock.assertSessions([targetJid], true);
-          healthySessionJids.add(targetJid);
-          console.log(`[SIGNAL SESSION] ✅ Fresh Signal pre-key session established and marked healthy for ${targetJid}.`);
-        } catch (assertErr) {
-          console.warn(`[SIGNAL SESSION] ⚠️ Pre-key assertion warning for ${targetJid}:`, assertErr?.message || assertErr);
-        }
-      }
-
       const startTime = Date.now();
       try {
         const res = await origRelayMessage.call(newSock, jid, message, opts);
@@ -818,7 +793,6 @@ Result: RESOLVED`);
         currentQrCode = null;
         lastConnectedAt = new Date().toISOString();
         connectedUser = newSock.user ? newSock.user.id.split(':')[0] : 'Go Grand Detailing';
-        healthySessionJids.clear();
         console.log(`[BAILEYS] ✅ Connection OPENED successfully! User: ${connectedUser} | Time: ${lastConnectedAt}`);
         io.emit('status', { status: 'connected', connected: true, user: connectedUser });
         processMessageQueue().catch((err) => console.warn('[QUEUE FLUSH ERROR]:', err.message));
@@ -828,7 +802,6 @@ Result: RESOLVED`);
         isConnected = false;
         isConnecting = false;
         connectedUser = null;
-        healthySessionJids.clear();
         lastDisconnectAt = new Date().toISOString();
 
         const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.statusCode;
@@ -1010,8 +983,6 @@ Result: NOT_FOUND_IN_STORE`);
           if (isSocketActive()) {
             await newSock.assertSessions([participant], true);
             sessionAsserted = true;
-            healthySessionJids.add(participant);
-            if (entry.remoteJid) healthySessionJids.add(entry.remoteJid);
           }
         } catch (sessErr) {
           if (!isSocketActive()) {
@@ -1170,7 +1141,6 @@ app.get('/api/whatsapp/status', async (req, res) => {
       last_reconnect_at: lastReconnectAt,
       reconnect_attempts: reconnectAttempts,
       connection_generation: socketInstanceId,
-      healthy_session_jids_count: healthySessionJids.size,
       ...authDiag,
       persisted_auth: persistedAuthDiag,
       uptime: Math.floor(process.uptime()),

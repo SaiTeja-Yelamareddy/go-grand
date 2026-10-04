@@ -23,6 +23,7 @@ import makeWASocket, {
   generateWAMessageContent,
   areJidsSameUser,
   jidDecode,
+  generateMessageIDV2,
 } from '@whiskeysockets/baileys';
 import NodeCache from '@cacheable/node-cache';
 import { useSupabaseAuthState, getAuthStateDiagnostics } from './supabaseAuth.js';
@@ -341,8 +342,50 @@ async function lookupMessageInSupabase(msgId) {
   return null;
 }
 
+function extractMessageDetails(msg) {
+  if (!msg || typeof msg !== 'object') return { type: 'text', text: '' };
+
+  let inner = msg;
+  if (inner.ephemeralMessage?.message) inner = inner.ephemeralMessage.message;
+  if (inner.viewOnceMessage?.message) inner = inner.viewOnceMessage.message;
+  if (inner.viewOnceMessageV2?.message) inner = inner.viewOnceMessageV2.message;
+  if (inner.documentWithCaptionMessage?.message) inner = inner.documentWithCaptionMessage.message;
+
+  if (inner.documentMessage) {
+    return {
+      type: 'pdf',
+      text: inner.documentMessage.caption || '',
+    };
+  }
+
+  if (inner.imageMessage) {
+    return {
+      type: 'image_qr',
+      text: inner.imageMessage.caption || '',
+    };
+  }
+
+  if (inner.extendedTextMessage) {
+    return {
+      type: 'text',
+      text: inner.extendedTextMessage.text || '',
+    };
+  }
+
+  if (typeof inner.conversation === 'string') {
+    return {
+      type: 'text',
+      text: inner.conversation,
+    };
+  }
+
+  return { type: 'text', text: '' };
+}
+
 function recordSentMessage(entry) {
   if (!entry || !entry.messageId) return;
+
+  const existing = sentMessagesStore.get(entry.messageId);
 
   const originalKey = entry.key || {
     id: entry.messageId,
@@ -351,33 +394,35 @@ function recordSentMessage(entry) {
     participant: entry.participant || undefined,
   };
 
+  const jobData = entry.job ? {
+    id: entry.job.id,
+    vehicleNumber: entry.job.vehicleNumber,
+    vehicleName: entry.job.vehicleName,
+    customerName: entry.job.customerName,
+    phoneNumber: entry.job.phoneNumber,
+    price: entry.job.price,
+    discount: entry.job.discount,
+    services: entry.job.services || entry.job.service,
+    billNo: entry.job.billNo,
+    createdAt: entry.job.createdAt,
+  } : (entry.jobData || existing?.jobData || null);
+
   const record = {
     messageId: entry.messageId,
-    remoteJid: entry.remoteJid,
+    remoteJid: entry.remoteJid || existing?.remoteJid,
     key: {
       id: originalKey.id,
-      remoteJid: originalKey.remoteJid,
-      fromMe: typeof originalKey.fromMe === 'boolean' ? originalKey.fromMe : true,
-      participant: originalKey.participant || undefined,
+      remoteJid: originalKey.remoteJid || existing?.key?.remoteJid,
+      fromMe: typeof originalKey.fromMe === 'boolean' ? originalKey.fromMe : (existing?.key?.fromMe ?? true),
+      participant: originalKey.participant || existing?.key?.participant || undefined,
     },
-    type: entry.type || 'text',
-    textMessage: entry.textMessage || '',
-    jobId: entry.jobId || entry.job?.id || null,
-    jobData: entry.job ? {
-      id: entry.job.id,
-      vehicleNumber: entry.job.vehicleNumber,
-      vehicleName: entry.job.vehicleName,
-      customerName: entry.job.customerName,
-      phoneNumber: entry.job.phoneNumber,
-      price: entry.job.price,
-      discount: entry.job.discount,
-      services: entry.job.services || entry.job.service,
-      billNo: entry.job.billNo,
-      createdAt: entry.job.createdAt,
-    } : (entry.jobData || null),
-    upiId: entry.upiId || null,
-    protoMessage: entry.protoMessage || null, // Live object retained in memory for zero-loss instant retry
-    timestamp: Date.now(),
+    type: entry.type || existing?.type || 'text',
+    textMessage: entry.textMessage || existing?.textMessage || '',
+    jobId: entry.jobId || entry.job?.id || existing?.jobId || null,
+    jobData,
+    upiId: entry.upiId || existing?.upiId || null,
+    protoMessage: entry.protoMessage || existing?.protoMessage || null, // Live object retained in memory for zero-loss instant retry
+    timestamp: existing?.timestamp || Date.now(),
   };
 
   sentMessagesStore.set(entry.messageId, record);
@@ -714,9 +759,66 @@ Result: RESOLVED`);
 
     const origRelayMessage = newSock.relayMessage;
     newSock.relayMessage = async (jid, message, opts) => {
-      const msgId = opts?.messageId || 'unknown';
+      opts = opts || {};
+      let finalMsgId = opts.messageId;
+      if (!finalMsgId || finalMsgId === 'unknown') {
+        if (typeof generateMessageIDV2 === 'function') {
+          finalMsgId = generateMessageIDV2(newSock.user?.id);
+        } else if (typeof generateMessageID === 'function') {
+          finalMsgId = generateMessageID();
+        }
+        if (finalMsgId) {
+          opts.messageId = finalMsgId;
+        }
+      }
+
+      const msgId = opts.messageId || 'unknown';
       const participantJid = opts?.participant?.jid || 'none';
       const retryCount = opts?.participant?.count || 'none';
+
+      // Pre-transmission recovery recording:
+      // Outgoing customer messages must be in the recovery store BEFORE the first byte is transmitted
+      // so any immediate retry receipt finds the exact protoMessage in memory without race conditions.
+      const isRetryRelay = Boolean(opts?.participant);
+      const isStatusOrBroadcast = typeof jid === 'string' && (jid === 'status@broadcast' || jid.endsWith('@broadcast') || jid.endsWith('@newsletter'));
+      const isControlProtocol = Boolean(
+        !message || typeof message !== 'object' ||
+        message.protocolMessage ||
+        message.senderKeyDistributionMessage ||
+        message.fastRatchetKeyDistributionMessage ||
+        message.peerDataOperationRequestMessage ||
+        message.peerDataOperationRequestResponseMessage ||
+        message.historySyncNotification ||
+        message.appStateSyncKeyShare ||
+        message.reactionMessage ||
+        message.keepInChatMessage ||
+        opts?.additionalAttributes?.category === 'peer'
+      );
+
+      const isEligibleForRecovery = !isRetryRelay && !isStatusOrBroadcast && !isControlProtocol && msgId && msgId !== 'unknown';
+
+      if (isEligibleForRecovery) {
+        try {
+          const details = extractMessageDetails(message);
+          recordSentMessage({
+            messageId: msgId,
+            remoteJid: jid,
+            key: {
+              id: msgId,
+              remoteJid: jid,
+              fromMe: true,
+              participant: opts?.participant?.jid || undefined,
+            },
+            type: details.type,
+            textMessage: details.text,
+            protoMessage: message,
+          });
+          console.log(`[MESSAGE RECOVERY] 🛡️ Pre-transmission recovery entry recorded for MsgID: ${msgId} to ${jid} (type: ${details.type})`);
+        } catch (recordErr) {
+          console.warn(`[MESSAGE RECOVERY] ⚠️ Failed pre-recording recovery entry for MsgID: ${msgId}:`, recordErr.message);
+        }
+      }
+
       console.log(`[BAILEYS NATIVE RETRY] 📤 relayMessage started for MsgID: ${msgId} to ${jid} (participant: ${participantJid}, retryCount: ${retryCount}, useUserDevicesCache: ${opts?.useUserDevicesCache}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
       const startTime = Date.now();
       try {

@@ -897,10 +897,10 @@ Result: RESOLVED`);
     // Helper to verify socket is open and actively connected
     const isSocketActive = () => Boolean(newSock && newSock.ws && newSock.ws.isOpen && !newSock.ws.isClosed);
 
-    // Layer-2 rescue resend temporarily disabled to isolate native Baileys 6.7.24 retry flow
-    const ENABLE_LAYER_2_RESCUE_RESEND = false;
+    // Layer-2 rescue resend enabled for guaranteed delivery when native Baileys retry does not complete
+    const ENABLE_LAYER_2_RESCUE_RESEND = true;
 
-    // Layer 2: Watchdog & Rescue Resend Interceptor (Cooperative Fallback - Temporarily Disabled)
+    // Layer 2: Watchdog & Rescue Resend Interceptor (Cooperative Fallback)
     newSock.ws.on('CB:receipt', async (node) => {
       if (currentInstance !== socketInstanceId) return;
       let msgId = null;

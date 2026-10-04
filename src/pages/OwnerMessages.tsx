@@ -19,6 +19,7 @@ import {
   saveMessageTemplates,
   syncMessageTemplatesFromSupabase,
   type MessageTemplates,
+  type MessageTemplateKey,
 } from '../utils/templateStorage';
 
 interface OwnerMessagesProps {
@@ -27,7 +28,7 @@ interface OwnerMessagesProps {
 }
 
 interface MessageRowConfig {
-  key: keyof MessageTemplates;
+  key: MessageTemplateKey;
   title: string;
   icon: string;
   IconComponent: React.ElementType;
@@ -95,7 +96,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
 }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [templates, setTemplates] = useState<MessageTemplates>(DEFAULT_MESSAGE_TEMPLATES);
-  const [activeKey, setActiveKey] = useState<keyof MessageTemplates | null>(null);
+  const [activeKey, setActiveKey] = useState<MessageTemplateKey | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showDetailMenu, setShowDetailMenu] = useState(false);
   const { notify } = useNotifications();
@@ -171,6 +172,42 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
     }
   };
 
+  const handleToggleSendPdf = async () => {
+    if (!isOwnerAuthenticated()) {
+      notify({ type: 'error', title: 'Access Denied', message: 'Owner access is required.' });
+      return;
+    }
+
+    const nextValue = !templates.sendPdfWithMessage;
+    setTemplates((prev) => ({
+      ...prev,
+      sendPdfWithMessage: nextValue,
+    }));
+
+    try {
+      await saveMessageTemplates({
+        sendPdfWithMessage: nextValue,
+      });
+      notify({
+        type: 'success',
+        title: nextValue ? 'PDF Enabled' : 'PDF Disabled',
+        message: nextValue
+          ? 'Invoice PDF will be sent along with the WhatsApp bill message.'
+          : 'Send Bill will send message only without PDF.',
+      });
+    } catch (_err) {
+      setTemplates((prev) => ({
+        ...prev,
+        sendPdfWithMessage: !nextValue,
+      }));
+      notify({
+        type: 'error',
+        title: 'Save Failed',
+        message: 'Could not save PDF setting.',
+      });
+    }
+  };
+
   const handleSaveActiveMessage = async () => {
     if (!activeKey) return;
 
@@ -187,7 +224,10 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
 
     setIsSaving(true);
     try {
-      await saveMessageTemplates({ [activeKey]: templates[activeKey] });
+      await saveMessageTemplates({
+        [activeKey]: templates[activeKey],
+        sendPdfWithMessage: templates.sendPdfWithMessage,
+      });
       notify({ type: 'success', title: 'Message Saved', message: 'The message template was saved successfully.' });
     } catch (err: any) {
       notify({ type: 'error', title: 'Message Save Failed', message: 'The message template could not be saved.' });
@@ -246,13 +286,52 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                         {row.title}
                       </h2>
                       <p className="text-xs text-slate-500 dark:text-neutral-400 mt-0.5">
-                        {row.subtitle}
+                        {row.key === 'whatsAppBill'
+                          ? `Invoice message • PDF: ${templates.sendPdfWithMessage ? 'ON' : 'OFF'}`
+                          : row.subtitle}
                       </p>
                     </div>
                   </div>
                   <ChevronRight size={16} className="text-slate-400 dark:text-neutral-600 shrink-0" />
                 </button>
               ))}
+            </div>
+
+            {/* QUICK SETTING: Send PDF with message */}
+            <div className="mt-4 bg-white dark:bg-[#0C0C0C] border border-slate-200 dark:border-[#1E1E1E] rounded-xl p-4 shadow-xs">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <label
+                    htmlFor="main-send-pdf-toggle"
+                    className="block text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider cursor-pointer"
+                  >
+                    Send PDF with message
+                  </label>
+                  <p className="text-[11px] text-slate-500 dark:text-neutral-400 font-medium mt-0.5">
+                    {templates.sendPdfWithMessage
+                      ? 'ON: Send Bill sends both customized bill message and invoice PDF'
+                      : 'OFF: Send Bill sends customized bill message only'}
+                  </p>
+                </div>
+                <button
+                  id="main-send-pdf-toggle"
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(templates.sendPdfWithMessage)}
+                  onClick={handleToggleSendPdf}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    templates.sendPdfWithMessage ? 'bg-[#25D366]' : 'bg-slate-300 dark:bg-neutral-700'
+                  }`}
+                  title="Send PDF with message"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      templates.sendPdfWithMessage ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -316,6 +395,45 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* TOGGLE OPTION: Send PDF with message (For WhatsApp Bill) */}
+              {activeKey === 'whatsAppBill' && (
+                <div className="pt-3 pb-1 border-t border-slate-100 dark:border-[#1C1C1C]">
+                  <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-[#141414] border border-slate-200 dark:border-[#242424] transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <label
+                        htmlFor="send-pdf-toggle"
+                        className="block text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider cursor-pointer"
+                      >
+                        Send PDF with message
+                      </label>
+                      <p className="text-[11px] text-slate-500 dark:text-neutral-400 font-medium mt-0.5">
+                        {templates.sendPdfWithMessage
+                          ? 'ON: Send Bill sends both customized bill message and invoice PDF'
+                          : 'OFF: Send Bill sends customized bill message only'}
+                      </p>
+                    </div>
+                    <button
+                      id="send-pdf-toggle"
+                      type="button"
+                      role="switch"
+                      aria-checked={Boolean(templates.sendPdfWithMessage)}
+                      onClick={handleToggleSendPdf}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        templates.sendPdfWithMessage ? 'bg-[#25D366]' : 'bg-slate-300 dark:bg-neutral-700'
+                      }`}
+                      title="Send PDF with message"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          templates.sendPdfWithMessage ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* PRIMARY BOTTOM ACTION BUTTON */}
               <div className="pt-2">

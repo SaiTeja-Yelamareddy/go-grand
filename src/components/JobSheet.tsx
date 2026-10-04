@@ -22,7 +22,7 @@ import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { useNotifications } from './NotificationSystem';
 import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend, sendVehicleReceivedWhatsAppViaBackend, parsePriceNumber, generateBillNo } from '../utils/invoiceUtils';
 import { getUpiEnabled } from '../utils/upiStorage';
-import { getMessageTemplates, renderTemplate, SHOP_NAME } from '../utils/templateStorage';
+import { getMessageTemplates, renderTemplate, SHOP_NAME, getSendPdfWithMessage } from '../utils/templateStorage';
 
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'w-[22px] h-[22px] text-[#25D366]' }) => (
   <svg
@@ -1112,22 +1112,22 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 </div>
               </button>
 
-              {/* Action 4: WhatsApp Bill */}
+              {/* Action 4: Send Bill */}
               <button
                 type="button"
                 onClick={handleBillWhatsApp}
                 className="relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-lg transition-all active:scale-[0.96] group border-2 border-[#86EFAC] bg-[#25D366] hover:bg-[#1EBE5D] text-left cursor-pointer"
-                title="Send PDF Invoice on WhatsApp"
+                title="Send Bill on WhatsApp"
               >
                 <div className="w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-sm">
                   <WhatsAppIcon className="w-6 h-6 text-white drop-shadow-md" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-white">
-                    WhatsApp Bill
+                    Send Bill
                   </span>
                   <span className="block text-[10px] font-black text-emerald-100 uppercase tracking-tight mt-0.5">
-                    PDF Tax Invoice
+                    {getSendPdfWithMessage() ? 'PDF Tax Invoice' : 'WhatsApp Message'}
                   </span>
                 </div>
               </button>

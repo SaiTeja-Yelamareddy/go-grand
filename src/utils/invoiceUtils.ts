@@ -7,6 +7,7 @@ import {
   formatMessageDateIST,
   formatMessageTimeIST,
   SHOP_NAME,
+  getSendPdfWithMessage,
 } from './templateStorage';
 
 /**
@@ -123,7 +124,10 @@ export function openWhatsAppDirect(record: JobRecord) {
   window.open(waUrl, '_blank');
 }
 
-export async function sendWhatsAppBillViaBackend(record: JobRecord): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+export async function sendWhatsAppBillViaBackend(
+  record: JobRecord,
+  options?: { sendPdf?: boolean }
+): Promise<{ success: boolean; method: 'backend'; error?: string }> {
   const backendUrl = getWhatsAppBackendUrl();
   try {
     console.log(`[WHATSAPP HEALTH] GET ${backendUrl}/api/whatsapp/status`);
@@ -140,43 +144,66 @@ export async function sendWhatsAppBillViaBackend(record: JobRecord): Promise<{ s
       }
 
       const fullTextMessage = formatWhatsAppBillText(record);
-      const pdfCaptionMessage = formatWhatsAppPdfCaption(record);
       const idempotencyKey = record.id ? `bill_${record.id}_${Date.now()}` : undefined;
-      
-      // Try sending PDF invoice document with clean short caption
-      const pdfSendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice-pdf`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job: record,
-          phoneNumber: record.phoneNumber,
-          textMessage: pdfCaptionMessage,
-          idempotencyKey,
-        }),
-      });
+      const shouldSendPdf = options?.sendPdf !== undefined ? options.sendPdf : getSendPdfWithMessage();
 
-      if (pdfSendRes.ok) {
-        const pdfData = await pdfSendRes.json();
-        if (pdfData.success) {
-          return { success: true, method: 'backend' };
+      if (shouldSendPdf) {
+        // Toggle ON: Send customized WhatsApp bill message and existing invoice PDF
+        const pdfCaptionMessage = formatWhatsAppPdfCaption(record);
+        
+        // Try sending PDF invoice document with clean short caption
+        const pdfSendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice-pdf`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            job: record,
+            phoneNumber: record.phoneNumber,
+            textMessage: pdfCaptionMessage,
+            idempotencyKey,
+          }),
+        });
+
+        if (pdfSendRes.ok) {
+          const pdfData = await pdfSendRes.json();
+          if (pdfData.success) {
+            return { success: true, method: 'backend' };
+          }
         }
-      }
 
-      // Fallback to text message send if PDF endpoint encountered issue
-      const sendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phoneNumber: record.phoneNumber,
-          message: fullTextMessage,
-          idempotencyKey,
-        }),
-      });
+        // Fallback to text message send if PDF endpoint encountered issue
+        const sendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phoneNumber: record.phoneNumber,
+            message: fullTextMessage,
+            idempotencyKey,
+          }),
+        });
 
-      if (sendRes.ok) {
-        const sendData = await sendRes.json();
-        if (sendData.success) {
-          return { success: true, method: 'backend' };
+        if (sendRes.ok) {
+          const sendData = await sendRes.json();
+          if (sendData.success) {
+            return { success: true, method: 'backend' };
+          }
+        }
+      } else {
+        // Toggle OFF: Send only the customized WhatsApp bill message (no PDF)
+        const sendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phoneNumber: record.phoneNumber,
+            message: fullTextMessage,
+            idempotencyKey,
+          }),
+        });
+
+        if (sendRes.ok) {
+          const sendData = await sendRes.json();
+          if (sendData.success) {
+            return { success: true, method: 'backend' };
+          }
         }
       }
     }

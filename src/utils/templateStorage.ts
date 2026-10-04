@@ -1,12 +1,20 @@
 import { supabase, isSupabaseConfigured } from '../config/supabaseClient';
 import { isOwnerAuthenticated } from '../config/authConfig';
 
+export type MessageTemplateKey =
+  | 'vehicleReceived'
+  | 'vehicleReady'
+  | 'whatsAppBill'
+  | 'sms'
+  | 'promotional';
+
 export interface MessageTemplates {
   vehicleReceived: string;
   vehicleReady: string;
   whatsAppBill: string;
   sms: string;
   promotional: string;
+  sendPdfWithMessage?: boolean;
 }
 
 export const DEFAULT_MESSAGE_TEMPLATES: MessageTemplates = {
@@ -50,9 +58,11 @@ Exclusive offer on [Date] at [Time]. ✨
 
 Visit GO GRAND Car Wash & Detailing, Murakambattu.
 Drive clean. Drive happy. 🚗✨`,
+  sendPdfWithMessage: false,
 };
 
 export const TEMPLATE_STORAGE_KEY = 'go-grand-message-templates';
+export const SEND_PDF_WITH_MESSAGE_STORAGE_KEY = 'go-grand-send-pdf-with-message';
 export const SHOP_NAME = 'GO GRAND Car Wash & Detailing';
 
 export interface TemplateVariables {
@@ -175,6 +185,7 @@ export const SAMPLE_PREVIEW_VARIABLES: TemplateVariables = {
 export function getMessageTemplates(): MessageTemplates {
   try {
     const stored = localStorage.getItem(TEMPLATE_STORAGE_KEY);
+    const standalone = localStorage.getItem(SEND_PDF_WITH_MESSAGE_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
       return {
@@ -198,12 +209,37 @@ export function getMessageTemplates(): MessageTemplates {
           typeof parsed.promotional === 'string' && parsed.promotional.trim()
             ? parsed.promotional
             : DEFAULT_MESSAGE_TEMPLATES.promotional,
+        sendPdfWithMessage:
+          typeof parsed.sendPdfWithMessage === 'boolean'
+            ? parsed.sendPdfWithMessage
+            : standalone !== null
+            ? standalone === 'true'
+            : false,
+      };
+    }
+    if (standalone !== null) {
+      return {
+        ...DEFAULT_MESSAGE_TEMPLATES,
+        sendPdfWithMessage: standalone === 'true',
       };
     }
   } catch (e) {
     console.error('Failed to parse cached message templates:', e);
   }
   return { ...DEFAULT_MESSAGE_TEMPLATES };
+}
+
+/**
+ * Retrieves the persisted setting for sending invoice PDF with WhatsApp bill message.
+ * Default is false (OFF).
+ */
+export function getSendPdfWithMessage(): boolean {
+  try {
+    const templates = getMessageTemplates();
+    return Boolean(templates.sendPdfWithMessage);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -220,15 +256,23 @@ export async function syncMessageTemplatesFromSupabase(): Promise<MessageTemplat
 
       if (!error && data?.value && typeof data.value === 'object') {
         const remote = data.value;
+        const standalone = localStorage.getItem(SEND_PDF_WITH_MESSAGE_STORAGE_KEY);
         const merged: MessageTemplates = {
           vehicleReceived: remote.vehicleReceived || DEFAULT_MESSAGE_TEMPLATES.vehicleReceived,
           vehicleReady: remote.vehicleReady || DEFAULT_MESSAGE_TEMPLATES.vehicleReady,
           whatsAppBill: remote.whatsAppBill || DEFAULT_MESSAGE_TEMPLATES.whatsAppBill,
           sms: remote.sms || DEFAULT_MESSAGE_TEMPLATES.sms,
           promotional: remote.promotional || DEFAULT_MESSAGE_TEMPLATES.promotional,
+          sendPdfWithMessage:
+            typeof remote.sendPdfWithMessage === 'boolean'
+              ? remote.sendPdfWithMessage
+              : standalone !== null
+              ? standalone === 'true'
+              : false,
         };
         try {
           localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(merged));
+          localStorage.setItem(SEND_PDF_WITH_MESSAGE_STORAGE_KEY, String(merged.sendPdfWithMessage));
         } catch (e) {}
         return merged;
       }
@@ -272,10 +316,15 @@ export async function saveMessageTemplates(
       typeof updates.promotional === 'string' && updates.promotional.trim()
         ? updates.promotional.trim()
         : current.promotional,
+    sendPdfWithMessage:
+      typeof updates.sendPdfWithMessage === 'boolean'
+        ? updates.sendPdfWithMessage
+        : current.sendPdfWithMessage ?? false,
   };
 
   try {
     localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(merged));
+    localStorage.setItem(SEND_PDF_WITH_MESSAGE_STORAGE_KEY, String(merged.sendPdfWithMessage));
   } catch (e) {
     console.error('Failed to cache message templates locally:', e);
   }
@@ -297,4 +346,14 @@ export async function saveMessageTemplates(
   }
 
   return merged;
+}
+
+/**
+ * Dedicated helper to update and persist the sendPdfWithMessage toggle.
+ */
+export async function saveSendPdfWithMessage(enabled: boolean): Promise<boolean> {
+  await saveMessageTemplates({
+    sendPdfWithMessage: enabled,
+  });
+  return enabled;
 }

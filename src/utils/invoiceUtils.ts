@@ -170,6 +170,11 @@ export async function sendWhatsAppBillViaBackend(
           }
         }
 
+        // If sendPdf was explicitly requested (e.g. from vehicle three-dot menu), do not fall back to text-only send
+        if (options?.sendPdf === true) {
+          return { success: false, method: 'backend', error: 'Failed to send PDF invoice via WhatsApp' };
+        }
+
         // Fallback to text message send if PDF endpoint encountered issue
         const sendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice`, {
           method: 'POST',
@@ -213,6 +218,16 @@ export async function sendWhatsAppBillViaBackend(
   }
 
   return { success: false, method: 'backend', error: 'WhatsApp server is offline or unreachable' };
+}
+
+/**
+ * Directly sends the existing invoice PDF via WhatsApp backend without checking toggle settings.
+ * Always sends exactly ONE invoice PDF document to the customer's WhatsApp number.
+ */
+export async function sendWhatsAppInvoicePdfViaBackend(
+  record: JobRecord
+): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+  return sendWhatsAppBillViaBackend(record, { sendPdf: true });
 }
 
 export async function sendWhatsAppMessageViaBackend(phoneNumber: string, message: string, idempotencyKey?: string): Promise<{ success: boolean; method: 'backend'; error?: string }> {

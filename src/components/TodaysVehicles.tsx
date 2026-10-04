@@ -8,7 +8,7 @@ import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { useNotifications } from './NotificationSystem';
-import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend } from '../utils/invoiceUtils';
+import { sendWhatsAppInvoicePdfViaBackend, sendVehicleReadyWhatsAppViaBackend } from '../utils/invoiceUtils';
 import { getUpiEnabled } from '../utils/upiStorage';
 
 interface TodaysVehiclesProps {
@@ -307,7 +307,7 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                   onClick={async () => {
                                     setActiveMenuId(null);
                                     const loadingId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
-                                    const res = await sendWhatsAppBillViaBackend(item);
+                                    const res = await sendWhatsAppInvoicePdfViaBackend(item);
                                     dismiss(loadingId);
                                     if (res.success) {
                                       notify({ type: 'success', title: 'Bill Sent', message: 'Invoice has been sent via WhatsApp.' });

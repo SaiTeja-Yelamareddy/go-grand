@@ -1121,7 +1121,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 </div>
               </button>
 
-              {/* Action 4: Send Bill */}
+              {/* Action 4: Payment Received */}
               <button
                 type="button"
                 onClick={handleBillWhatsApp}
@@ -1131,14 +1131,14 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                     ? 'bg-[#1EBE5D] opacity-75 cursor-not-allowed'
                     : 'bg-[#25D366] hover:bg-[#1EBE5D] active:scale-[0.96] group cursor-pointer'
                 }`}
-                title="Send Bill on WhatsApp"
+                title="Send Payment Received on WhatsApp"
               >
                 <div className={`w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center shrink-0 shadow-sm ${!isSending ? 'group-hover:scale-110 transition-transform' : ''}`}>
                   <WhatsAppIcon className="w-6 h-6 text-white drop-shadow-md" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-white">
-                    {isSending ? 'Sending...' : 'Send Bill'}
+                    {isSending ? 'Sending...' : 'Payment Received'}
                   </span>
                   <span className="block text-[10px] font-black text-emerald-100 uppercase tracking-tight mt-0.5">
                     {getSendPdfWithMessage() ? 'PDF Tax Invoice' : 'WhatsApp Message'}

@@ -193,7 +193,7 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
         title: nextValue ? 'PDF Enabled' : 'PDF Disabled',
         message: nextValue
           ? 'Invoice PDF will be sent along with the WhatsApp bill message.'
-          : 'Send Bill will send message only without PDF.',
+          : 'Payment Received will send message only without PDF.',
       });
     } catch (_err) {
       setTemplates((prev) => ({
@@ -309,8 +309,8 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                   </label>
                   <p className="text-[11px] text-slate-500 dark:text-neutral-400 font-medium mt-0.5">
                     {templates.sendPdfWithMessage
-                      ? 'ON: Send Bill sends both customized bill message and invoice PDF'
-                      : 'OFF: Send Bill sends customized bill message only'}
+                      ? 'ON: Payment Received sends both customized bill message and invoice PDF'
+                      : 'OFF: Payment Received sends customized bill message only'}
                   </p>
                 </div>
                 <button
@@ -409,8 +409,8 @@ export const OwnerMessages: React.FC<OwnerMessagesProps> = ({
                       </label>
                       <p className="text-[11px] text-slate-500 dark:text-neutral-400 font-medium mt-0.5">
                         {templates.sendPdfWithMessage
-                          ? 'ON: Send Bill sends both customized bill message and invoice PDF'
-                          : 'OFF: Send Bill sends customized bill message only'}
+                          ? 'ON: Payment Received sends both customized bill message and invoice PDF'
+                          : 'OFF: Payment Received sends customized bill message only'}
                       </p>
                     </div>
                     <button

@@ -7,6 +7,7 @@ export interface MessageTemplates {
   whatsAppBill: string;
   sms: string;
   promotional: string;
+  paymentReceived: string;
 }
 
 export const DEFAULT_MESSAGE_TEMPLATES: MessageTemplates = {
@@ -50,6 +51,14 @@ Exclusive offer on [Date] at [Time]. ✨
 
 Visit GO GRAND Car Wash & Detailing, Murakambattu.
 Drive clean. Drive happy. 🚗✨`,
+  paymentReceived: `Hello [Customer Name],
+
+We have received the payment for your vehicle [Vehicle Number].
+
+Thank you for choosing GO GRAND Car Wash & Detailing! 🚗✨
+
+GO GRAND
+Drive clean. Drive happy.`,
 };
 
 export const TEMPLATE_STORAGE_KEY = 'go-grand-message-templates';
@@ -198,6 +207,12 @@ export function getMessageTemplates(): MessageTemplates {
           typeof parsed.promotional === 'string' && parsed.promotional.trim()
             ? parsed.promotional
             : DEFAULT_MESSAGE_TEMPLATES.promotional,
+        paymentReceived:
+          typeof parsed.paymentReceived === 'string' && parsed.paymentReceived.trim()
+            ? parsed.paymentReceived
+            : (typeof parsed.payment_received === 'string' && parsed.payment_received.trim()
+                ? parsed.payment_received
+                : DEFAULT_MESSAGE_TEMPLATES.paymentReceived),
       };
     }
   } catch (e) {
@@ -226,6 +241,7 @@ export async function syncMessageTemplatesFromSupabase(): Promise<MessageTemplat
           whatsAppBill: remote.whatsAppBill || DEFAULT_MESSAGE_TEMPLATES.whatsAppBill,
           sms: remote.sms || DEFAULT_MESSAGE_TEMPLATES.sms,
           promotional: remote.promotional || DEFAULT_MESSAGE_TEMPLATES.promotional,
+          paymentReceived: remote.paymentReceived || remote.payment_received || DEFAULT_MESSAGE_TEMPLATES.paymentReceived,
         };
         try {
           localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(merged));
@@ -272,6 +288,10 @@ export async function saveMessageTemplates(
       typeof updates.promotional === 'string' && updates.promotional.trim()
         ? updates.promotional.trim()
         : current.promotional,
+    paymentReceived:
+      typeof updates.paymentReceived === 'string' && updates.paymentReceived.trim()
+        ? updates.paymentReceived.trim()
+        : current.paymentReceived,
   };
 
   try {

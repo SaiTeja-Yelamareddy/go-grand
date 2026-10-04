@@ -20,20 +20,11 @@ import { saveJobRecord, updateJobRecord, getJobRecordById, lookupVehicleHistory,
 import { INDIAN_VEHICLE_BRANDS } from '../data/indianVehicles';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { useNotifications } from './NotificationSystem';
-import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend, sendVehicleReceivedWhatsAppViaBackend, parsePriceNumber, generateBillNo } from '../utils/invoiceUtils';
+import { sendVehicleReadyWhatsAppViaBackend, sendVehicleReceivedWhatsAppViaBackend, sendPaymentReceivedWhatsAppViaBackend, parsePriceNumber, generateBillNo } from '../utils/invoiceUtils';
 import { getUpiEnabled } from '../utils/upiStorage';
 import { getMessageTemplates, renderTemplate, SHOP_NAME } from '../utils/templateStorage';
 
-const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'w-[22px] h-[22px] text-[#25D366]' }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    className={className}
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-  </svg>
-);
+
 
 const SmsIcon: React.FC<{ className?: string }> = ({ className = 'w-[22px] h-[22px] text-[#2196F3]' }) => (
   <svg
@@ -88,6 +79,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   });
 
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSendingPayment, setIsSendingPayment] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showDropdownPicker, setShowDropdownPicker] = useState(false);
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
@@ -487,20 +479,63 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     }
   };
 
-  const handleBillWhatsApp = async () => {
-    if (!validateForm()) return;
+  const handlePaymentReceivedWhatsApp = async () => {
+    if (isSendingPayment) return;
+    if (!validateForm()) {
+      notify({
+        type: 'warning',
+        title: 'Missing Information',
+        message: 'Please complete the required fields to send payment confirmation.',
+      });
+      return;
+    }
 
-    const saved = await handleSaveDraft(undefined, 'billed');
-    if (saved) {
-      const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
-      const res = await sendWhatsAppBillViaBackend(saved);
+    setIsSendingPayment(true);
+    const notifId = notify({
+      type: 'loading',
+      title: 'Connecting to server...',
+      message: 'Sending payment received confirmation, please wait...',
+      duration: 0,
+    });
+
+    try {
+      const existingJob = activeJobId ? getJobRecordById(activeJobId) : null;
+      const res = await sendPaymentReceivedWhatsAppViaBackend({
+        id: activeJobId || undefined,
+        customerName: formData.customerName.trim(),
+        vehicleName: formData.vehicleName.trim(),
+        vehicleNumber: formData.vehicleNumber.trim().toUpperCase(),
+        phoneNumber: formData.phoneNumber.trim(),
+        services: formData.selectedServices,
+        price: formData.price.trim(),
+        discount: (formData as any).discount,
+        billNo: existingJob?.billNo,
+        createdAt: existingJob?.createdAt,
+      });
+
       dismiss(notifId);
       if (res && res.success) {
-        notify({ type: 'success', title: 'Sent ✓', message: 'Invoice has been sent via WhatsApp.' });
+        notify({
+          type: 'success',
+          title: 'Sent ✓',
+          message: 'Payment received confirmation sent via WhatsApp.',
+        });
       } else {
-        notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
-        
+        notify({
+          type: 'error',
+          title: 'Message Not Sent',
+          message: res?.error || 'The payment confirmation could not be sent via WhatsApp.',
+        });
       }
+    } catch (err: any) {
+      dismiss(notifId);
+      notify({
+        type: 'error',
+        title: 'Message Not Sent',
+        message: err?.message || 'Failed to send payment confirmation.',
+      });
+    } finally {
+      setIsSendingPayment(false);
     }
   };
 
@@ -1112,22 +1147,25 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 </div>
               </button>
 
-              {/* Action 4: WhatsApp Bill */}
+              {/* Action 4: Payment Received */}
               <button
                 type="button"
-                onClick={handleBillWhatsApp}
-                className="relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-lg transition-all active:scale-[0.96] group border-2 border-[#86EFAC] bg-[#25D366] hover:bg-[#1EBE5D] text-left cursor-pointer"
-                title="Send PDF Invoice on WhatsApp"
+                onClick={handlePaymentReceivedWhatsApp}
+                disabled={isSendingPayment}
+                className={`relative overflow-hidden flex items-center gap-2.5 p-3 rounded-2xl text-white shadow-lg transition-all group border-2 border-[#86EFAC] bg-[#25D366] hover:bg-[#1EBE5D] text-left cursor-pointer ${
+                  isSendingPayment ? 'opacity-60 cursor-not-allowed' : 'active:scale-[0.96]'
+                }`}
+                title="Send Payment Received Confirmation on WhatsApp"
               >
                 <div className="w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-sm">
-                  <WhatsAppIcon className="w-6 h-6 text-white drop-shadow-md" />
+                  <CheckCircle2 className="w-6 h-6 text-white drop-shadow-md" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="block text-xs sm:text-sm font-black tracking-wide uppercase leading-tight truncate text-white">
-                    WhatsApp Bill
+                    Payment Received
                   </span>
                   <span className="block text-[10px] font-black text-emerald-100 uppercase tracking-tight mt-0.5">
-                    PDF Tax Invoice
+                    WhatsApp Confirmation
                   </span>
                 </div>
               </button>

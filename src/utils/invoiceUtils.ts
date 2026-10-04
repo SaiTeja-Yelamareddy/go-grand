@@ -3,6 +3,7 @@ import { getStoredUpiId, getUpiEnabled } from './upiStorage';
 import { getWhatsAppBackendUrl } from '../config/apiConfig';
 import {
   getMessageTemplates,
+  DEFAULT_MESSAGE_TEMPLATES,
   renderTemplate,
   formatMessageDateIST,
   formatMessageTimeIST,
@@ -359,6 +360,69 @@ export async function sendVehicleReceivedWhatsAppViaBackend(record: JobRecord): 
     record.createdAt || new Date()
   );
   const idempotencyKey = record.id ? `recv_${record.id}_${Date.now()}` : undefined;
+  return sendWhatsAppMessageViaBackend(record.phoneNumber, msg, idempotencyKey);
+}
+
+/**
+ * Formats a Payment Received WhatsApp message using the configured paymentReceived template.
+ * [Date] and [Time] represent the timestamp in Asia/Kolkata timezone.
+ */
+export function formatPaymentReceivedMessage(
+  customerName?: string,
+  vehicleName?: string,
+  vehicleNumber?: string,
+  services?: string[] | string,
+  amount?: string | number,
+  billNo?: string,
+  dateInput?: Date | string | number
+): string {
+  const servicesText = Array.isArray(services)
+    ? services.join(', ')
+    : services || 'Car Wash & Detailing';
+
+  const templates = getMessageTemplates();
+  const templateStr = templates.paymentReceived || DEFAULT_MESSAGE_TEMPLATES.paymentReceived;
+  return renderTemplate(templateStr, {
+    customer_name: customerName,
+    vehicle_model: vehicleName,
+    vehicle_number: vehicleNumber,
+    service: servicesText,
+    amount: amount,
+    bill_no: billNo,
+    shop_name: SHOP_NAME,
+    date: formatMessageDateIST(dateInput || new Date()),
+    time: formatMessageTimeIST(dateInput || new Date()),
+  });
+}
+
+export async function sendPaymentReceivedWhatsAppViaBackend(record: {
+  id?: string;
+  customerName: string;
+  vehicleName?: string;
+  vehicleNumber: string;
+  phoneNumber: string;
+  services?: string[] | string;
+  price?: string | number;
+  discount?: string | number;
+  billNo?: string;
+  createdAt?: string | Date;
+}): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+  const priceNum = parsePriceNumber(record.price);
+  const discountNum = record.discount ? parsePriceNumber(record.discount) : 0;
+  const finalAmount = Math.max(0, priceNum - discountNum);
+  const createdAtStr = record.createdAt instanceof Date ? record.createdAt.toISOString() : record.createdAt;
+  const billNo = record.billNo || (record.id ? generateBillNo(record.id, createdAtStr) : '');
+
+  const msg = formatPaymentReceivedMessage(
+    record.customerName,
+    record.vehicleName,
+    record.vehicleNumber,
+    record.services,
+    finalAmount,
+    billNo,
+    record.createdAt || new Date()
+  );
+  const idempotencyKey = record.id ? `pay_${record.id}_${Date.now()}` : `pay_${Date.now()}`;
   return sendWhatsAppMessageViaBackend(record.phoneNumber, msg, idempotencyKey);
 }
 

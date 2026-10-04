@@ -8,6 +8,7 @@ import {
   FileText,
   Smartphone,
   Megaphone,
+  CheckCircle2,
 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { NavigationDrawer } from '../components/NavigationDrawer';
@@ -51,6 +52,14 @@ const MESSAGE_ROWS: MessageRowConfig[] = [
     IconComponent: Sparkles,
     iconColor: 'text-emerald-500',
     subtitle: 'WhatsApp notification',
+  },
+  {
+    key: 'paymentReceived',
+    title: 'Payment Received',
+    icon: '✅',
+    IconComponent: CheckCircle2,
+    iconColor: 'text-emerald-500',
+    subtitle: 'Payment confirmation',
   },
   {
     key: 'whatsAppBill',

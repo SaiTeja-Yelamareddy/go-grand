@@ -23,7 +23,9 @@ import makeWASocket, {
   generateWAMessageContent,
   areJidsSameUser,
   jidDecode,
+  jidEncode,
   generateMessageIDV2,
+  encodeSignedDeviceIdentity,
 } from '@whiskeysockets/baileys';
 import NodeCache from '@cacheable/node-cache';
 import { useSupabaseAuthState, getAuthStateDiagnostics } from './supabaseAuth.js';
@@ -380,6 +382,27 @@ function extractMessageDetails(msg) {
   }
 
   return { type: 'text', text: '' };
+}
+
+function getMediaType(message) {
+  if (!message || typeof message !== 'object') return undefined;
+  if (message.imageMessage) return 'image';
+  if (message.videoMessage) return message.videoMessage?.gifPlayback ? 'gif' : 'video';
+  if (message.audioMessage) return message.audioMessage?.ptt ? 'ptt' : 'audio';
+  if (message.contactMessage) return 'vcard';
+  if (message.documentMessage) return 'document';
+  if (message.contactsArrayMessage) return 'contact_array';
+  if (message.liveLocationMessage) return 'livelocation';
+  if (message.stickerMessage) return 'sticker';
+  return undefined;
+}
+
+function getMessageType(message) {
+  if (!message || typeof message !== 'object') return 'text';
+  if (message.pollCreationMessage || message.pollCreationMessageV2 || message.pollCreationMessageV3) {
+    return 'poll';
+  }
+  return 'text';
 }
 
 function recordSentMessage(entry) {
@@ -775,6 +798,95 @@ Result: RESOLVED`);
       const msgId = opts.messageId || 'unknown';
       const participantJid = opts?.participant?.jid || 'none';
       const retryCount = opts?.participant?.count || 'none';
+
+      // 1. Self-Device LID Retry Handler (Option B):
+      // When the sender's own phone / linked companion sends a retry receipt from its LID (@lid),
+      // Baileys natively fails to match the LID string with the phone number string, incorrectly treating
+      // our own phone as an external contact and dropping the self-sync deviceSentMessage.
+      // We detect this specific case, preserve @lid addressing, and deliver deviceSentMessage cleanly.
+      if (opts?.participant?.jid) {
+        try {
+          const rawPartJid = opts.participant.jid;
+          const partDecoded = jidDecode(rawPartJid);
+          const myLidUser = newSock.authState?.creds?.me?.lid ? jidDecode(newSock.authState.creds.me.lid).user : null;
+          const myPnUser = newSock.authState?.creds?.me?.id ? jidDecode(newSock.authState.creds.me.id).user : null;
+
+          const isSelfDeviceRetry = Boolean(
+            (partDecoded?.server === 'lid' && myLidUser && partDecoded.user === myLidUser) ||
+            (partDecoded?.user && myPnUser && partDecoded.user === myPnUser)
+          );
+
+          if (isSelfDeviceRetry) {
+            const selfTargetJid = jidEncode(
+              partDecoded.user,
+              partDecoded.server || (myLidUser && partDecoded.user === myLidUser ? 'lid' : 's.whatsapp.net'),
+              partDecoded.device
+            );
+
+            console.log(`[BAILEYS RETRY RESCUE] 🔄 Routing self-device retry for MsgID: ${msgId} to sender phone/LID: ${selfTargetJid} (chat: ${jid})`);
+
+            // Ensure pairwise session exists in memory with the sender's phone
+            await newSock.assertSessions([selfTargetJid], false);
+
+            const meMsg = {
+              deviceSentMessage: {
+                destinationJid: jid,
+                message,
+              },
+              messageContextInfo: message?.messageContextInfo,
+            };
+
+            const extraAttrs = {};
+            const mediaType = getMediaType(message);
+            if (mediaType) {
+              extraAttrs['mediatype'] = mediaType;
+            }
+
+            const { nodes: meNodes, shouldIncludeDeviceIdentity: s1 } = await newSock.createParticipantNodes(
+              [selfTargetJid],
+              meMsg,
+              extraAttrs
+            );
+
+            const binaryContent = [
+              {
+                tag: 'participants',
+                attrs: {},
+                content: meNodes,
+              },
+            ];
+
+            if (s1 && typeof encodeSignedDeviceIdentity === 'function' && newSock.authState?.creds?.account) {
+              binaryContent.push({
+                tag: 'device-identity',
+                attrs: {},
+                content: encodeSignedDeviceIdentity(newSock.authState.creds.account, true),
+              });
+            }
+
+            const stanza = {
+              tag: 'message',
+              attrs: {
+                id: msgId,
+                type: getMessageType(message),
+                to: selfTargetJid,
+                recipient: jid,
+                device_fanout: 'false',
+                ...(opts.additionalAttributes || {}),
+              },
+              content: binaryContent,
+            };
+
+            const startTime = Date.now();
+            const res = await newSock.sendNode(stanza);
+            console.log(`[BAILEYS RETRY RESCUE] ✅ Self-device retry resend completed for ${selfTargetJid} (MsgID: ${msgId}) in ${Date.now() - startTime}ms`);
+            return res;
+          }
+        } catch (selfRetryErr) {
+          console.warn(`[BAILEYS RETRY RESCUE] ⚠️ Self-device retry handling warning for MsgID: ${msgId}:`, selfRetryErr.message);
+          // Fall through to origRelayMessage as safety net
+        }
+      }
 
       // Pre-transmission recovery recording:
       // Outgoing customer messages must be in the recovery store BEFORE the first byte is transmitted

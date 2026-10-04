@@ -7,6 +7,8 @@
  * 3. Payload is wrapped in deviceSentMessage with proper destinationJid.
  * 4. Third-party customer retries continue to use standard origRelayMessage.
  * 5. Normal sends continue to use standard origRelayMessage.
+ * 6. PDF invoices retain mediatype=document on self-device retry.
+ * 7. When Baileys sendToAll=true drops opts.participant, activeSelfDeviceRetries intercepts and preserves @lid routing.
  */
 
 import { jidDecode, jidEncode, encodeSignedDeviceIdentity } from '@whiskeysockets/baileys';
@@ -80,15 +82,18 @@ async function runTests() {
     return { status: 200, orig: true };
   };
 
-  // Wrapped relayMessage incorporating Option B
+  const activeSelfDeviceRetries = new Map();
+
+  // Wrapped relayMessage incorporating Option B with activeSelfDeviceRetries support
   const relayMessage = async (jid, message, opts) => {
     opts = opts || {};
     const msgId = opts.messageId || 'unknown';
+    const activeSelfRetry = activeSelfDeviceRetries.get(msgId);
+    const rawPartJid = opts?.participant?.jid || (activeSelfRetry ? activeSelfRetry.participant : null);
 
     // Option B: Self-device LID retry handler
-    if (opts?.participant?.jid) {
+    if (rawPartJid) {
       try {
-        const rawPartJid = opts.participant.jid;
         const partDecoded = jidDecode(rawPartJid);
         const myLidUser = mockSock.authState?.creds?.me?.lid ? jidDecode(mockSock.authState.creds.me.lid).user : null;
         const myPnUser = mockSock.authState?.creds?.me?.id ? jidDecode(mockSock.authState.creds.me.id).user : null;
@@ -158,6 +163,7 @@ async function runTests() {
             content: binaryContent,
           };
 
+          activeSelfDeviceRetries.delete(msgId);
           return mockSock.sendNode(stanza);
         }
       } catch (err) {
@@ -168,8 +174,8 @@ async function runTests() {
     return origRelayMessage(jid, message, opts);
   };
 
-  // Test 1: Self-Device Retry Request from sender's LID
-  console.log('\n--- Test 1: Sender Phone LID Retry Request ---');
+  // Test 1: Self-Device Retry Request from sender's LID (with explicit participant)
+  console.log('\n--- Test 1: Sender Phone LID Retry Request (Explicit participant) ---');
   const chatJid = '917660984590@s.whatsapp.net';
   const testMsg = { conversation: 'Your vehicle is ready!' };
   const retryOptsSelfLid = {
@@ -251,8 +257,44 @@ async function runTests() {
   }
   console.log('  ✅ PDF invoice self-device retry successfully routed with mediatype=document.');
 
+  // Test 5: Baileys sendToAll=true omission (opts.participant dropped by Baileys)
+  console.log('\n--- Test 5: Baileys sendToAll=true (opts.participant omitted) ---');
+  sentStanzas.length = 0;
+  origRelayCalls.length = 0;
+
+  const testMsgId5 = '3EB0TEST_SENDTOALL_OMISSION';
+  // Simulate CB:receipt recording in-flight retry from sender phone LID
+  activeSelfDeviceRetries.set(testMsgId5, {
+    participant: '22128225194116@lid',
+    count: 1,
+    timestamp: Date.now(),
+  });
+
+  // Baileys sendMessagesAgain calls relayMessage without opts.participant when sendToAll=true
+  await relayMessage(chatJid, testMsg, { messageId: testMsgId5, useUserDevicesCache: false });
+
+  if (origRelayCalls.length > 0) {
+    throw new Error('FAILED: sendToAll omission should NOT have fallen through to standard origRelayMessage!');
+  }
+  if (sentStanzas.length !== 1) {
+    throw new Error('FAILED: sendNode was not called for sendToAll self-device retry!');
+  }
+
+  const stanza5 = sentStanzas[0];
+  if (stanza5.attrs.to !== '22128225194116@lid') {
+    throw new Error(`FAILED: Stanza destination is '${stanza5.attrs.to}', expected '22128225194116@lid'!`);
+  }
+  if (stanza5.attrs.recipient !== chatJid) {
+    throw new Error(`FAILED: Stanza recipient is '${stanza5.attrs.recipient}', expected '${chatJid}'!`);
+  }
+  if (activeSelfDeviceRetries.has(testMsgId5)) {
+    throw new Error('FAILED: activeSelfDeviceRetries was not cleared after sendNode!');
+  }
+  console.log('  ✅ sendToAll omission successfully intercepted via activeSelfDeviceRetries!');
+  console.log('  ✅ Stanza cleanly routed to 22128225194116@lid with recipient: ' + chatJid);
+
   console.log('\n===============================================================');
-  console.log('🎉 ALL 4 OPTION B SELF-DEVICE LID RETRY TESTS PASSED!');
+  console.log('🎉 ALL 5 OPTION B SELF-DEVICE LID RETRY TESTS PASSED!');
   console.log('===============================================================');
 }
 

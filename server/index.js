@@ -254,6 +254,9 @@ function formatMessageTimeIST(dateInput) {
 // ==============================================================================
 const sentMessagesStore = new Map();
 let saveSentMessagesDebounceTimer = null;
+// Tracks in-flight self-device/LID retries to guarantee @lid self-sync addressing
+// even when Baileys sendToAll=true drops opts.participant in sendMessagesAgain!
+const activeSelfDeviceRetries = new Map();
 
 async function loadSentMessagesStore() {
   try {
@@ -796,17 +799,19 @@ Result: RESOLVED`);
       }
 
       const msgId = opts.messageId || 'unknown';
-      const participantJid = opts?.participant?.jid || 'none';
-      const retryCount = opts?.participant?.count || 'none';
+      const activeSelfRetry = activeSelfDeviceRetries.get(msgId);
+      const rawPartJid = opts?.participant?.jid || (activeSelfRetry ? activeSelfRetry.participant : null);
+      const participantJid = rawPartJid || 'none';
+      const retryCount = opts?.participant?.count || (activeSelfRetry ? activeSelfRetry.count : 'none');
 
       // 1. Self-Device LID Retry Handler (Option B):
       // When the sender's own phone / linked companion sends a retry receipt from its LID (@lid),
       // Baileys natively fails to match the LID string with the phone number string, incorrectly treating
       // our own phone as an external contact and dropping the self-sync deviceSentMessage.
-      // We detect this specific case, preserve @lid addressing, and deliver deviceSentMessage cleanly.
-      if (opts?.participant?.jid) {
+      // Additionally, Baileys sendToAll (!jidDecode(participant)?.device) strips opts.participant,
+      // so we use activeSelfDeviceRetries to retain participant context and deliver deviceSentMessage cleanly.
+      if (rawPartJid) {
         try {
-          const rawPartJid = opts.participant.jid;
           const partDecoded = jidDecode(rawPartJid);
           const myLidUser = newSock.authState?.creds?.me?.lid ? jidDecode(newSock.authState.creds.me.lid).user : null;
           const myPnUser = newSock.authState?.creds?.me?.id ? jidDecode(newSock.authState.creds.me.id).user : null;
@@ -880,6 +885,14 @@ Result: RESOLVED`);
             const startTime = Date.now();
             const res = await newSock.sendNode(stanza);
             console.log(`[BAILEYS RETRY RESCUE] ✅ Self-device retry resend completed for ${selfTargetJid} (MsgID: ${msgId}) in ${Date.now() - startTime}ms`);
+
+            // Mark recovery store entry as handled so Layer 2 rescue doesn't duplicate
+            const entry = sentMessagesStore.get(msgId);
+            if (entry) {
+              entry._retryHandled = Date.now();
+            }
+            activeSelfDeviceRetries.delete(msgId);
+
             return res;
           }
         } catch (selfRetryErr) {
@@ -891,7 +904,7 @@ Result: RESOLVED`);
       // Pre-transmission recovery recording:
       // Outgoing customer messages must be in the recovery store BEFORE the first byte is transmitted
       // so any immediate retry receipt finds the exact protoMessage in memory without race conditions.
-      const isRetryRelay = Boolean(opts?.participant);
+      const isRetryRelay = Boolean(opts?.participant || activeSelfRetry);
       const isStatusOrBroadcast = typeof jid === 'string' && (jid === 'status@broadcast' || jid.endsWith('@broadcast') || jid.endsWith('@newsletter'));
       const isControlProtocol = Boolean(
         !message || typeof message !== 'object' ||
@@ -1066,6 +1079,19 @@ Result: RESOLVED`);
         const isNodeFromMe = areJidsSameUser(attrs.participant || attrs.from, myJid);
         const rawFromMe = !attrs.recipient || ((attrs.type === 'retry' || attrs.type === 'sender') && isNodeFromMe);
 
+        if (isNodeFromMe && msgId) {
+          activeSelfDeviceRetries.set(msgId, {
+            participant: attrs.participant || attrs.from,
+            count: retryCount,
+            timestamp: Date.now(),
+          });
+          setTimeout(() => {
+            if (activeSelfDeviceRetries.has(msgId)) {
+              activeSelfDeviceRetries.delete(msgId);
+            }
+          }, 45000);
+        }
+
         console.log(`[BAILEYS NATIVE RETRY] 📥 Retry receipt stanza received:
   ID: ${msgId}
   From: ${from}
@@ -1238,8 +1264,25 @@ Result: RECONSTRUCTION_FAILED`);
           return;
         }
 
-        // Determine relay options using exact Baileys sendToAll multi-device fan-out logic
-        const sendToAll = !jidDecode(participant)?.device;
+        // Determine relay options: For self-device LID retries, ALWAYS provide explicit participant
+        // so Option B self-sync deviceSentMessage is guaranteed, preventing sendToAll from dropping participant!
+        const myLidUser = newSock.authState?.creds?.me?.lid ? jidDecode(newSock.authState.creds.me.lid).user : null;
+        const myPnUser = newSock.authState?.creds?.me?.id ? jidDecode(newSock.authState.creds.me.id).user : null;
+        const partDecoded = jidDecode(participant);
+        const isSelfLid = Boolean(
+          (partDecoded?.server === 'lid' && myLidUser && partDecoded.user === myLidUser) ||
+          (partDecoded?.user && myPnUser && partDecoded.user === myPnUser)
+        );
+
+        if (isSelfLid) {
+          activeSelfDeviceRetries.set(msgId, {
+            participant,
+            count: retryCount,
+            timestamp: Date.now(),
+          });
+        }
+
+        const sendToAll = !partDecoded?.device && !isSelfLid;
         const msgRelayOpts = { messageId: msgId };
         if (sendToAll) {
           msgRelayOpts.useUserDevicesCache = false;

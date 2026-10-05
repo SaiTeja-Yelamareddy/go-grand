@@ -83,6 +83,27 @@
 }
 
 /* ==========================================================================
+   JOB ENTRY DESCRIPTION FIELD:
+   Entered text = RED + BOLD, Placeholder = RED + NORMAL WEIGHT
+   ========================================================================== */
+.description-textarea {
+  color: #dc2626 !important;
+  font-weight: 700 !important;
+}
+
+html.dark .description-textarea {
+  color: #ef4444 !important;
+  font-weight: 700 !important;
+}
+
+.description-textarea::placeholder,
+html.dark .description-textarea::placeholder {
+  color: #ef4444 !important;
+  font-weight: 400 !important;
+  opacity: 0.75 !important;
+}
+
+/* ==========================================================================
    OFFICIAL TAX INVOICE: ALWAYS CRISP CLEAN WHITE PAPER IN LIGHT & DARK MODE
    ========================================================================== */
 .printable-invoice-card,

@@ -8,6 +8,7 @@ export interface JobRecord {
   phoneNumber: string;
   vehicleName?: string;
   location?: string;
+  description?: string;
   services: string[] | string;
   service?: string;
   price: string;
@@ -41,6 +42,7 @@ export function mapRowToJobRecord(row: any): JobRecord {
     phoneNumber: String(row.phone_number || row.phoneNumber || ''),
     vehicleName: String(row.vehicle_name || row.vehicleName || ''),
     location: String(row.location || ''),
+    description: String(row.description || ''),
     services: serviceList,
     service: serviceList.join(', '),
     price: String(row.price || '0'),
@@ -71,7 +73,8 @@ export function mapJobRecordToRow(job: JobRecord): any {
     customer_name: job.customerName.trim(),
     phone_number: job.phoneNumber.trim(),
     vehicle_name: job.vehicleName || '',
-      location: job.location || '',
+    location: job.location || '',
+    description: job.description || '',
     services: serviceList,
     price: job.price || '0',
     discount: job.discount || '',
@@ -155,8 +158,13 @@ export async function saveJobRecord(
 
   // Sync to Supabase
   try {
-    const row = mapJobRecordToRow(newJob);
-    const { error } = await supabase.from('jobs').insert([row]);
+    let row = mapJobRecordToRow(newJob);
+    let { error } = await supabase.from('jobs').insert([row]);
+    if (error && error.message && error.message.toLowerCase().includes('description')) {
+      const { description, ...rowWithoutDesc } = row;
+      const fallback = await supabase.from('jobs').insert([rowWithoutDesc]);
+      error = fallback.error;
+    }
     if (error) {
       console.error('❌ Supabase insert job error:', error.message);
     }
@@ -212,11 +220,19 @@ export async function updateJobRecord(
 
     // Update in Supabase without duplicating
     try {
-      const row = mapJobRecordToRow(targetJob);
-      const { error } = await supabase
+      let row = mapJobRecordToRow(targetJob);
+      let { error } = await supabase
         .from('jobs')
         .update(row)
         .eq('id', id);
+      if (error && error.message && error.message.toLowerCase().includes('description')) {
+        const { description, ...rowWithoutDesc } = row;
+        const fallback = await supabase
+          .from('jobs')
+          .update(rowWithoutDesc)
+          .eq('id', id);
+        error = fallback.error;
+      }
       if (error) {
         console.error('❌ Supabase update job error:', error.message);
       }
@@ -326,29 +342,64 @@ export function getTodaysJobRecords(): JobRecord[] {
     return jobIST === currentTodayIST;
   });
 }
+export function normalizeVehicleNumber(vehicleNumber: string): string {
+  return (vehicleNumber || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
 export async function lookupVehicleHistory(vehicleNumber: string): Promise<JobRecord | null> {
-  if (!vehicleNumber || vehicleNumber.trim().length < 4) return null;
+  const normalizedSearch = normalizeVehicleNumber(vehicleNumber);
+  if (!normalizedSearch || normalizedSearch.length < 4) return null;
 
   try {
-    const normalizedSearch = vehicleNumber.replace(/\s+/g, '').toLowerCase();
-    const searchPattern = '%' + normalizedSearch.split('').join('%') + '%';
+    // 1. Search local cached/saved job records first
+    const allLocalJobs = getAllJobRecords();
+    const localMatches = allLocalJobs.filter(
+      (job) => normalizeVehicleNumber(job.vehicleNumber) === normalizedSearch
+    );
 
-    const { data, error } = await supabase
-      .from('jobs')
-      .select('*')
-      .ilike('vehicle_number', searchPattern)
-      .order('created_at', { ascending: false })
-      .limit(30);
+    // 2. Query Supabase for matching records
+    let supabaseMatches: JobRecord[] = [];
+    try {
+      const searchPattern = '%' + normalizedSearch.toLowerCase().split('').join('%') + '%';
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .ilike('vehicle_number', searchPattern)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-    if (error || !data || data.length === 0) return null;
-
-    // Filter locally to find exact alphanumeric match
-    for (const row of data) {
-      const dbVehicle = (row.vehicle_number || '').replace(/\s+/g, '').toLowerCase();
-      if (dbVehicle === normalizedSearch) {
-        return mapRowToJobRecord(row);
+      if (!error && data && data.length > 0) {
+        supabaseMatches = data
+          .map(mapRowToJobRecord)
+          .filter((job) => normalizeVehicleNumber(job.vehicleNumber) === normalizedSearch);
       }
+    } catch (e) {
+      console.warn('Supabase vehicle lookup query failed, falling back to local records:', e);
     }
+
+    // 3. Merge and deduplicate by job ID, ordered newest first
+    const mergedMap = new Map<string, JobRecord>();
+    supabaseMatches.forEach((j) => mergedMap.set(j.id, j));
+    localMatches.forEach((j) => mergedMap.set(j.id, j));
+
+    const allMatches = Array.from(mergedMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    if (allMatches.length === 0) return null;
+
+    // The most recent overall job record (provides customerName, phoneNumber, vehicleName, location)
+    const latestJob = allMatches[0];
+
+    // Find the most recent job that contains a saved description
+    const jobWithDesc = allMatches.find(
+      (j) => typeof j.description === 'string' && j.description.trim().length > 0
+    );
+
+    return {
+      ...latestJob,
+      description: jobWithDesc?.description ? jobWithDesc.description.trim() : '',
+    };
   } catch (err) {
     console.error('Vehicle lookup error:', err);
   }

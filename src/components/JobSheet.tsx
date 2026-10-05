@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { Header } from './Header';
-import { saveJobRecord, updateJobRecord, getJobRecordById, lookupVehicleHistory, type JobRecord } from '../utils/draftStorage';
+import { saveJobRecord, updateJobRecord, getJobRecordById, lookupVehicleHistory, normalizeVehicleNumber, type JobRecord } from '../utils/draftStorage';
 import { INDIAN_VEHICLE_BRANDS } from '../data/indianVehicles';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { useNotifications } from './NotificationSystem';
@@ -60,6 +60,7 @@ interface FormState {
   phoneNumber: string;
   vehicleName: string;
   location: string;
+  description: string;
   selectedServices: string[];
   price: string;
 }
@@ -83,6 +84,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     phoneNumber: '',
     vehicleName: '',
     location: '',
+    description: '',
     selectedServices: [],
     price: '',
   });
@@ -97,6 +99,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const [lastLookedUp, setLastLookedUp] = useState('');
   const [isSending, setIsSending] = useState(false);
   const isSendingRef = useRef(false);
+  const isDescriptionManualRef = useRef(false);
 
 
   // Two-step Vehicle Selection States
@@ -124,13 +127,22 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   useEffect(() => {
     if (isEditing) return;
     
-    const vNum = formData.vehicleNumber.trim().toUpperCase();
-    if (vNum.length < 4 || vNum === lastLookedUp) return;
+    const cleanNum = normalizeVehicleNumber(formData.vehicleNumber);
+
+    if (cleanNum.length === 0) {
+      setLastLookedUp('');
+      if (!isDescriptionManualRef.current) {
+        setFormData((prev) => (prev.description ? { ...prev, description: '' } : prev));
+      }
+      return;
+    }
+
+    if (cleanNum.length < 4 || cleanNum === lastLookedUp) return;
 
     const timer = setTimeout(async () => {
       try {
-        const previousJob = await lookupVehicleHistory(vNum);
-        setLastLookedUp(vNum);
+        const previousJob = await lookupVehicleHistory(cleanNum);
+        setLastLookedUp(cleanNum);
         
         if (previousJob) {
           const vName = previousJob.vehicleName || '';
@@ -141,6 +153,9 @@ export const JobSheet: React.FC<JobSheetProps> = ({
             phoneNumber: prev.phoneNumber || previousJob.phoneNumber || '',
             vehicleName: prev.vehicleName || vName,
             location: prev.location || previousJob.location || '',
+            description: isDescriptionManualRef.current
+              ? prev.description
+              : (previousJob.description || ''),
           }));
 
           if (vName && !selectedCompany && !selectedModel) {
@@ -162,11 +177,16 @@ export const JobSheet: React.FC<JobSheetProps> = ({
             title: 'Returning customer ✓',
             message: 'Customer details auto-filled from previous visit.',
           });
+        } else {
+          // If no previous job exists for that vehicle and description was not manually typed, clear description
+          if (!isDescriptionManualRef.current) {
+            setFormData((prev) => (prev.description ? { ...prev, description: '' } : prev));
+          }
         }
       } catch (err) {
         notify({ type: 'warning', title: 'Lookup failed', message: 'Unable to check vehicle history right now.' });
       }
-    }, 1200);
+    }, 800);
 
     return () => clearTimeout(timer);
   }, [formData.vehicleNumber, isEditing, lastLookedUp, notify, allModelOptions, selectedCompany, selectedModel]);
@@ -234,6 +254,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
           phoneNumber: existing.phoneNumber || '',
           vehicleName: vName,
           location: existing.location || '',
+          description: existing.description || '',
           selectedServices: initialServices,
           price: existing.price || '',
         });
@@ -357,6 +378,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       phoneNumber: formData.phoneNumber.trim(),
       vehicleName: formData.vehicleName.trim(),
       location: formData.location.trim(),
+      description: formData.description.trim(),
       services: formData.selectedServices,
       price: formData.price.trim(),
       createdBy: staffName,
@@ -398,12 +420,14 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   };
 
   const handleResetForm = () => {
+    isDescriptionManualRef.current = false;
     setFormData({
       vehicleNumber: '',
       customerName: '',
       phoneNumber: '',
       vehicleName: '',
       location: '',
+      description: '',
       selectedServices: [],
       price: '',
     });
@@ -414,6 +438,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     setErrors({});
     setSaveSuccess(false);
     setActiveJobId(null);
+    setLastLookedUp('');
   };
 
   const [showWhatsAppSettingsModal, setShowWhatsAppSettingsModal] = useState(false);
@@ -1013,6 +1038,23 @@ export const JobSheet: React.FC<JobSheetProps> = ({
                 </div>
               );
             })()}
+
+            {/* Description Field */}
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-xs font-bold text-slate-800 dark:text-neutral-200 uppercase tracking-wide">
+                DESCRIPTION
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => {
+                  isDescriptionManualRef.current = true;
+                  handleChange('description', e.target.value);
+                }}
+                placeholder="Enter description here..."
+                rows={3}
+                className="description-textarea w-full rounded-xl border border-slate-300 dark:border-neutral-800 bg-white dark:bg-[#121212] px-3.5 py-2.5 text-xs sm:text-sm font-bold text-red-600 dark:text-red-500 placeholder:text-red-500 placeholder:font-normal dark:placeholder:text-red-400/80 dark:placeholder:font-normal focus:border-slate-900 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 focus:outline-none transition-all shadow-xs resize-y"
+              />
+            </div>
 
             {/* Price & Currency Input */}
             <div className="space-y-1.5 pt-1">

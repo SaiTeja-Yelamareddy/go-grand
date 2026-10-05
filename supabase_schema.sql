@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS public.jobs (
     customer_name TEXT NOT NULL,
     phone_number TEXT NOT NULL,
     vehicle_name TEXT,
+    location TEXT,
+    description TEXT,
     services JSONB DEFAULT '[]'::jsonb,
     price TEXT NOT NULL,
     discount TEXT,
@@ -25,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.jobs (
 ALTER TABLE public.jobs DROP COLUMN IF EXISTS email;
 ALTER TABLE public.jobs DROP COLUMN IF EXISTS address;
 ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE public.jobs ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE public.jobs DROP COLUMN IF EXISTS service;
 
 ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;

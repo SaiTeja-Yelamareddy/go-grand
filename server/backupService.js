@@ -219,6 +219,8 @@ export async function createDatabaseBackup(supabase) {
     lines.push('    customer_name TEXT NOT NULL,');
     lines.push('    phone_number TEXT NOT NULL,');
     lines.push('    vehicle_name TEXT,');
+    lines.push('    location TEXT,');
+    lines.push('    description TEXT,');
     lines.push('    services JSONB DEFAULT \'[]\'::jsonb,');
     lines.push('    price TEXT NOT NULL,');
     lines.push('    discount TEXT,');
@@ -242,9 +244,9 @@ export async function createDatabaseBackup(supabase) {
     lines.push('CREATE POLICY "Allow authorized job deletions" ON public.jobs FOR DELETE USING (true);\n');
 
     if (jobs.length > 0) {
-      lines.push('INSERT INTO public.jobs (id, vehicle_number, customer_name, phone_number, vehicle_name, services, price, discount, bill_no, status, created_by, created_by_id, created_at) VALUES');
+      lines.push('INSERT INTO public.jobs (id, vehicle_number, customer_name, phone_number, vehicle_name, location, description, services, price, discount, bill_no, status, created_by, created_by_id, created_at) VALUES');
       const jobRows = jobs.map((j) => {
-        return `  (${escapeSqlValue(j.id)}, ${escapeSqlValue(j.vehicle_number)}, ${escapeSqlValue(j.customer_name)}, ${escapeSqlValue(j.phone_number)}, ${escapeSqlValue(j.vehicle_name)}, ${escapeSqlValue(j.services)}, ${escapeSqlValue(j.price)}, ${escapeSqlValue(j.discount)}, ${escapeSqlValue(j.bill_no)}, ${escapeSqlValue(j.status)}, ${escapeSqlValue(j.created_by)}, ${escapeSqlValue(j.created_by_id)}, ${escapeSqlValue(j.created_at)})`;
+        return `  (${escapeSqlValue(j.id)}, ${escapeSqlValue(j.vehicle_number)}, ${escapeSqlValue(j.customer_name)}, ${escapeSqlValue(j.phone_number)}, ${escapeSqlValue(j.vehicle_name)}, ${escapeSqlValue(j.location)}, ${escapeSqlValue(j.description)}, ${escapeSqlValue(j.services)}, ${escapeSqlValue(j.price)}, ${escapeSqlValue(j.discount)}, ${escapeSqlValue(j.bill_no)}, ${escapeSqlValue(j.status)}, ${escapeSqlValue(j.created_by)}, ${escapeSqlValue(j.created_by_id)}, ${escapeSqlValue(j.created_at)})`;
       });
       lines.push(jobRows.join(',\n') + '\nON CONFLICT (id) DO UPDATE SET vehicle_number = EXCLUDED.vehicle_number, customer_name = EXCLUDED.customer_name, phone_number = EXCLUDED.phone_number, price = EXCLUDED.price, status = EXCLUDED.status;\n');
     }

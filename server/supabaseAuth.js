@@ -244,15 +244,6 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
             return data;
           }
 
-          // Pairwise Signal sessions are strictly memory-only during container runtime.
-          // Never query or restore stale pairwise sessions from Supabase across restarts.
-          if (type === 'session') {
-            for (const id of missingIds) {
-              data[id] = null;
-            }
-            return data;
-          }
-
           try {
             if (useFallbackAppSettings) {
               const dbKeys = missingIds.map((id) => formatKeyId(`${type}-${id}`));
@@ -331,55 +322,49 @@ export const useSupabaseAuthState = async (supabase, sessionId = 'default', opti
         },
 
         set: async (data) => {
-          // Immediately update in-memory cache for all categories (including session)
-          for (const category in data) {
-            for (const id in data[category]) {
-              const dbKey = formatKeyId(`${category}-${id}`);
-              if (data[category][id]) memoryCache.set(dbKey, data[category][id]);
-              else memoryCache.delete(dbKey);
-            }
-          }
-
-          const upserts = [];
-          const deletes = [];
-
-          for (const category in data) {
-            // Signal pairwise sessions are strictly memory-only for container resilience.
-            // Do NOT persist pairwise session records to Supabase.
-            if (category === 'session') {
-              continue;
-            }
-
-            for (const id in data[category]) {
-              const value = data[category][id];
-              const keyId = `${category}-${id}`;
-              const dbKey = formatKeyId(keyId);
-
-              if (value) {
-                const serialized = JSON.stringify(value, BufferJSON.replacer);
-
-                if (useFallbackAppSettings) {
-                  upserts.push({
-                    key: dbKey,
-                    value: JSON.parse(serialized),
-                    updated_at: new Date().toISOString(),
-                  });
-                } else {
-                  upserts.push({
-                    session_id: sessionId,
-                    key_id: keyId,
-                    value: JSON.parse(serialized),
-                    updated_at: new Date().toISOString(),
-                  });
-                }
-              } else {
-                deletes.push(useFallbackAppSettings ? dbKey : keyId);
-              }
-            }
-          }
-
           const release = await mutex.acquire();
           try {
+            // Immediately update in-memory cache for all categories (including session)
+            for (const category in data) {
+              for (const id in data[category]) {
+                const dbKey = formatKeyId(`${category}-${id}`);
+                if (data[category][id]) memoryCache.set(dbKey, data[category][id]);
+                else memoryCache.delete(dbKey);
+              }
+            }
+
+            const upserts = [];
+            const deletes = [];
+
+            for (const category in data) {
+              for (const id in data[category]) {
+                const value = data[category][id];
+                const keyId = `${category}-${id}`;
+                const dbKey = formatKeyId(keyId);
+
+                if (value) {
+                  const serialized = JSON.stringify(value, BufferJSON.replacer);
+
+                  if (useFallbackAppSettings) {
+                    upserts.push({
+                      key: dbKey,
+                      value: JSON.parse(serialized),
+                      updated_at: new Date().toISOString(),
+                    });
+                  } else {
+                    upserts.push({
+                      session_id: sessionId,
+                      key_id: keyId,
+                      value: JSON.parse(serialized),
+                      updated_at: new Date().toISOString(),
+                    });
+                  }
+                } else {
+                  deletes.push(useFallbackAppSettings ? dbKey : keyId);
+                }
+              }
+            }
+
             if (upserts.length > 0) {
               const onConflict = useFallbackAppSettings ? 'key' : 'session_id,key_id';
               

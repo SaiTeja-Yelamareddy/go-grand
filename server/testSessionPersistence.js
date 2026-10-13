@@ -92,6 +92,12 @@ async function runSessionPersistenceTest() {
   }
   console.log('  ✅ Signal keys byte-level restoration verified after 2nd restart!');
 
+  const fetchedSession = await auth3.state.keys.get('session', ['919999988888:0@s.whatsapp.net']);
+  if (!fetchedSession['919999988888:0@s.whatsapp.net'] || fetchedSession['919999988888:0@s.whatsapp.net'].sessionData !== 'encrypted_session_payload') {
+    throw new Error('Step 9 Failed: Signal pairwise session was not restored properly across restart!');
+  }
+  console.log('  ✅ Signal pairwise session restoration verified after 2nd restart!');
+
   // Cleanup test session
   console.log('\n🧹 Cleaning up test session records...');
   await auth3.clearAuthState();

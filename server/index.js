@@ -26,6 +26,7 @@ import makeWASocket, {
   jidEncode,
   generateMessageIDV2,
   encodeSignedDeviceIdentity,
+  makeCacheableSignalKeyStore,
 } from '@whiskeysockets/baileys';
 import NodeCache from '@cacheable/node-cache';
 import { useSupabaseAuthState, getAuthStateDiagnostics } from './supabaseAuth.js';
@@ -155,20 +156,45 @@ const rawRetryCache = new NodeCache({
   useClones: false,
 });
 
+function maskJidForSafeLog(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/\b(\d{2,4})\d{4,8}(\d{2,4})@/g, '$1****$2@');
+}
+
 const msgRetryCounterCache = {
   get: (key) => {
-    const val = rawRetryCache.get(key);
+    if (!key || typeof key !== 'string') return undefined;
+    let val = rawRetryCache.get(key);
+    if (val === undefined && key.includes(':')) {
+      const [msgId, part] = key.split(':');
+      if (part && part !== 'undefined') {
+        val = rawRetryCache.get(`${msgId}:undefined`);
+      }
+    }
     if (val !== undefined) {
-      console.log(`[RETRY CACHE] 🔍 GET ${key} => Count: ${val}`);
+      console.log(`[RETRY CACHE] 🔍 GET ${maskJidForSafeLog(key)} => Count: ${val}`);
     }
     return val;
   },
   set: (key, val) => {
-    console.log(`[RETRY CACHE] 📝 SET ${key} => Count: ${val}`);
-    return rawRetryCache.set(key, val);
+    if (!key || typeof key !== 'string') return false;
+    console.log(`[RETRY CACHE] 📝 SET ${maskJidForSafeLog(key)} => Count: ${val}`);
+    const res = rawRetryCache.set(key, val);
+    if (key.includes(':')) {
+      const [msgId, part] = key.split(':');
+      if (part && part !== 'undefined') {
+        rawRetryCache.set(`${msgId}:undefined`, val);
+      }
+    }
+    return res;
   },
   del: (key) => {
-    console.log(`[RETRY CACHE] 🗑️ DEL ${key}`);
+    if (!key || typeof key !== 'string') return false;
+    console.log(`[RETRY CACHE] 🗑️ DEL ${maskJidForSafeLog(key)}`);
+    if (key.includes(':')) {
+      const [msgId] = key.split(':');
+      rawRetryCache.del(`${msgId}:undefined`);
+    }
     return rawRetryCache.del(key);
   },
   flushAll: () => {
@@ -468,7 +494,8 @@ function recordSentMessage(entry) {
   }, 1000);
 }
 
-async function getMessageForRetry(key) {
+async function getMessageForRetry(key, socketInstance = null) {
+  const activeSock = socketInstance || sock;
   const msgId = key?.id;
   if (!msgId) return undefined;
 
@@ -482,7 +509,7 @@ async function getMessageForRetry(key) {
     return undefined; // Must return undefined, never empty object {}
   }
 
-  console.log(`[BAILEYS RETRY] 🔄 Reconstructing message for ID '${msgId}' (Type: ${entry.type}, Target: ${entry.remoteJid || key.remoteJid})...`);
+  console.log(`[BAILEYS RETRY] 🔄 Reconstructing message for ID '${msgId}' (Type: ${entry.type}, Target: ${maskJidForSafeLog(entry.remoteJid || key.remoteJid)})...`);
 
   // 1. If protoMessage was cached, reconstruct directly
   if (entry.protoMessage) {
@@ -524,7 +551,7 @@ async function getMessageForRetry(key) {
       console.log(`[BAILEYS RETRY] 📄 Regenerating invoice PDF dynamically for job ${job.vehicleNumber}...`);
       const pdfBuffer = await generateInvoicePDF(job);
       const vehNo = (job.vehicleNumber || 'Vehicle').toUpperCase();
-      if (sock && sock.waUploadToServer) {
+      if (activeSock && activeSock.waUploadToServer) {
         const generated = await generateWAMessageContent(
           {
             document: pdfBuffer,
@@ -532,7 +559,7 @@ async function getMessageForRetry(key) {
             fileName: `Invoice_${vehNo}_GoGrand.pdf`,
             caption: entry.textMessage,
           },
-          { upload: sock.waUploadToServer }
+          { upload: activeSock.waUploadToServer }
         );
         return proto.Message.fromObject(generated);
       }
@@ -554,10 +581,10 @@ async function getMessageForRetry(key) {
         const note = encodeURIComponent(`GO GRAND Bill - ${vehNo}`);
         const upiUri = `upi://pay?pa=${entry.upiId}&pn=${payeeName}&am=${finalAmount}&cu=INR&tn=${note}`;
         const qrBuffer = await QRCode.toBuffer(upiUri, { type: 'png', width: 600, margin: 2 });
-        if (sock && sock.waUploadToServer) {
+        if (activeSock && activeSock.waUploadToServer) {
           const generated = await generateWAMessageContent(
             { image: qrBuffer, caption: entry.textMessage, mimetype: 'image/png' },
-            { upload: sock.waUploadToServer }
+            { upload: activeSock.waUploadToServer }
           );
           return proto.Message.fromObject(generated);
         }
@@ -668,7 +695,10 @@ async function connectToWhatsAppUnlocked(force = false) {
 
     const newSock = makeWASocket({
       version,
-      auth: state,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger),
+      },
       printQRInTerminal: true,
       logger,
       msgRetryCounterCache,
@@ -691,10 +721,10 @@ async function connectToWhatsAppUnlocked(force = false) {
         try {
           console.log(`[BAILEYS NATIVE RETRY] 🔍 getMessage called by native Baileys:
   Key ID: ${key?.id}
-  Key RemoteJID: ${key?.remoteJid}
+  Key RemoteJID: ${maskJidForSafeLog(key?.remoteJid)}
   Key fromMe: ${key?.fromMe}
-  Key Participant: ${key?.participant || 'none'}
-  Socket state: isOpen=${Boolean(sock && sock.ws && sock.ws.isOpen)}`);
+  Key Participant: ${maskJidForSafeLog(key?.participant || 'none')}
+  Socket state: isOpen=${Boolean(newSock && newSock.ws && newSock.ws.isOpen)}`);
 
           const memEntry = sentMessagesStore.get(msgId);
           entry = memEntry;
@@ -709,7 +739,7 @@ async function connectToWhatsAppUnlocked(force = false) {
   Found: ${Boolean(entry)} (source: ${foundSource})
   Type: ${entry?.type || 'unknown'}
   Has ProtoMessage: ${Boolean(entry?.protoMessage)}
-  Socket state: isOpen=${Boolean(sock && sock.ws && sock.ws.isOpen)}`);
+  Socket state: isOpen=${Boolean(newSock && newSock.ws && newSock.ws.isOpen)}`);
 
           if (!entry) {
             console.warn(`[BAILEYS RETRY] ⚠️ Message ID '${msgId}' not found in recovery store.`);
@@ -725,8 +755,8 @@ async function connectToWhatsAppUnlocked(force = false) {
 
           console.log(`[BAILEYS RETRY]
 Message ID: ${msgId}
-Remote JID: ${remoteJid}
-Participant: ${participant}
+Remote JID: ${maskJidForSafeLog(remoteJid)}
+Participant: ${maskJidForSafeLog(participant)}
 Retry count: ${retryCount}
 Message found: true
 Message type: ${entry.type}
@@ -735,13 +765,13 @@ Re-encryption: IN_PROGRESS
 Resend: NATIVE_BAILEYS_IN_PROGRESS
 Result: PENDING_NATIVE_RELAY`);
 
-          const msg = await getMessageForRetry(key);
+          const msg = await getMessageForRetry(key, newSock);
           if (msg) {
             entry._retryHandled = Date.now();
             console.log(`[BAILEYS RETRY]
 Message ID: ${msgId}
-Remote JID: ${remoteJid}
-Participant: ${participant}
+Remote JID: ${maskJidForSafeLog(remoteJid)}
+Participant: ${maskJidForSafeLog(participant)}
 Retry count: ${retryCount}
 Message found: true
 Message type: ${entry.type}
@@ -944,14 +974,14 @@ Result: RESOLVED`);
         }
       }
 
-      console.log(`[BAILEYS NATIVE RETRY] 📤 relayMessage started for MsgID: ${msgId} to ${jid} (participant: ${participantJid}, retryCount: ${retryCount}, useUserDevicesCache: ${opts?.useUserDevicesCache}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+      console.log(`[BAILEYS NATIVE RETRY] 📤 relayMessage started for MsgID: ${msgId} to ${maskJidForSafeLog(jid)} (participant: ${maskJidForSafeLog(participantJid)}, retryCount: ${retryCount}, useUserDevicesCache: ${opts?.useUserDevicesCache}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
       const startTime = Date.now();
       try {
         const res = await origRelayMessage.call(newSock, jid, message, opts);
-        console.log(`[BAILEYS NATIVE RETRY] ✅ relayMessage completed for MsgID: ${msgId} to ${jid} in ${Date.now() - startTime}ms | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+        console.log(`[BAILEYS NATIVE RETRY] ✅ relayMessage completed for MsgID: ${msgId} to ${maskJidForSafeLog(jid)} in ${Date.now() - startTime}ms | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
         return res;
       } catch (err) {
-        console.error(`[BAILEYS NATIVE RETRY] ❌ relayMessage failed for MsgID: ${msgId} to ${jid} in ${Date.now() - startTime}ms:`, err?.message || err);
+        console.error(`[BAILEYS NATIVE RETRY] ❌ relayMessage failed for MsgID: ${msgId} to ${maskJidForSafeLog(jid)} in ${Date.now() - startTime}ms:`, err?.message || err);
         throw err;
       }
     };
@@ -961,7 +991,7 @@ Result: RESOLVED`);
       const isAck = node?.tag === 'ack';
       if (isAck) {
         const ackAttrs = node?.attrs || {};
-        console.log(`[BAILEYS NATIVE RETRY] 📨 Retry ACK attempted for ID: ${ackAttrs.id} (to: ${ackAttrs.to}, class: ${ackAttrs.class}, type: ${ackAttrs.type}, recipient: ${ackAttrs.recipient || 'none'}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+        console.log(`[BAILEYS NATIVE RETRY] 📨 Retry ACK attempted for ID: ${ackAttrs.id} (to: ${maskJidForSafeLog(ackAttrs.to)}, class: ${ackAttrs.class}, type: ${ackAttrs.type}, recipient: ${maskJidForSafeLog(ackAttrs.recipient || 'none')}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
       }
       try {
         const res = await origSendNode.call(newSock, node);
@@ -1053,6 +1083,46 @@ Result: RESOLVED`);
       }
     });
 
+    // Track delivery and read status updates from recipient devices
+    newSock.ev.on('messages.update', (updates) => {
+      if (currentInstance !== socketInstanceId) return;
+      for (const update of updates) {
+        const id = update.key?.id;
+        if (!id) continue;
+        const entry = sentMessagesStore.get(id);
+        if (entry) {
+          const statusVal = update.update?.status;
+          if (statusVal === proto.WebMessageInfo.Status.DELIVERY_ACK) {
+            entry.deliveryStatus = 'delivered';
+            console.log(`[WA RECEIPT] 📬 Message ${id} marked DELIVERED to recipient`);
+          } else if (statusVal === proto.WebMessageInfo.Status.READ || statusVal === proto.WebMessageInfo.Status.PLAYED) {
+            entry.deliveryStatus = 'read';
+            console.log(`[WA RECEIPT] 👁️ Message ${id} marked READ by recipient`);
+          } else if (statusVal === proto.WebMessageInfo.Status.SERVER_ACK) {
+            if (!entry.deliveryStatus || entry.deliveryStatus === 'pending') {
+              entry.deliveryStatus = 'server_ack';
+            }
+          }
+        }
+      }
+    });
+
+    newSock.ev.on('message-receipt.update', (receipts) => {
+      if (currentInstance !== socketInstanceId) return;
+      for (const item of receipts) {
+        const id = item.key?.id;
+        if (!id) continue;
+        const entry = sentMessagesStore.get(id);
+        if (entry) {
+          if (item.receipt?.readTimestamp) {
+            entry.deliveryStatus = 'read';
+          } else if (item.receipt?.receiptTimestamp) {
+            entry.deliveryStatus = 'delivered';
+          }
+        }
+      }
+    });
+
     // ==============================================================================
     // RETRY RECEIPT INTERCEPTOR & DUAL-LAYER RESCUE ENGINE
     // Layer 1: Synchronously fixes Baileys 6.7.24 fromMe=false bug so native sendMessagesAgain runs
@@ -1094,9 +1164,9 @@ Result: RESOLVED`);
 
         console.log(`[BAILEYS NATIVE RETRY] 📥 Retry receipt stanza received:
   ID: ${msgId}
-  From: ${from}
-  Participant: ${participant}
-  Recipient: ${recipient}
+  From: ${maskJidForSafeLog(from)}
+  Participant: ${maskJidForSafeLog(participant)}
+  Recipient: ${maskJidForSafeLog(recipient)}
   Type: ${type}
   Retry count: ${retryCount}
   Timestamp (t): ${timestampT}
@@ -1175,8 +1245,8 @@ Result: RESOLVED`);
           return;
         }
 
-        // Allow Baileys native sendMessagesAgain a cooperative window (1200ms) to execute via getMessage
-        await new Promise((r) => setTimeout(r, 1200));
+        // Allow Baileys native sendMessagesAgain a cooperative window (3000ms) to execute via getMessage
+        await new Promise((r) => setTimeout(r, 3000));
 
         // Re-check socket health immediately after wait window: if socket closed in interim, exit cleanly!
         if (!isSocketActive() || currentInstance !== socketInstanceId) {
@@ -1192,8 +1262,8 @@ Result: RESOLVED`);
         if (!entry) {
           console.warn(`[BAILEYS RETRY]
 Message ID: ${msgId}
-Remote JID: ${remoteJid}
-Participant: ${participant}
+Remote JID: ${maskJidForSafeLog(remoteJid)}
+Participant: ${maskJidForSafeLog(participant)}
 Retry count: ${retryCount}
 Message found: false
 Message type: unknown
@@ -1221,7 +1291,7 @@ Result: NOT_FOUND_IN_STORE`);
         let sessionAsserted = false;
         try {
           if (isSocketActive()) {
-            await newSock.assertSessions([participant], true);
+            await newSock.assertSessions([participant], false);
             sessionAsserted = true;
           }
         } catch (sessErr) {
@@ -1242,7 +1312,7 @@ Result: NOT_FOUND_IN_STORE`);
           remoteJid: entry.remoteJid || remoteJid,
           fromMe: true,
           participant,
-        });
+        }, newSock);
 
         if (!reconstructedMsg) {
           console.error(`[BAILEYS RETRY]

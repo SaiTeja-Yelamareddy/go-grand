@@ -98,6 +98,9 @@ first.state.creds.registered = true;
 await first.saveCreds();
 
 await first.state.keys.set({
+  'session': {
+    'mock-contact:0@s.whatsapp.net': { sessionData: 'test-session-data' },
+  },
   'pre-key': {
     '1': {
       keyPair: {
@@ -114,6 +117,8 @@ assert.equal(restarted.state.creds.me.id, 'mock-user', 'credentials should reloa
 const restoredKeys = await restarted.state.keys.get('pre-key', ['1']);
 assert.equal(Buffer.isBuffer(restoredKeys['1'].keyPair.public), true, 'BufferJSON should restore Buffers');
 assert.equal(restoredKeys['1'].keyPair.public.toString(), 'public-key');
+const restoredSession = await restarted.state.keys.get('session', ['mock-contact:0@s.whatsapp.net']);
+assert.equal(restoredSession['mock-contact:0@s.whatsapp.net']?.sessionData, 'test-session-data', 'pairwise session should survive restart');
 
 restarted.state.creds.accountSyncCounter = 2;
 await restarted.saveCreds();

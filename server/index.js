@@ -24,6 +24,8 @@ import makeWASocket, {
   areJidsSameUser,
   jidDecode,
   jidEncode,
+  jidNormalizedUser,
+  isJidGroup,
   generateMessageIDV2,
   encodeSignedDeviceIdentity,
   makeCacheableSignalKeyStore,
@@ -156,49 +158,176 @@ const rawRetryCache = new NodeCache({
   useClones: false,
 });
 
+// Message-to-participant mapping for consistent 1:1 retry key synchronization
+const retryParticipantMap = new Map();
+
 function maskJidForSafeLog(str) {
   if (typeof str !== 'string') return '';
   return str.replace(/\b(\d{2,4})\d{4,8}(\d{2,4})@/g, '$1****$2@');
 }
 
+function parseRetryKey(key) {
+  if (!key || typeof key !== 'string') return null;
+  const colonIndex = key.indexOf(':');
+  if (colonIndex === -1) {
+    return { msgId: key.trim(), participant: '' };
+  }
+  const msgId = key.slice(0, colonIndex).trim();
+  const rawParticipant = key.slice(colonIndex + 1).trim();
+  const participant = (rawParticipant === 'undefined' || rawParticipant === 'null' || rawParticipant === 'unknown') ? '' : rawParticipant;
+  return { msgId, participant };
+}
+
+function isGroupMessage(msgId, participant) {
+  if (participant && isJidGroup(participant)) return true;
+  const entry = sentMessagesStore.get(msgId);
+  if (entry?.remoteJid && isJidGroup(entry.remoteJid)) return true;
+  return false;
+}
+
 const msgRetryCounterCache = {
   get: (key) => {
-    if (!key || typeof key !== 'string') return undefined;
+    const parsed = parseRetryKey(key);
+    if (!parsed || !parsed.msgId) return undefined;
+    const { msgId, participant } = parsed;
+
+    // 1. Direct key lookup
     let val = rawRetryCache.get(key);
-    if (val === undefined && key.includes(':')) {
-      const [msgId, part] = key.split(':');
-      if (part && part !== 'undefined') {
-        val = rawRetryCache.get(`${msgId}:undefined`);
-      }
-    }
     if (val !== undefined) {
       console.log(`[RETRY CACHE] 🔍 GET ${maskJidForSafeLog(key)} => Count: ${val}`);
+      return val;
     }
-    return val;
-  },
-  set: (key, val) => {
-    if (!key || typeof key !== 'string') return false;
-    console.log(`[RETRY CACHE] 📝 SET ${maskJidForSafeLog(key)} => Count: ${val}`);
-    const res = rawRetryCache.set(key, val);
-    if (key.includes(':')) {
-      const [msgId, part] = key.split(':');
-      if (part && part !== 'undefined') {
-        rawRetryCache.set(`${msgId}:undefined`, val);
+
+    // 2. If participant was provided
+    if (participant) {
+      try {
+        const normalized = jidNormalizedUser(participant);
+        if (normalized !== participant) {
+          val = rawRetryCache.get(`${msgId}:${normalized}`);
+          if (val !== undefined) {
+            console.log(`[RETRY CACHE] 🔍 GET ${maskJidForSafeLog(key)} (via normalized) => Count: ${val}`);
+            return val;
+          }
+        }
+      } catch (_) {}
+
+      // If NOT a group message, fall back to undefined / general key for 1:1
+      if (!isGroupMessage(msgId, participant)) {
+        val = rawRetryCache.get(`${msgId}:undefined`);
+        if (val === undefined) {
+          val = rawRetryCache.get(msgId);
+        }
+        if (val !== undefined) {
+          console.log(`[RETRY CACHE] 🔍 GET ${maskJidForSafeLog(key)} (via fallback) => Count: ${val}`);
+          return val;
+        }
+      }
+    } else {
+      // 3. No participant provided (key was msgId:undefined or msgId)
+      val = rawRetryCache.get(`${msgId}:undefined`);
+      if (val === undefined) {
+        val = rawRetryCache.get(msgId);
+      }
+      if (val !== undefined) {
+        console.log(`[RETRY CACHE] 🔍 GET ${maskJidForSafeLog(key)} (via undefined/id) => Count: ${val}`);
+        return val;
+      }
+
+      const entry = sentMessagesStore.get(msgId);
+      const targetJid = entry?.remoteJid || retryParticipantMap.get(msgId);
+      if (targetJid && !isGroupMessage(msgId, targetJid)) {
+        val = rawRetryCache.get(`${msgId}:${targetJid}`);
+        if (val === undefined) {
+          try {
+            const norm = jidNormalizedUser(targetJid);
+            val = rawRetryCache.get(`${msgId}:${norm}`);
+          } catch (_) {}
+        }
+        if (val !== undefined) {
+          console.log(`[RETRY CACHE] 🔍 GET ${maskJidForSafeLog(key)} (via targetJid) => Count: ${val}`);
+          return val;
+        }
       }
     }
+
+    return undefined;
+  },
+
+  set: (key, val) => {
+    const parsed = parseRetryKey(key);
+    if (!parsed || !parsed.msgId) return false;
+    const { msgId, participant } = parsed;
+
+    console.log(`[RETRY CACHE] 📝 SET ${maskJidForSafeLog(key)} => Count: ${val}`);
+    const res = rawRetryCache.set(key, val);
+    const isGroup = isGroupMessage(msgId, participant);
+
+    if (participant) {
+      retryParticipantMap.set(msgId, participant);
+      try {
+        const normalized = jidNormalizedUser(participant);
+        if (normalized !== participant) {
+          rawRetryCache.set(`${msgId}:${normalized}`, val);
+        }
+      } catch (_) {}
+
+      // Strictly isolate group participants: only mirror to undefined/general for 1:1 messages
+      if (!isGroup) {
+        rawRetryCache.set(`${msgId}:undefined`, val);
+        rawRetryCache.set(msgId, val);
+      }
+    } else {
+      // participant is empty / undefined
+      rawRetryCache.set(`${msgId}:undefined`, val);
+      rawRetryCache.set(msgId, val);
+
+      const entry = sentMessagesStore.get(msgId);
+      const targetJid = entry?.remoteJid || retryParticipantMap.get(msgId);
+      if (targetJid && !isGroupMessage(msgId, targetJid)) {
+        rawRetryCache.set(`${msgId}:${targetJid}`, val);
+        try {
+          const norm = jidNormalizedUser(targetJid);
+          rawRetryCache.set(`${msgId}:${norm}`, val);
+        } catch (_) {}
+      }
+    }
+
     return res;
   },
+
   del: (key) => {
-    if (!key || typeof key !== 'string') return false;
+    const parsed = parseRetryKey(key);
+    if (!parsed || !parsed.msgId) return false;
+    const { msgId, participant } = parsed;
+    const isGroup = isGroupMessage(msgId, participant);
+
     console.log(`[RETRY CACHE] 🗑️ DEL ${maskJidForSafeLog(key)}`);
-    if (key.includes(':')) {
-      const [msgId] = key.split(':');
+    rawRetryCache.del(key);
+    if (participant) {
+      try {
+        const norm = jidNormalizedUser(participant);
+        rawRetryCache.del(`${msgId}:${norm}`);
+      } catch (_) {}
+      if (!isGroup) {
+        rawRetryCache.del(`${msgId}:undefined`);
+        rawRetryCache.del(msgId);
+        retryParticipantMap.delete(msgId);
+      }
+    } else {
       rawRetryCache.del(`${msgId}:undefined`);
+      rawRetryCache.del(msgId);
+      const targetJid = retryParticipantMap.get(msgId);
+      if (targetJid) {
+        rawRetryCache.del(`${msgId}:${targetJid}`);
+        retryParticipantMap.delete(msgId);
+      }
     }
-    return rawRetryCache.del(key);
+    return true;
   },
+
   flushAll: () => {
     console.log(`[RETRY CACHE] 🧹 flushAll called`);
+    retryParticipantMap.clear();
     return rawRetryCache.flushAll();
   },
 };
@@ -797,14 +926,18 @@ Result: RESOLVED`);
 
     sock = newSock;
 
-    // Wrap socket native retry methods with detailed safe diagnostics
+    // Wrap socket native retry methods with detailed safe diagnostics and non-destructive session assertion
     const origAssertSessions = newSock.assertSessions;
-    newSock.assertSessions = async (jids, force) => {
+    newSock.assertSessions = async (jids, force = false) => {
       const safeJids = (jids || []).map((j) => String(j || ''));
-      console.log(`[BAILEYS NATIVE RETRY] 🔑 assertSessions started for: ${safeJids.join(', ')} (force: ${force}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+      // Task 5: Reuse valid Signal encryption sessions without destructive session resets.
+      // Baileys assertSessions(jids, false) checks if sessions exist in authState.keys;
+      // if missing it fetches a fresh session from WhatsApp servers; if present it safely reuses them.
+      const nonDestructiveForce = false;
+      console.log(`[BAILEYS NATIVE RETRY] 🔑 assertSessions started for: ${safeJids.join(', ')} (requested force: ${force} -> effectiveForce: ${nonDestructiveForce}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
       const startTime = Date.now();
       try {
-        const res = await origAssertSessions.call(newSock, jids, force);
+        const res = await origAssertSessions.call(newSock, jids, nonDestructiveForce);
         console.log(`[BAILEYS NATIVE RETRY] ✅ assertSessions completed for: ${safeJids.join(', ')} in ${Date.now() - startTime}ms (didFetchNewSession: ${res}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
         return res;
       } catch (err) {

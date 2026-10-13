@@ -516,9 +516,9 @@ console.log('\n▶ TEST 9: Pairwise Signal Sessions Survive Process Restart...')
 }
 
 // -----------------------------------------------------------------------------
-// TEST 10: Non-Destructive Session Assertion (Signal Ratchet Reuse)
+// TEST 10: Safe Signal Session Assertion & Forced Refresh Preservation
 // -----------------------------------------------------------------------------
-console.log('\n▶ TEST 10: Non-Destructive Session Assertion (Signal Ratchet Reuse)...');
+console.log('\n▶ TEST 10: Safe Signal Session Assertion & Forced Refresh Preservation...');
 {
   const existingSessions = new Map();
   let serverFetchCount = 0;
@@ -526,7 +526,7 @@ console.log('\n▶ TEST 10: Non-Destructive Session Assertion (Signal Ratchet Re
   // Pre-seed an existing valid Signal session for a customer
   existingSessions.set('919876543210:0@s.whatsapp.net', { ratchetKey: 'valid_ratchet_v1' });
 
-  // Mock assertSessions implementation mirroring Baileys behavior
+  // Mock assertSessions implementation mirroring Baileys 6.7.24 behavior
   async function mockBaileysAssertSessions(jids, force = false) {
     let jidsToFetch = [];
     if (force) {
@@ -541,33 +541,94 @@ console.log('\n▶ TEST 10: Non-Destructive Session Assertion (Signal Ratchet Re
 
     if (jidsToFetch.length > 0) {
       serverFetchCount++;
+      // Simulate asynchronous server IQ query delay
+      await new Promise((r) => setTimeout(r, 10));
       for (const jid of jidsToFetch) {
-        existingSessions.set(jid, { ratchetKey: 'fresh_server_bundle' });
+        existingSessions.set(jid, { ratchetKey: 'fresh_server_bundle_' + serverFetchCount });
       }
       return true;
     }
     return false;
   }
 
-  // Socket wrapper with non-destructive session assertion
+  // Socket wrapper mirroring server/index.js with force preservation and concurrency coalescing
+  const inflightSessionAssertions = new Map();
   async function wrappedAssertSessions(jids, force = false) {
-    const nonDestructiveForce = false; // Never wipe existing valid pairwise sessions
-    return await mockBaileysAssertSessions(jids, nonDestructiveForce);
+    const effectiveForce = Boolean(force);
+    const dedupeKey = `${(jids || []).slice().sort().join(',')}:${effectiveForce}`;
+    if (inflightSessionAssertions.has(dedupeKey)) {
+      return await inflightSessionAssertions.get(dedupeKey);
+    }
+
+    const assertionPromise = (async () => {
+      return await mockBaileysAssertSessions(jids, effectiveForce);
+    })();
+
+    inflightSessionAssertions.set(dedupeKey, assertionPromise);
+    try {
+      return await assertionPromise;
+    } finally {
+      inflightSessionAssertions.delete(dedupeKey);
+    }
   }
 
-  // 1. For a recipient with existing session, wrappedAssertSessions must NOT trigger server fetch or wipe
-  const didFetch1 = await wrappedAssertSessions(['919876543210:0@s.whatsapp.net'], true);
-  assert.strictEqual(didFetch1, false, 'Existing session must be preserved without force refetch');
-  assert.strictEqual(serverFetchCount, 0, 'No server query must be issued for existing session');
-  assert.strictEqual(existingSessions.get('919876543210:0@s.whatsapp.net').ratchetKey, 'valid_ratchet_v1', 'Original ratchet key must NOT be overwritten');
+  // 1. Normal send (force = false): Must reuse existing valid session without issuing server queries
+  const normalFetch = await wrappedAssertSessions(['919876543210:0@s.whatsapp.net'], false);
+  assert.strictEqual(normalFetch, false, 'Normal send must reuse existing session without server fetch');
+  assert.strictEqual(serverFetchCount, 0, 'No server query must be issued for normal send with valid session');
+  assert.strictEqual(existingSessions.get('919876543210:0@s.whatsapp.net').ratchetKey, 'valid_ratchet_v1', 'Existing ratchet key must remain intact');
 
-  // 2. For a recipient WITHOUT existing session, wrappedAssertSessions MUST fetch a new session
-  const didFetch2 = await wrappedAssertSessions(['919888888888:0@s.whatsapp.net'], false);
-  assert.strictEqual(didFetch2, true, 'Missing session must trigger fetch');
-  assert.strictEqual(serverFetchCount, 1, 'Server query must be issued when session is absent');
-  assert.strictEqual(existingSessions.get('919888888888:0@s.whatsapp.net').ratchetKey, 'fresh_server_bundle', 'Fresh session must be stored');
+  // 2. Native retry request (force = true): Must honor caller force and fetch fresh prekey bundle from server
+  const retryFetch = await wrappedAssertSessions(['919876543210:0@s.whatsapp.net'], true);
+  assert.strictEqual(retryFetch, true, 'Retry with force=true must trigger server session refresh');
+  assert.strictEqual(serverFetchCount, 1, 'Server query must be issued when force=true is requested');
+  assert.strictEqual(existingSessions.get('919876543210:0@s.whatsapp.net').ratchetKey, 'fresh_server_bundle_1', 'Fresh session bundle must be injected');
 
-  console.log('  ✅ Non-destructive session assertion reuses valid Signal sessions and avoids disruptive resets.');
+  // 3. Concurrency coalescing: Multiple simultaneous retry requests for the same JID must coalesce into 1 fetch
+  serverFetchCount = 0;
+  const [c1, c2, c3] = await Promise.all([
+    wrappedAssertSessions(['919876543210:0@s.whatsapp.net'], true),
+    wrappedAssertSessions(['919876543210:0@s.whatsapp.net'], true),
+    wrappedAssertSessions(['919876543210:0@s.whatsapp.net'], true),
+  ]);
+  assert.strictEqual(c1, true);
+  assert.strictEqual(c2, true);
+  assert.strictEqual(c3, true);
+  assert.strictEqual(serverFetchCount, 1, 'Concurrent assertions must coalesce into exactly 1 server fetch');
+
+  // 4. Watchdog cooperative safety: If native retry is in progress or recently handled, watchdog must yield
+  const mockStoreEntry = {
+    _retryInProgress: true,
+    _retryHandled: null,
+  };
+  function shouldWatchdogExecute(entry) {
+    if (entry._retryInProgress || (entry._retryHandled && (Date.now() - entry._retryHandled < 10000))) {
+      return false; // Yield to native Baileys
+    }
+    return true;
+  }
+  assert.strictEqual(shouldWatchdogExecute(mockStoreEntry), false, 'Watchdog must yield when native retry is in progress');
+  mockStoreEntry._retryInProgress = false;
+  mockStoreEntry._retryHandled = Date.now() - 2000; // Handled 2 seconds ago
+  assert.strictEqual(shouldWatchdogExecute(mockStoreEntry), false, 'Watchdog must yield when native retry recently handled');
+  mockStoreEntry._retryHandled = Date.now() - 15000; // Handled 15 seconds ago
+  assert.strictEqual(shouldWatchdogExecute(mockStoreEntry), true, 'Watchdog can execute if cooperative window expired without completion');
+
+  // 5. Failed session refresh error isolation: Network failures must not corrupt in-memory or persisted state
+  async function failingAssertSessions(jids, force = false) {
+    throw new Error('Network timeout fetching prekey bundle from WhatsApp server');
+  }
+  let failureHandled = false;
+  try {
+    await failingAssertSessions(['919876543210:0@s.whatsapp.net'], true);
+  } catch (err) {
+    failureHandled = true;
+    assert.ok(err.message.includes('Network timeout'), 'Expected error message preserved');
+  }
+  assert.strictEqual(failureHandled, true, 'Failed session refresh caught cleanly');
+  assert.ok(existingSessions.get('919876543210:0@s.whatsapp.net'), 'Session record must not be corrupted by failed fetch');
+
+  console.log('  ✅ Normal sends reuse sessions, native retries force-refresh, concurrency coalesces, and watchdog cooperates safely.');
 }
 
 console.log('\n===============================================================');

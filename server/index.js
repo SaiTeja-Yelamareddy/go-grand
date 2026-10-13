@@ -926,20 +926,36 @@ Result: RESOLVED`);
 
     sock = newSock;
 
+    // Coalescing map to prevent concurrent overlapping session assertions for the same JID set
+    const inflightSessionAssertions = new Map();
+
     // Wrap socket native retry methods with detailed safe diagnostics and non-destructive session assertion
     const origAssertSessions = newSock.assertSessions;
     newSock.assertSessions = async (jids, force = false) => {
-      const safeJids = (jids || []).map((j) => String(j || ''));
-      // Task 5: Reuse valid Signal encryption sessions without destructive session resets.
-      // Baileys assertSessions(jids, false) checks if sessions exist in authState.keys;
-      // if missing it fetches a fresh session from WhatsApp servers; if present it safely reuses them.
-      const nonDestructiveForce = false;
-      console.log(`[BAILEYS NATIVE RETRY] 🔑 assertSessions started for: ${safeJids.join(', ')} (requested force: ${force} -> effectiveForce: ${nonDestructiveForce}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+      const effectiveForce = Boolean(force);
+      const safeJids = (jids || []).map((j) => maskJidForSafeLog(String(j || '')));
+      console.log(`[BAILEYS NATIVE RETRY] 🔑 assertSessions started for: ${safeJids.join(', ')} (requested force: ${force} -> effectiveForce: ${effectiveForce}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
       const startTime = Date.now();
       try {
-        const res = await origAssertSessions.call(newSock, jids, nonDestructiveForce);
-        console.log(`[BAILEYS NATIVE RETRY] ✅ assertSessions completed for: ${safeJids.join(', ')} in ${Date.now() - startTime}ms (didFetchNewSession: ${res}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
-        return res;
+        // Coalesce concurrent assertions per JID set if an assertion is already in-flight
+        const dedupeKey = `${(jids || []).slice().sort().join(',')}:${effectiveForce}`;
+        if (inflightSessionAssertions.has(dedupeKey)) {
+          console.log(`[BAILEYS NATIVE RETRY] ⏳ Joining in-flight assertSessions for: ${safeJids.join(', ')}`);
+          return await inflightSessionAssertions.get(dedupeKey);
+        }
+
+        const assertionPromise = (async () => {
+          return await origAssertSessions.call(newSock, jids, effectiveForce);
+        })();
+
+        inflightSessionAssertions.set(dedupeKey, assertionPromise);
+        try {
+          const res = await assertionPromise;
+          console.log(`[BAILEYS NATIVE RETRY] ✅ assertSessions completed for: ${safeJids.join(', ')} in ${Date.now() - startTime}ms (didFetchNewSession: ${res}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+          return res;
+        } finally {
+          inflightSessionAssertions.delete(dedupeKey);
+        }
       } catch (err) {
         console.error(`[BAILEYS NATIVE RETRY] ❌ assertSessions failed for: ${safeJids.join(', ')} in ${Date.now() - startTime}ms:`, err?.message || err);
         throw err;
@@ -1424,7 +1440,9 @@ Result: NOT_FOUND_IN_STORE`);
         let sessionAsserted = false;
         try {
           if (isSocketActive()) {
-            await newSock.assertSessions([participant], false);
+            // Watchdog fallback: only force-refresh if native retry did not execute and retryCount > 1
+            const watchdogForce = Boolean(retryCount > 1);
+            await newSock.assertSessions([participant], watchdogForce);
             sessionAsserted = true;
           }
         } catch (sessErr) {
@@ -1450,8 +1468,8 @@ Result: NOT_FOUND_IN_STORE`);
         if (!reconstructedMsg) {
           console.error(`[BAILEYS RETRY]
 Message ID: ${msgId}
-Remote JID: ${entry.remoteJid || remoteJid}
-Participant: ${participant}
+Remote JID: ${maskJidForSafeLog(entry.remoteJid || remoteJid)}
+Participant: ${maskJidForSafeLog(participant)}
 Retry count: ${retryCount}
 Message found: true
 Message type: ${entry.type}
@@ -1503,8 +1521,8 @@ Result: RECONSTRUCTION_FAILED`);
 
         console.log(`[BAILEYS RETRY]
 Message ID: ${msgId}
-Remote JID: ${targetDestination}
-Participant: ${participant}
+Remote JID: ${maskJidForSafeLog(targetDestination)}
+Participant: ${maskJidForSafeLog(participant)}
 Retry count: ${retryCount}
 Message found: true
 Message type: ${entry.type}

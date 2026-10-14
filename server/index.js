@@ -882,32 +882,25 @@ async function connectToWhatsAppUnlocked(force = false) {
           const remoteJid = key.remoteJid || (entry ? entry.remoteJid : 'unknown');
           const retryCount = (msgRetryCounterCache.get(`${msgId}:${participant}`) || 0) + 1;
 
-          console.log(`[BAILEYS RETRY]
+          console.log(`[BAILEYS RETRY: STAGE 1 - PAYLOAD RECOVERY]
 Message ID: ${msgId}
 Remote JID: ${maskJidForSafeLog(remoteJid)}
 Participant: ${maskJidForSafeLog(participant)}
 Retry count: ${retryCount}
-Message found: true
-Message type: ${entry.type}
-Session assertion: DELEGATED_TO_NATIVE_BAILEYS
-Re-encryption: IN_PROGRESS
-Resend: NATIVE_BAILEYS_IN_PROGRESS
-Result: PENDING_NATIVE_RELAY`);
+Payload recovery: IN_PROGRESS
+Message type: ${entry.type}`);
 
           const msg = await getMessageForRetry(key, newSock);
           if (msg) {
             entry._retryHandled = Date.now();
-            console.log(`[BAILEYS RETRY]
+            console.log(`[BAILEYS RETRY: STAGE 1 - PAYLOAD RECOVERY]
 Message ID: ${msgId}
 Remote JID: ${maskJidForSafeLog(remoteJid)}
 Participant: ${maskJidForSafeLog(participant)}
 Retry count: ${retryCount}
-Message found: true
+Payload recovery: SUCCESS (source: ${foundSource})
 Message type: ${entry.type}
-Session assertion: DELEGATED_TO_NATIVE_BAILEYS
-Re-encryption: SUCCESS
-Resend: NATIVE_BAILEYS_SUCCESS
-Result: RESOLVED`);
+Next stage: AWAITING_NATIVE_SESSION_ASSERTION_AND_RELAY`);
             return msg;
           }
 
@@ -934,13 +927,13 @@ Result: RESOLVED`);
     newSock.assertSessions = async (jids, force = false) => {
       const effectiveForce = Boolean(force);
       const safeJids = (jids || []).map((j) => maskJidForSafeLog(String(j || '')));
-      console.log(`[BAILEYS NATIVE RETRY] 🔑 assertSessions started for: ${safeJids.join(', ')} (requested force: ${force} -> effectiveForce: ${effectiveForce}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+      console.log(`[BAILEYS RETRY: STAGE 2 - SESSION REFRESH] 🔑 assertSessions started for: ${safeJids.join(', ')} (force: ${effectiveForce}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
       const startTime = Date.now();
       try {
         // Coalesce concurrent assertions per JID set if an assertion is already in-flight
         const dedupeKey = `${(jids || []).slice().sort().join(',')}:${effectiveForce}`;
         if (inflightSessionAssertions.has(dedupeKey)) {
-          console.log(`[BAILEYS NATIVE RETRY] ⏳ Joining in-flight assertSessions for: ${safeJids.join(', ')}`);
+          console.log(`[BAILEYS RETRY: STAGE 2 - SESSION REFRESH] ⏳ Joining in-flight assertSessions for: ${safeJids.join(', ')}`);
           return await inflightSessionAssertions.get(dedupeKey);
         }
 
@@ -951,7 +944,7 @@ Result: RESOLVED`);
         inflightSessionAssertions.set(dedupeKey, assertionPromise);
         try {
           const res = await assertionPromise;
-          console.log(`[BAILEYS NATIVE RETRY] ✅ assertSessions completed for: ${safeJids.join(', ')} in ${Date.now() - startTime}ms (didFetchNewSession: ${res}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+          console.log(`[BAILEYS RETRY: STAGE 2 - SESSION REFRESH] ✅ assertSessions completed for: ${safeJids.join(', ')} in ${Date.now() - startTime}ms (didFetchNewSession: ${res}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
           return res;
         } finally {
           inflightSessionAssertions.delete(dedupeKey);
@@ -1123,11 +1116,11 @@ Result: RESOLVED`);
         }
       }
 
-      console.log(`[BAILEYS NATIVE RETRY] 📤 relayMessage started for MsgID: ${msgId} to ${maskJidForSafeLog(jid)} (participant: ${maskJidForSafeLog(participantJid)}, retryCount: ${retryCount}, useUserDevicesCache: ${opts?.useUserDevicesCache}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+      console.log(`[BAILEYS RETRY: STAGE 3 - WIRE TRANSMISSION] 📤 relayMessage started for MsgID: ${msgId} to ${maskJidForSafeLog(jid)} (participant: ${maskJidForSafeLog(participantJid)}, retryCount: ${retryCount}) | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
       const startTime = Date.now();
       try {
         const res = await origRelayMessage.call(newSock, jid, message, opts);
-        console.log(`[BAILEYS NATIVE RETRY] ✅ relayMessage completed for MsgID: ${msgId} to ${maskJidForSafeLog(jid)} in ${Date.now() - startTime}ms | Socket isOpen: ${Boolean(newSock.ws && newSock.ws.isOpen)}`);
+        console.log(`[BAILEYS RETRY: STAGE 3 - WIRE TRANSMISSION] ✅ relayMessage completed for MsgID: ${msgId} to ${maskJidForSafeLog(jid)} in ${Date.now() - startTime}ms | Awaiting recipient delivery confirmation`);
         return res;
       } catch (err) {
         console.error(`[BAILEYS NATIVE RETRY] ❌ relayMessage failed for MsgID: ${msgId} to ${maskJidForSafeLog(jid)} in ${Date.now() - startTime}ms:`, err?.message || err);
@@ -1519,17 +1512,15 @@ Result: RECONSTRUCTION_FAILED`);
         msgRetryCounterCache.set(`${msgId}:${participant}`, retryCount);
         entry._retryHandled = Date.now();
 
-        console.log(`[BAILEYS RETRY]
+        console.log(`[BAILEYS RETRY: WATCHDOG RESCUE]
 Message ID: ${msgId}
 Remote JID: ${maskJidForSafeLog(targetDestination)}
 Participant: ${maskJidForSafeLog(participant)}
 Retry count: ${retryCount}
-Message found: true
-Message type: ${entry.type}
+Payload recovery: SUCCESS
 Session assertion: ${sessionAsserted ? 'SUCCESS' : 'FAILED'}
-Re-encryption: SUCCESS
-Resend: RESCUE_SUCCESS
-Result: RESOLVED`);
+Wire transmission: RESCUE_TRANSMITTED
+Next stage: AWAITING_RECIPIENT_ACK`);
       } catch (interceptErr) {
         const errText = interceptErr?.stack || interceptErr?.message || (typeof interceptErr === 'object' ? JSON.stringify(interceptErr) : String(interceptErr || 'Unknown error'));
         if (String(errText).includes('Connection Closed') || String(errText).includes('428')) {

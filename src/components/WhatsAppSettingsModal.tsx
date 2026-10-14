@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, RefreshCw, LogOut, Send, Smartphone, AlertCircle, X, Server, Globe } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { getWhatsAppBackendUrl } from '../config/apiConfig';
-import { sendWhatsAppMessageViaBackend } from '../utils/invoiceUtils';
+import { sendWhatsAppMessageViaBackend, classifyWhatsAppError } from '../utils/invoiceUtils';
 import { useNotifications } from './NotificationSystem';
 
 interface WhatsAppSettingsModalProps {
@@ -289,7 +289,12 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
       } else if (res.status === 'disconnected') {
         setTestFeedback({
           type: 'error',
-          message: 'WhatsApp is disconnected. Please scan the QR code to reconnect and try again.',
+          message: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
+        });
+      } else if (res.status === 'server_error') {
+        setTestFeedback({
+          type: 'error',
+          message: 'The messaging server could not complete your request. Please try again later.',
         });
       } else if (res.status === 'unconfirmed') {
         setTestFeedback({
@@ -303,10 +308,11 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
         });
       }
     } catch (err: any) {
-      notifyWhatsAppState('failed', notifId, { description: err.message });
+      const classified = classifyWhatsAppError(err);
+      notifyWhatsAppState(classified.status, notifId, { description: classified.error || err.message });
       setTestFeedback({
         type: 'error',
-        message: err.message || 'WhatsApp Server is unreachable.',
+        message: classified.error || (classified.status === 'server_error' ? 'The messaging server could not complete your request. Please try again later.' : 'Your WhatsApp message could not be sent. Please try again.'),
       });
     } finally {
       setSendingTest(false);

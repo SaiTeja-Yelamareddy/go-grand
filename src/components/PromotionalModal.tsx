@@ -8,7 +8,7 @@ import {
   formatMessageTimeIST,
   SHOP_NAME,
 } from '../utils/templateStorage';
-import { sendPromotionalWhatsAppViaBackend } from '../utils/invoiceUtils';
+import { sendPromotionalWhatsAppViaBackend, classifyWhatsAppError } from '../utils/invoiceUtils';
 import { useNotifications } from './NotificationSystem';
 
 interface PromotionalModalProps {
@@ -189,7 +189,8 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
           setTimeout(onClose, 800);
         }
       } catch (err: any) {
-        notifyWhatsAppState('failed', notifId, { description: err?.message });
+        const classified = classifyWhatsAppError(err);
+        notifyWhatsAppState(classified.status, notifId, { description: classified.error || err?.message });
       } finally {
         setIsSending(false);
       }
@@ -217,6 +218,7 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
     let failedCount = 0;
     let unconfirmedCount = 0;
     let hadDisconnected = false;
+    let hadServerError = false;
 
     for (let i = 0; i < targetRecipients.length; i++) {
       const rec = targetRecipients[i];
@@ -256,11 +258,18 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
           failedCount++;
           hadDisconnected = true;
           setRecipientStatuses((prev) => ({ ...prev, [recKey]: 'failed' }));
+        } else if (res.status === 'server_error') {
+          failedCount++;
+          hadServerError = true;
+          setRecipientStatuses((prev) => ({ ...prev, [recKey]: 'failed' }));
         } else {
           failedCount++;
           setRecipientStatuses((prev) => ({ ...prev, [recKey]: 'failed' }));
         }
-      } catch {
+      } catch (err: any) {
+        const classified = classifyWhatsAppError(err);
+        if (classified.status === 'disconnected') hadDisconnected = true;
+        if (classified.status === 'server_error') hadServerError = true;
         failedCount++;
         setRecipientStatuses((prev) => ({ ...prev, [recKey]: 'failed' }));
       }
@@ -286,6 +295,10 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
     } else if (hadDisconnected && sentCount === 0 && unconfirmedCount === 0) {
       notifyWhatsAppState('disconnected', notifId, {
         description: `WhatsApp disconnected. ${summaryText}`,
+      });
+    } else if (hadServerError && sentCount === 0 && unconfirmedCount === 0) {
+      notifyWhatsAppState('server_error', notifId, {
+        description: `Server unavailable. ${summaryText}`,
       });
     } else if (unconfirmedCount > 0) {
       notifyWhatsAppState('unconfirmed', notifId, {

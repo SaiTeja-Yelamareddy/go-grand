@@ -124,7 +124,12 @@ export function openWhatsAppDirect(record: JobRecord) {
   window.open(waUrl, '_blank');
 }
 
-export type WhatsAppSendStatus = 'sent' | 'failed' | 'unconfirmed' | 'disconnected';
+export type WhatsAppSendStatus =
+  | 'sent'
+  | 'failed'
+  | 'unconfirmed'
+  | 'disconnected'
+  | 'server_error';
 
 export interface WhatsAppSendResult {
   success: boolean;
@@ -134,7 +139,7 @@ export interface WhatsAppSendResult {
   error?: string;
 }
 
-async function safeWhatsAppFetch(
+export async function safeWhatsAppFetch(
   url: string,
   options: RequestInit,
   timeoutMs = 18000
@@ -144,7 +149,16 @@ async function safeWhatsAppFetch(
   try {
     const res = await fetch(url, { ...options, signal: controller.signal });
     clearTimeout(timer);
-    const data = await res.json().catch(() => null);
+
+    let data: any = null;
+    const text = await res.text().catch(() => '');
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { rawText: text };
+      }
+    }
     return { ok: res.ok, status: res.status, data };
   } catch (err: any) {
     clearTimeout(timer);
@@ -156,13 +170,14 @@ async function safeWhatsAppFetch(
   }
 }
 
-function interpretSendResponse(fetchResult: {
+export function interpretSendResponse(fetchResult: {
   ok: boolean;
   status: number;
   data?: any;
   timedOut?: boolean;
 }): WhatsAppSendResult {
-  if (fetchResult.timedOut) {
+  // 1. Timeout or connection loss after submission
+  if (fetchResult.timedOut || fetchResult.status === 408) {
     return {
       success: false,
       status: 'unconfirmed',
@@ -173,21 +188,7 @@ function interpretSendResponse(fetchResult: {
 
   const { ok, status, data } = fetchResult;
 
-  // 1. Explicit disconnected detection
-  if (
-    status === 503 ||
-    data?.status === 'disconnected' ||
-    data?.whatsappConnected === false
-  ) {
-    return {
-      success: false,
-      status: 'disconnected',
-      method: 'backend',
-      error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
-    };
-  }
-
-  // 2. Successful send: Only when backend confirms WhatsApp accepted message
+  // 2. Successful backend acceptance
   if (ok && data?.success && (data?.status === 'sent' || data?.messageId)) {
     return {
       success: true,
@@ -197,7 +198,36 @@ function interpretSendResponse(fetchResult: {
     };
   }
 
-  // 3. Ambiguous / unconfirmed outcome (e.g. unknown status or queued)
+  // 3. HTTP 503 or confirmed disconnected socket: ONLY when backend explicitly confirms WhatsApp is disconnected
+  const isExplicitlyDisconnected =
+    data &&
+    typeof data === 'object' &&
+    (data.status === 'disconnected' ||
+      data.whatsappConnected === false ||
+      data.connected === false ||
+      (typeof data.error === 'string' &&
+        data.error.toLowerCase().includes('whatsapp is disconnected')));
+
+  if (isExplicitlyDisconnected) {
+    return {
+      success: false,
+      status: 'disconnected',
+      method: 'backend',
+      error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
+    };
+  }
+
+  // 4. HTTP 400 or another confirmed message rejection (client error / invalid parameters / rejected)
+  if (status === 400 || status === 422 || (data?.status === 'failed' && status < 500)) {
+    return {
+      success: false,
+      status: 'failed',
+      method: 'backend',
+      error: data?.error || 'Your WhatsApp message could not be sent. Please try again.',
+    };
+  }
+
+  // 5. Ambiguous outcome from backend (unknown or unconfirmed status)
   if (data?.status === 'unconfirmed' || data?.status === 'unknown') {
     return {
       success: false,
@@ -209,12 +239,113 @@ function interpretSendResponse(fetchResult: {
     };
   }
 
-  // 4. Definite failure
+  // 6. Malformed response on a 200 OK (request succeeded at HTTP layer, so sending may have occurred)
+  if (ok && (!data || !data.success)) {
+    return {
+      success: false,
+      status: 'unconfirmed',
+      method: 'backend',
+      error: 'WhatsApp has not confirmed delivery. Check the message status before retrying.',
+    };
+  }
+
+  // 7. HTTP 5xx or backend failure (unless explicitly confirmed disconnected above)
+  if (status >= 500 && status <= 599) {
+    return {
+      success: false,
+      status: 'server_error',
+      method: 'backend',
+      error: 'The messaging server could not complete your request. Please try again later.',
+    };
+  }
+
+  // 8. Network unavailable before request reaches server (status === 0 or offline)
+  if (status === 0) {
+    return {
+      success: false,
+      status: 'server_error',
+      method: 'backend',
+      error: 'The messaging server could not complete your request. Please try again later.',
+    };
+  }
+
+  // Default fallback for any other failure
   return {
     success: false,
     status: 'failed',
     method: 'backend',
     error: data?.error || 'Your WhatsApp message could not be sent. Please try again.',
+  };
+}
+
+export function classifyWhatsAppError(err: any): WhatsAppSendResult {
+  if (!err) {
+    return {
+      success: false,
+      status: 'failed',
+      method: 'backend',
+      error: 'Your WhatsApp message could not be sent. Please try again.',
+    };
+  }
+
+  // If already a WhatsAppSendResult
+  if (typeof err === 'object' && err.status && err.method === 'backend') {
+    return err as WhatsAppSendResult;
+  }
+
+  // If it's a fetchResult object ({ ok, status, data, timedOut })
+  if (typeof err === 'object' && ('status' in err || 'timedOut' in err)) {
+    return interpretSendResponse(err);
+  }
+
+  // Check timeout
+  const isTimeout =
+    err?.name === 'AbortError' ||
+    String(err?.message || err).toLowerCase().includes('abort') ||
+    String(err?.message || err).toLowerCase().includes('timeout');
+
+  if (isTimeout) {
+    return {
+      success: false,
+      status: 'unconfirmed',
+      method: 'backend',
+      error: 'WhatsApp has not confirmed delivery. Check the message status before retrying.',
+    };
+  }
+
+  // Check explicit disconnection mention in error
+  const errMsg = String(err?.message || err).toLowerCase();
+  if (errMsg.includes('whatsapp is disconnected') || errMsg.includes('whatsapp disconnected')) {
+    return {
+      success: false,
+      status: 'disconnected',
+      method: 'backend',
+      error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
+    };
+  }
+
+  // Network / server unavailable error (fetch failure, connection refused)
+  if (
+    errMsg.includes('failed to fetch') ||
+    errMsg.includes('network') ||
+    errMsg.includes('econnrefused') ||
+    errMsg.includes('server unavailable') ||
+    (typeof navigator !== 'undefined' && !navigator.onLine)
+  ) {
+    return {
+      success: false,
+      status: 'server_error',
+      method: 'backend',
+      error: 'The messaging server could not complete your request. Please try again later.',
+    };
+  }
+
+  // General failure
+  return {
+    success: false,
+    status: 'failed',
+    method: 'backend',
+    error: err?.message || 'Your WhatsApp message could not be sent. Please try again.',
   };
 }
 
@@ -226,8 +357,8 @@ export async function sendWhatsAppBillViaBackend(
   try {
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
     if (statusRes && statusRes.ok) {
-      const statusData = await statusRes.json();
-      if (!statusData.connected) {
+      const statusData = await statusRes.json().catch(() => null);
+      if (statusData && !statusData.connected) {
         return {
           success: false,
           status: 'disconnected',
@@ -264,8 +395,12 @@ export async function sendWhatsAppBillViaBackend(
         return interpretedPdf;
       }
 
-      // If disconnected or unconfirmed, return immediately without duplicate attempt
-      if (interpretedPdf.status === 'disconnected' || interpretedPdf.status === 'unconfirmed') {
+      // If disconnected, unconfirmed, or server error, return immediately without duplicate attempt
+      if (
+        interpretedPdf.status === 'disconnected' ||
+        interpretedPdf.status === 'unconfirmed' ||
+        interpretedPdf.status === 'server_error'
+      ) {
         return interpretedPdf;
       }
 
@@ -293,12 +428,7 @@ export async function sendWhatsAppBillViaBackend(
       return interpretSendResponse(textSendRes);
     }
   } catch (err: any) {
-    return {
-      success: false,
-      status: 'failed',
-      method: 'backend',
-      error: 'Your WhatsApp message could not be sent. Please try again.',
-    };
+    return classifyWhatsAppError(err);
   }
 }
 
@@ -321,8 +451,8 @@ export async function sendWhatsAppMessageViaBackend(
   try {
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
     if (statusRes && statusRes.ok) {
-      const statusData = await statusRes.json();
-      if (!statusData.connected) {
+      const statusData = await statusRes.json().catch(() => null);
+      if (statusData && !statusData.connected) {
         return {
           success: false,
           status: 'disconnected',
@@ -343,12 +473,7 @@ export async function sendWhatsAppMessageViaBackend(
     });
     return interpretSendResponse(sendRes);
   } catch (err: any) {
-    return {
-      success: false,
-      status: 'failed',
-      method: 'backend',
-      error: 'Your WhatsApp message could not be sent. Please try again.',
-    };
+    return classifyWhatsAppError(err);
   }
 }
 
@@ -386,8 +511,8 @@ export async function sendVehicleReadyWhatsAppViaBackend(
   try {
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
     if (statusRes && statusRes.ok) {
-      const statusData = await statusRes.json();
-      if (!statusData.connected) {
+      const statusData = await statusRes.json().catch(() => null);
+      if (statusData && !statusData.connected) {
         return {
           success: false,
           status: 'disconnected',
@@ -431,12 +556,7 @@ export async function sendVehicleReadyWhatsAppViaBackend(
 
     return interpretSendResponse(sendRes);
   } catch (err: any) {
-    return {
-      success: false,
-      status: 'failed',
-      method: 'backend',
-      error: 'Your WhatsApp message could not be sent. Please try again.',
-    };
+    return classifyWhatsAppError(err);
   }
 }
 
@@ -532,8 +652,8 @@ export async function sendPromotionalWhatsAppViaBackend(
   try {
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
     if (statusRes && statusRes.ok) {
-      const statusData = await statusRes.json();
-      if (!statusData.connected) {
+      const statusData = await statusRes.json().catch(() => null);
+      if (statusData && !statusData.connected) {
         return {
           success: false,
           status: 'disconnected',
@@ -558,12 +678,7 @@ export async function sendPromotionalWhatsAppViaBackend(
 
     return interpretSendResponse(promoRes);
   } catch (err: any) {
-    return {
-      success: false,
-      status: 'failed',
-      method: 'backend',
-      error: 'Your WhatsApp message could not be sent. Please try again.',
-    };
+    return classifyWhatsAppError(err);
   }
 }
 

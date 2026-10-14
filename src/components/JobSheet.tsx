@@ -20,7 +20,7 @@ import { saveJobRecord, updateJobRecord, getJobRecordById, lookupVehicleHistory,
 import { INDIAN_VEHICLE_BRANDS } from '../data/indianVehicles';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { useNotifications } from './NotificationSystem';
-import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend, sendVehicleReceivedWhatsAppViaBackend, parsePriceNumber, generateBillNo } from '../utils/invoiceUtils';
+import { sendWhatsAppBillViaBackend, sendVehicleReadyWhatsAppViaBackend, sendVehicleReceivedWhatsAppViaBackend, classifyWhatsAppError, parsePriceNumber, generateBillNo } from '../utils/invoiceUtils';
 import { getUpiEnabled } from '../utils/upiStorage';
 import { getMessageTemplates, renderTemplate, SHOP_NAME, getSendPdfWithMessage } from '../utils/templateStorage';
 
@@ -451,9 +451,10 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       const notifId = notifyWhatsAppState('sending');
       try {
         const res = await sendVehicleReceivedWhatsAppViaBackend(saved);
-        notifyWhatsAppState(res.status, notifId);
-      } catch {
-        notifyWhatsAppState('failed', notifId);
+        notifyWhatsAppState(res.status, notifId, res.error ? { description: res.error } : undefined);
+      } catch (err: any) {
+        const classified = classifyWhatsAppError(err);
+        notifyWhatsAppState(classified.status, notifId, classified.error ? { description: classified.error } : undefined);
       }
     }
   };
@@ -470,9 +471,10 @@ export const JobSheet: React.FC<JobSheetProps> = ({
       const notifId = notifyWhatsAppState('sending');
       try {
         const res = await sendVehicleReadyWhatsAppViaBackend(saved);
-        notifyWhatsAppState(res.status, notifId);
-      } catch {
-        notifyWhatsAppState('failed', notifId);
+        notifyWhatsAppState(res.status, notifId, res.error ? { description: res.error } : undefined);
+      } catch (err: any) {
+        const classified = classifyWhatsAppError(err);
+        notifyWhatsAppState(classified.status, notifId, classified.error ? { description: classified.error } : undefined);
       }
     }
   };
@@ -522,9 +524,10 @@ export const JobSheet: React.FC<JobSheetProps> = ({
         const notifId = notifyWhatsAppState('sending');
         try {
           const res = await sendWhatsAppBillViaBackend(saved);
-          notifyWhatsAppState(res.status, notifId);
-        } catch {
-          notifyWhatsAppState('failed', notifId);
+          notifyWhatsAppState(res.status, notifId, res.error ? { description: res.error } : undefined);
+        } catch (err: any) {
+          const classified = classifyWhatsAppError(err);
+          notifyWhatsAppState(classified.status, notifId, classified.error ? { description: classified.error } : undefined);
         }
       }
     } finally {

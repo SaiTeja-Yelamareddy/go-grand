@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, Info, LoaderCircle, WifiOff, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, LoaderCircle, ServerOff, WifiOff, X } from 'lucide-react';
 
 export type NotificationType =
   | 'success'
@@ -11,14 +11,16 @@ export type NotificationType =
   | 'whatsapp-sent'
   | 'whatsapp-failed'
   | 'whatsapp-unconfirmed'
-  | 'whatsapp-disconnected';
+  | 'whatsapp-disconnected'
+  | 'whatsapp-server-error';
 
 export type WhatsAppNotificationState =
   | 'sending'
   | 'sent'
   | 'failed'
   | 'unconfirmed'
-  | 'disconnected';
+  | 'disconnected'
+  | 'server_error';
 
 export interface NotificationOptions {
   id?: string;
@@ -128,13 +130,28 @@ const NOTIFICATION_CONFIGS: Record<
     icon: <WifiOff size={18} />,
     titleColor: 'text-rose-900 dark:text-rose-300',
   },
+  'whatsapp-server-error': {
+    border: 'border-l-rose-500 dark:border-l-rose-400',
+    iconBg: 'bg-rose-100 text-rose-600 dark:bg-rose-950/70 dark:text-rose-400',
+    icon: <ServerOff size={18} />,
+    titleColor: 'text-rose-900 dark:text-rose-300',
+  },
 };
+
+const isTerminalState = (type?: NotificationType) =>
+  type === 'whatsapp-sent' ||
+  type === 'whatsapp-failed' ||
+  type === 'whatsapp-disconnected' ||
+  type === 'whatsapp-unconfirmed' ||
+  type === 'whatsapp-server-error';
 
 export const NotificationProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const timersRef = useRef<Map<string, number>>(new Map());
+  const dismissedIdsRef = useRef<Set<string>>(new Set());
 
   const dismiss = useCallback((id: string) => {
+    dismissedIdsRef.current.add(id);
     const existingTimer = timersRef.current.get(id);
     if (existingTimer) {
       window.clearTimeout(existingTimer);
@@ -144,6 +161,11 @@ export const NotificationProvider: React.FC<React.PropsWithChildren> = ({ childr
   }, []);
 
   const update = useCallback((id: string, options: Partial<NotificationOptions>) => {
+    // If the notification was explicitly dismissed by the user, do not resurrect it
+    if (dismissedIdsRef.current.has(id)) {
+      return;
+    }
+
     // Clear previous timer for this notification if duration is being changed or specified
     const existingTimer = timersRef.current.get(id);
     if (existingTimer) {
@@ -151,9 +173,28 @@ export const NotificationProvider: React.FC<React.PropsWithChildren> = ({ childr
       timersRef.current.delete(id);
     }
 
-    setNotifications((current) =>
-      current.map((n) => {
+    setNotifications((current) => {
+      const existingIdx = current.findIndex((n) => n.id === id);
+      if (existingIdx === -1) {
+        // Safe Upsert: If the update arrives before the initial state has settled, append it so status is never dropped
+        const newNotif: Notification = {
+          id,
+          title: options.title || '',
+          message: options.message || '',
+          type: options.type || 'info',
+          dismissible: options.dismissible ?? true,
+          timestamp: Date.now(),
+          ...options,
+        };
+        return [...current, newNotif].slice(-4);
+      }
+
+      return current.map((n) => {
         if (n.id !== id) return n;
+        // Stale async callback guard: do not allow a delayed 'whatsapp-sending' callback to overwrite a finished status
+        if (isTerminalState(n.type) && options.type === 'whatsapp-sending') {
+          return n;
+        }
         const updated: Notification = {
           ...n,
           ...options,
@@ -161,15 +202,16 @@ export const NotificationProvider: React.FC<React.PropsWithChildren> = ({ childr
           timestamp: Date.now(),
         };
         return updated;
-      })
-    );
+      });
+    });
 
     const targetDuration =
       options.duration !== undefined
         ? options.duration
         : options.type === 'error' ||
           options.type === 'whatsapp-failed' ||
-          options.type === 'whatsapp-disconnected'
+          options.type === 'whatsapp-disconnected' ||
+          options.type === 'whatsapp-server-error'
         ? 6500
         : options.type === 'whatsapp-unconfirmed' || options.type === 'warning'
         ? 7500
@@ -185,38 +227,52 @@ export const NotificationProvider: React.FC<React.PropsWithChildren> = ({ childr
 
   const notify = useCallback(
     (options: NotificationOptions): string => {
-      // 1. Prevent duplicate identical notifications within short timeframe
-      const existingDuplicate = notifications.find(
-        (n) => n.title === options.title && n.message === options.message
-      );
-      if (existingDuplicate && !options.id) {
-        // Refresh timestamp of existing notification rather than stacking duplicate
-        update(existingDuplicate.id, { timestamp: Date.now() });
-        return existingDuplicate.id;
-      }
-
       const id = options.id || `notif_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
-      // If notification already exists with this ID, update in-place
-      const exists = notifications.some((n) => n.id === id);
-      if (exists) {
-        update(id, options);
-        return id;
-      }
+      setNotifications((current) => {
+        const existingIdx = current.findIndex((n) => n.id === id);
+        if (existingIdx !== -1) {
+          return current.map((n) => {
+            if (n.id !== id) return n;
+            if (isTerminalState(n.type) && options.type === 'whatsapp-sending') {
+              return n;
+            }
+            return {
+              ...n,
+              ...options,
+              id,
+              timestamp: Date.now(),
+            };
+          });
+        }
 
-      const notification: Notification = {
-        ...options,
-        id,
-        dismissible: options.dismissible ?? true,
-        timestamp: options.timestamp ?? Date.now(),
-      };
+        // Prevent duplicate identical notifications within short timeframe when no explicit ID provided
+        if (!options.id) {
+          const dupIdx = current.findIndex(
+            (n) => n.title === options.title && n.message === options.message
+          );
+          if (dupIdx !== -1) {
+            return current.map((n, idx) =>
+              idx === dupIdx ? { ...n, timestamp: Date.now() } : n
+            );
+          }
+        }
 
-      setNotifications((current) => [...current, notification].slice(-4));
+        const notification: Notification = {
+          ...options,
+          id,
+          dismissible: options.dismissible ?? true,
+          timestamp: options.timestamp ?? Date.now(),
+        };
+
+        return [...current, notification].slice(-4);
+      });
 
       const defaultDuration =
         options.type === 'error' ||
         options.type === 'whatsapp-failed' ||
-        options.type === 'whatsapp-disconnected'
+        options.type === 'whatsapp-disconnected' ||
+        options.type === 'whatsapp-server-error'
           ? 6500
           : options.type === 'warning' || options.type === 'whatsapp-unconfirmed'
           ? 7500
@@ -232,7 +288,7 @@ export const NotificationProvider: React.FC<React.PropsWithChildren> = ({ childr
 
       return id;
     },
-    [dismiss, notifications, update]
+    [dismiss]
   );
 
   /**
@@ -304,6 +360,17 @@ export const NotificationProvider: React.FC<React.PropsWithChildren> = ({ childr
             onAction: customOverrides?.onAction,
           });
           break;
+        case 'server_error':
+          update(id, {
+            type: 'whatsapp-server-error',
+            title: customOverrides?.title || 'Server Unavailable',
+            message: customMessage || 'The messaging server could not complete your request. Please try again later.',
+            duration: customOverrides?.duration !== undefined ? customOverrides.duration : 7500,
+            dismissible: true,
+            actionLabel: customOverrides?.actionLabel,
+            onAction: customOverrides?.onAction,
+          });
+          break;
       }
 
       return id;
@@ -330,7 +397,8 @@ export const NotificationProvider: React.FC<React.PropsWithChildren> = ({ childr
           const isErrorLike =
             notification.type === 'error' ||
             notification.type === 'whatsapp-failed' ||
-            notification.type === 'whatsapp-disconnected';
+            notification.type === 'whatsapp-disconnected' ||
+            notification.type === 'whatsapp-server-error';
 
           return (
             <div

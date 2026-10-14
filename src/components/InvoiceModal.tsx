@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { X, Printer, Send, CheckCircle2 } from 'lucide-react';
 import { formatNumericDateIST, type JobRecord } from '../utils/draftStorage';
-import { generateBillNo, parsePriceNumber, numberToWordsRupees, sendWhatsAppBillViaBackend } from '../utils/invoiceUtils';
+import { generateBillNo, parsePriceNumber, numberToWordsRupees, sendWhatsAppBillViaBackend, classifyWhatsAppError } from '../utils/invoiceUtils';
 import { useNotifications } from './NotificationSystem';
 
 interface InvoiceModalProps {
@@ -39,18 +39,20 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ record, onClose }) =
   };
 
   const handleSendWhatsAppPDF = async () => {
+    if (sendingPdf) return;
     setSendingPdf(true);
     setSentSuccess(false);
     const notifId = notifyWhatsAppState('sending');
     try {
       const res = await sendWhatsAppBillViaBackend(record);
-      notifyWhatsAppState(res.status, notifId);
+      notifyWhatsAppState(res.status, notifId, res.error ? { description: res.error } : undefined);
       if (res && res.success) {
         setSentSuccess(true);
         setTimeout(() => setSentSuccess(false), 4000);
       }
-    } catch {
-      notifyWhatsAppState('failed', notifId);
+    } catch (err: any) {
+      const classified = classifyWhatsAppError(err);
+      notifyWhatsAppState(classified.status, notifId, classified.error ? { description: classified.error } : undefined);
     } finally {
       setSendingPdf(false);
     }

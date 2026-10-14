@@ -8,7 +8,7 @@ import { exportJobsToExcel } from '../utils/excelExport';
 import { InvoiceModal } from './InvoiceModal';
 import { WhatsAppSettingsModal } from './WhatsAppSettingsModal';
 import { useNotifications } from './NotificationSystem';
-import { sendWhatsAppInvoicePdfViaBackend, sendVehicleReadyWhatsAppViaBackend } from '../utils/invoiceUtils';
+import { sendWhatsAppInvoicePdfViaBackend, sendVehicleReadyWhatsAppViaBackend, classifyWhatsAppError } from '../utils/invoiceUtils';
 import { getUpiEnabled } from '../utils/upiStorage';
 
 interface TodaysVehiclesProps {
@@ -309,9 +309,10 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                     const notifId = notifyWhatsAppState('sending');
                                     try {
                                       const res = await sendWhatsAppInvoicePdfViaBackend(item);
-                                      notifyWhatsAppState(res.status, notifId);
-                                    } catch {
-                                      notifyWhatsAppState('failed', notifId);
+                                      notifyWhatsAppState(res.status, notifId, res.error ? { description: res.error } : undefined);
+                                    } catch (err: any) {
+                                      const classified = classifyWhatsAppError(err);
+                                      notifyWhatsAppState(classified.status, notifId, classified.error ? { description: classified.error } : undefined);
                                     }
                                   }}
                                   className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-[#25D366] hover:bg-green-50 dark:hover:bg-green-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
@@ -338,9 +339,10 @@ export const TodaysVehicles: React.FC<TodaysVehiclesProps> = ({
                                     const notifId = notifyWhatsAppState('sending');
                                     try {
                                       const res = await sendVehicleReadyWhatsAppViaBackend(item);
-                                      notifyWhatsAppState(res.status, notifId);
-                                    } catch {
-                                      notifyWhatsAppState('failed', notifId);
+                                      notifyWhatsAppState(res.status, notifId, res.error ? { description: res.error } : undefined);
+                                    } catch (err: any) {
+                                      const classified = classifyWhatsAppError(err);
+                                      notifyWhatsAppState(classified.status, notifId, classified.error ? { description: classified.error } : undefined);
                                     }
                                   }}
                                   className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"

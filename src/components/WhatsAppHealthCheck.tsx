@@ -5,7 +5,7 @@ import { isOwnerAuthenticated, isStaffAuthenticated } from '../config/authConfig
 
 export const WhatsAppHealthCheck: React.FC = () => {
   const { notify, dismiss } = useNotifications();
-  const notificationIdRef = useRef<number | null>(null);
+  const notificationIdRef = useRef<string | null>(null);
   const isRecoveringRef = useRef<boolean>(false);
   const isUnmountedRef = useRef<boolean>(false);
 

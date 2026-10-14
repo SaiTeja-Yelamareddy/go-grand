@@ -1945,32 +1945,25 @@ app.post('/api/whatsapp/send-invoice', requireApiAuth, async (req, res) => {
 
       return res.json({
         success: true,
+        status: 'sent',
         messageId: sentMsg.key.id,
         recipient: cleanPhone,
       });
     } catch (error) {
       console.error('Direct send failed:', error.message);
-      return res.status(400).json({ success: false, error: 'WhatsApp could not send the message. Make sure the number is valid and on WhatsApp.' });
+      return res.status(400).json({
+        success: false,
+        status: 'failed',
+        error: 'WhatsApp could not send the message. Make sure the number is valid and on WhatsApp.',
+      });
     }
   }
 
-  // Enqueue for 24/7 resilient delivery
-  const queueItem = {
-    id: `txt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    type: 'text',
-    phoneNumber,
-    textMessage: message,
-    idempotencyKey,
-    createdAt: Date.now(),
-    attempts: 0,
-  };
-  await enqueueMessage(queueItem);
-
-  res.json({
-    success: true,
-    queued: true,
-    message: 'Message queued for delivery',
-    queueId: queueItem.id,
+  return res.status(503).json({
+    success: false,
+    status: 'disconnected',
+    whatsappConnected: false,
+    error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
   });
 });
 
@@ -2048,35 +2041,25 @@ app.post('/api/whatsapp/send-vehicle-ready-qr', requireApiAuth, async (req, res)
 
       return res.json({
         success: true,
+        status: 'sent',
         messageId: sentMsg.key.id,
         recipient: cleanPhone,
       });
     } catch (error) {
       console.error('Direct Vehicle Ready send failed:', error.message);
-      return res.status(400).json({ success: false, error: 'WhatsApp could not send the message. Make sure the number is valid and on WhatsApp.' });
+      return res.status(400).json({
+        success: false,
+        status: 'failed',
+        error: 'WhatsApp could not send the message. Make sure the number is valid and on WhatsApp.',
+      });
     }
   }
 
-  // Enqueue for resilient delivery
-  const queueItem = {
-    id: `ready_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    type: qrPngBuffer ? 'image_qr' : 'text',
-    job,
-    phoneNumber: cleanPhone,
-    upiId: targetUpiId,
-    textMessage,
-    imageBuffer: qrPngBuffer,
-    idempotencyKey: effectiveIdempotencyKey,
-    createdAt: Date.now(),
-    attempts: 0,
-  };
-  await enqueueMessage(queueItem);
-
-  res.json({
-    success: true,
-    queued: true,
-    message: 'Vehicle Ready notification queued for delivery',
-    queueId: queueItem.id,
+  return res.status(503).json({
+    success: false,
+    status: 'disconnected',
+    whatsappConnected: false,
+    error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
   });
 });
 
@@ -2158,35 +2141,26 @@ app.post('/api/whatsapp/send-invoice-pdf', requireApiAuth, async (req, res) => {
 
       return res.json({
         success: true,
+        status: 'sent',
         messageId: sentDoc.key.id,
         recipient: cleanPhone,
         fileName: fileName,
       });
     } catch (sendErr) {
       console.error('Direct PDF invoice send failed:', sendErr.message);
-      return res.status(400).json({ success: false, error: 'WhatsApp could not send the message. Make sure the number is valid and on WhatsApp.' });
+      return res.status(400).json({
+        success: false,
+        status: 'failed',
+        error: 'WhatsApp could not send the message. Make sure the number is valid and on WhatsApp.',
+      });
     }
   }
 
-  // Enqueue for 24/7 resilient delivery
-  const queueItem = {
-    id: `pdf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    type: 'pdf',
-    job,
-    pdfBuffer,
-    phoneNumber: cleanPhone,
-    textMessage,
-    idempotencyKey: effectiveIdempotencyKey,
-    createdAt: Date.now(),
-    attempts: 0,
-  };
-  await enqueueMessage(queueItem);
-
-  res.json({
-    success: true,
-    queued: true,
-    message: 'Invoice PDF queued for delivery',
-    queueId: queueItem.id,
+  return res.status(503).json({
+    success: false,
+    status: 'disconnected',
+    whatsappConnected: false,
+    error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
   });
 });
 
@@ -2227,32 +2201,25 @@ app.post('/api/whatsapp/send-promotional', requireApiAuth, async (req, res) => {
 
       return res.json({
         success: true,
+        status: 'sent',
         messageId: sentMsg.key.id,
         recipient: cleanPhone,
       });
     } catch (error) {
       console.error('Direct promotional send failed:', error.message);
-      return res.status(400).json({ success: false, error: 'WhatsApp could not send promotional message. Make sure the number is valid and on WhatsApp.' });
+      return res.status(400).json({
+        success: false,
+        status: 'failed',
+        error: 'WhatsApp could not send promotional message. Make sure the number is valid and on WhatsApp.',
+      });
     }
   }
 
-  // Enqueue for resilient delivery if temporarily reconnecting
-  const queueItem = {
-    id: `promo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    type: 'text',
-    phoneNumber: cleanPhone,
-    textMessage: message,
-    idempotencyKey,
-    createdAt: Date.now(),
-    attempts: 0,
-  };
-  await enqueueMessage(queueItem);
-
-  res.json({
-    success: true,
-    queued: true,
-    message: 'Promotional message queued for delivery',
-    queueId: queueItem.id,
+  return res.status(503).json({
+    success: false,
+    status: 'disconnected',
+    whatsappConnected: false,
+    error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
   });
 });
 

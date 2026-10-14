@@ -73,7 +73,7 @@ export const JobSheet: React.FC<JobSheetProps> = ({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { notify, dismiss } = useNotifications();
+  const { notify, notifyWhatsAppState } = useNotifications();
 
   const editId = searchParams.get('editId') || searchParams.get('edit');
   const [activeJobId, setActiveJobId] = useState<string | null>(editId);
@@ -448,14 +448,12 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
     const saved = await handleSaveDraft(undefined, 'received');
     if (saved) {
-      const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
-      const res = await sendVehicleReceivedWhatsAppViaBackend(saved);
-      dismiss(notifId);
-      if (res && res.success) {
-        notify({ type: 'success', title: 'Sent ✓', message: 'Customer notification sent successfully.' });
-      } else {
-        notify({ type: 'error', title: 'Vehicle Notification Failed', message: 'Vehicle was saved, but the notification could not be sent.' });
-        
+      const notifId = notifyWhatsAppState('sending');
+      try {
+        const res = await sendVehicleReceivedWhatsAppViaBackend(saved);
+        notifyWhatsAppState(res.status, notifId);
+      } catch {
+        notifyWhatsAppState('failed', notifId);
       }
     }
   };
@@ -469,14 +467,12 @@ export const JobSheet: React.FC<JobSheetProps> = ({
 
     const saved = await handleSaveDraft(undefined, 'ready');
     if (saved) {
-      const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
-      const res = await sendVehicleReadyWhatsAppViaBackend(saved);
-      dismiss(notifId);
-      if (res && res.success) {
-        notify({ type: 'success', title: 'Sent ✓', message: 'Customer has been notified successfully.' });
-      } else {
-        notify({ type: 'error', title: 'Vehicle Ready Notification Failed', message: 'The vehicle status was updated, but the notification could not be sent.' });
-        
+      const notifId = notifyWhatsAppState('sending');
+      try {
+        const res = await sendVehicleReadyWhatsAppViaBackend(saved);
+        notifyWhatsAppState(res.status, notifId);
+      } catch {
+        notifyWhatsAppState('failed', notifId);
       }
     }
   };
@@ -523,13 +519,12 @@ export const JobSheet: React.FC<JobSheetProps> = ({
     try {
       const saved = await handleSaveDraft(undefined, 'billed');
       if (saved) {
-        const notifId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
-        const res = await sendWhatsAppBillViaBackend(saved);
-        dismiss(notifId);
-        if (res && res.success) {
-          notify({ type: 'success', title: 'Sent ✓', message: 'Invoice has been sent via WhatsApp.' });
-        } else {
-          notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
+        const notifId = notifyWhatsAppState('sending');
+        try {
+          const res = await sendWhatsAppBillViaBackend(saved);
+          notifyWhatsAppState(res.status, notifId);
+        } catch {
+          notifyWhatsAppState('failed', notifId);
         }
       }
     } finally {

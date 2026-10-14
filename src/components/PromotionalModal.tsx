@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Megaphone, Plus, Users, Send, RefreshCw, Eye } from 'lucide-react';
+import { X, Megaphone, Plus, Users, Send, RefreshCw, Eye, CheckCircle2, AlertTriangle, AlertCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { type JobRecord } from '../utils/draftStorage';
 import {
   getMessageTemplates,
@@ -18,6 +18,8 @@ interface PromotionalModalProps {
   initialTargetRecord?: JobRecord | null;
 }
 
+export type RecipientDeliveryStatus = 'pending' | 'sending' | 'sent' | 'failed' | 'unconfirmed';
+
 const CUSTOMER_DETAILS = [
   { label: 'Customer Name', token: '[Customer Name]' },
   { label: 'Vehicle Model', token: '[Vehicle Model]' },
@@ -35,12 +37,15 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
   records,
   initialTargetRecord,
 }) => {
-  const { notify } = useNotifications();
+  const { notify, notifyWhatsAppState } = useNotifications();
   const [templateText, setTemplateText] = useState<string>('');
   const [showDetailMenu, setShowDetailMenu] = useState(false);
   const [sendMode, setSendMode] = useState<'single' | 'all'>('all');
   const [isSending, setIsSending] = useState(false);
   const [sendProgress, setSendProgress] = useState<{ current: number; total: number } | null>(null);
+  const [recipientStatuses, setRecipientStatuses] = useState<Record<string, RecipientDeliveryStatus>>({});
+  const [bulkSummary, setBulkSummary] = useState<{ sent: number; failed: number; unconfirmed: number } | null>(null);
+  const [showRecipientList, setShowRecipientList] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -70,6 +75,9 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
       }
       setIsSending(false);
       setSendProgress(null);
+      setRecipientStatuses({});
+      setBulkSummary(null);
+      setShowRecipientList(false);
     }
   }, [isOpen, initialTargetRecord]);
 
@@ -133,6 +141,10 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
     }
   };
 
+  const getRecipientKey = (rec: JobRecord, idx: number) => {
+    return rec.id || `${rec.phoneNumber || 'unknown'}_${idx}`;
+  };
+
   const handleSendPromotional = async () => {
     if (!templateText.trim()) {
       notify({ type: 'warning', title: 'Empty Message', message: 'Please enter a promotional message.' });
@@ -144,15 +156,75 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
       return;
     }
 
+    // SINGLE SEND FLOW
+    if (sendMode === 'single' && initialTargetRecord) {
+      const notifId = notifyWhatsAppState('sending');
+      setIsSending(true);
+
+      const sendTime = new Date();
+      const resolvedMsg = renderTemplate(templateText, {
+        customer_name: initialTargetRecord.customerName,
+        vehicle_model: initialTargetRecord.vehicleName,
+        vehicle_number: initialTargetRecord.vehicleNumber,
+        service: Array.isArray(initialTargetRecord.services)
+          ? initialTargetRecord.services.join(', ')
+          : initialTargetRecord.services || initialTargetRecord.service || 'Car Wash & Detailing',
+        amount: initialTargetRecord.price || '0',
+        bill_no: initialTargetRecord.billNo || '',
+        shop_name: SHOP_NAME,
+        date: formatMessageDateIST(sendTime),
+        time: formatMessageTimeIST(sendTime),
+      });
+
+      const idempotencyKey = `promo_${initialTargetRecord.id || initialTargetRecord.phoneNumber}_${Date.now()}`;
+      try {
+        const res = await sendPromotionalWhatsAppViaBackend(
+          initialTargetRecord.phoneNumber,
+          resolvedMsg,
+          initialTargetRecord,
+          idempotencyKey
+        );
+        notifyWhatsAppState(res.status, notifId, res.error ? { description: res.error } : undefined);
+        if (res.status === 'sent') {
+          setTimeout(onClose, 800);
+        }
+      } catch (err: any) {
+        notifyWhatsAppState('failed', notifId, { description: err?.message });
+      } finally {
+        setIsSending(false);
+      }
+      return;
+    }
+
+    // BULK SEND FLOW
     setIsSending(true);
+    setShowRecipientList(true);
     setSendProgress({ current: 0, total: targetRecipients.length });
 
-    let successCount = 0;
-    let failCount = 0;
+    // Initialize all recipient statuses to pending
+    const initialStatuses: Record<string, RecipientDeliveryStatus> = {};
+    targetRecipients.forEach((rec, idx) => {
+      initialStatuses[getRecipientKey(rec, idx)] = 'pending';
+    });
+    setRecipientStatuses(initialStatuses);
+
+    // Initial non-blocking notification
+    const notifId = notifyWhatsAppState('sending', undefined, {
+      description: `Sending messages to ${targetRecipients.length} recipients...`,
+    });
+
+    let sentCount = 0;
+    let failedCount = 0;
+    let unconfirmedCount = 0;
+    let hadDisconnected = false;
 
     for (let i = 0; i < targetRecipients.length; i++) {
       const rec = targetRecipients[i];
+      const recKey = getRecipientKey(rec, i);
       setSendProgress({ current: i + 1, total: targetRecipients.length });
+
+      // Mark this individual recipient as sending
+      setRecipientStatuses((prev) => ({ ...prev, [recKey]: 'sending' }));
 
       // Actual send timestamp in Asia/Kolkata
       const sendTime = new Date();
@@ -174,36 +246,58 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
 
       try {
         const res = await sendPromotionalWhatsAppViaBackend(rec.phoneNumber, resolvedMsg, rec, idempotencyKey);
-        if (res.success) {
-          successCount++;
+        if (res.status === 'sent') {
+          sentCount++;
+          setRecipientStatuses((prev) => ({ ...prev, [recKey]: 'sent' }));
+        } else if (res.status === 'unconfirmed') {
+          unconfirmedCount++;
+          setRecipientStatuses((prev) => ({ ...prev, [recKey]: 'unconfirmed' }));
+        } else if (res.status === 'disconnected') {
+          failedCount++;
+          hadDisconnected = true;
+          setRecipientStatuses((prev) => ({ ...prev, [recKey]: 'failed' }));
         } else {
-          failCount++;
+          failedCount++;
+          setRecipientStatuses((prev) => ({ ...prev, [recKey]: 'failed' }));
         }
       } catch {
-        failCount++;
+        failedCount++;
+        setRecipientStatuses((prev) => ({ ...prev, [recKey]: 'failed' }));
       }
 
-      // Small delay between sends to respect WhatsApp rate limits
+      // Small delay between sends to respect rate limits
       if (i < targetRecipients.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, 350));
       }
     }
 
+    const finalSummary = { sent: sentCount, failed: failedCount, unconfirmed: unconfirmedCount };
+    setBulkSummary(finalSummary);
     setIsSending(false);
     setSendProgress(null);
 
-    if (successCount > 0) {
-      notify({
-        type: 'success',
-        title: 'Promotional Messages Sent',
-        message: `Successfully dispatched to ${successCount} customer${successCount > 1 ? 's' : ''}${failCount > 0 ? ` (${failCount} failed)` : ''}.`,
+    // Summary description matching specification: "18 sent · 2 failed · 1 unconfirmed"
+    const summaryText = `${sentCount} sent · ${failedCount} failed · ${unconfirmedCount} unconfirmed`;
+
+    if (sentCount === targetRecipients.length) {
+      notifyWhatsAppState('sent', notifId, {
+        description: summaryText,
       });
-      onClose();
+    } else if (hadDisconnected && sentCount === 0 && unconfirmedCount === 0) {
+      notifyWhatsAppState('disconnected', notifId, {
+        description: `WhatsApp disconnected. ${summaryText}`,
+      });
+    } else if (unconfirmedCount > 0) {
+      notifyWhatsAppState('unconfirmed', notifId, {
+        description: summaryText,
+      });
+    } else if (failedCount > 0) {
+      notifyWhatsAppState('failed', notifId, {
+        description: summaryText,
+      });
     } else {
-      notify({
-        type: 'error',
-        title: 'Sending Failed',
-        message: 'Could not deliver promotional messages. Check WhatsApp connection status.',
+      notifyWhatsAppState('sent', notifId, {
+        description: summaryText,
       });
     }
   };
@@ -334,20 +428,119 @@ export const PromotionalModal: React.FC<PromotionalModalProps> = ({
           </div>
 
           {/* SEND PROGRESS BAR */}
-          {isSending && sendProgress && (
-            <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-center space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-rose-800 dark:text-rose-300">
-                <span>Sending WhatsApp Messages...</span>
-                <span>
-                  {sendProgress.current} / {sendProgress.total}
-                </span>
-              </div>
-              <div className="w-full bg-rose-200 dark:bg-rose-900/50 h-2 rounded-full overflow-hidden">
-                <div
-                  className="bg-rose-600 h-full transition-all duration-300 rounded-full"
-                  style={{ width: `${(sendProgress.current / sendProgress.total) * 100}%` }}
-                />
-              </div>
+          {/* SEND PROGRESS & STATUS SUMMARY */}
+          {(isSending || bulkSummary) && (
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#202020] space-y-3">
+              {/* Progress bar when sending */}
+              {isSending && sendProgress && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-neutral-200">
+                    <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                      <RefreshCw size={13} className="animate-spin" />
+                      Dispatching Messages...
+                    </span>
+                    <span className="font-mono text-[11px] text-slate-500">
+                      {sendProgress.current} / {sendProgress.total}
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-neutral-800 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-rose-600 h-full transition-all duration-300 rounded-full"
+                      style={{ width: `${(sendProgress.current / sendProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Status Summary Banner (e.g. 18 sent · 2 failed · 1 unconfirmed) */}
+              {bulkSummary && (
+                <div className="p-3 rounded-lg bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] flex items-center justify-between gap-2 text-xs">
+                  <div className="font-bold text-slate-900 dark:text-white">Delivery Summary</div>
+                  <div className="flex items-center gap-2 font-mono text-[11px]">
+                    <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                      {bulkSummary.sent} sent
+                    </span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-rose-700 dark:text-rose-400 font-bold">
+                      {bulkSummary.failed} failed
+                    </span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-amber-700 dark:text-amber-400 font-bold">
+                      {bulkSummary.unconfirmed} unconfirmed
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Collapsible toggle for recipient list */}
+              {sendMode === 'all' && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRecipientList((prev) => !prev)}
+                    className="w-full py-1.5 px-2 flex items-center justify-between text-xs font-bold text-slate-700 dark:text-neutral-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                  >
+                    <span>Recipient Status List ({targetRecipients.length})</span>
+                    {showRecipientList ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+
+                  {/* Scrollable Recipient Status List */}
+                  {showRecipientList && (
+                    <div className="mt-2 max-h-48 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-100 dark:divide-[#1C1C1C]">
+                      {targetRecipients.map((rec, idx) => {
+                        const recKey = getRecipientKey(rec, idx);
+                        const status: RecipientDeliveryStatus = recipientStatuses[recKey] || 'pending';
+
+                        return (
+                          <div
+                            key={recKey}
+                            className="pt-1.5 first:pt-0 flex items-center justify-between gap-2 text-xs"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-slate-900 dark:text-neutral-100 truncate">
+                                {rec.customerName || 'Customer'}
+                                {rec.vehicleNumber ? ` (${rec.vehicleNumber})` : ''}
+                              </p>
+                              <p className="text-[10px] text-slate-400 dark:text-neutral-500 font-mono">
+                                {rec.phoneNumber}
+                              </p>
+                            </div>
+
+                            {/* Status Badge */}
+                            <div className="shrink-0">
+                              {status === 'sent' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                  <CheckCircle2 size={11} /> Sent
+                                </span>
+                              )}
+                              {status === 'failed' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                                  <AlertCircle size={11} /> Failed
+                                </span>
+                              )}
+                              {status === 'unconfirmed' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                                  <AlertTriangle size={11} /> Delivery Unconfirmed
+                                </span>
+                              )}
+                              {status === 'sending' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
+                                  <RefreshCw size={11} className="animate-spin" /> Sending...
+                                </span>
+                              )}
+                              {status === 'pending' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-400 border border-slate-200 dark:border-neutral-700">
+                                  <Clock size={11} /> Pending
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

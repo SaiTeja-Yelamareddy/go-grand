@@ -24,7 +24,7 @@ export const WhatsAppProvider: React.FC<React.PropsWithChildren> = ({ children }
   const [serverOnline, setServerOnline] = useState<boolean>(false);
   
   const { notify, dismiss } = useNotifications();
-  const notificationIdRef = useRef<number | null>(null);
+  const notificationIdRef = useRef<string | null>(null);
   const isRecoveringRef = useRef<boolean>(false);
   
   const retryTimerRef = useRef<number | null>(null);

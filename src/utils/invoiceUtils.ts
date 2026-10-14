@@ -124,100 +124,182 @@ export function openWhatsAppDirect(record: JobRecord) {
   window.open(waUrl, '_blank');
 }
 
+export type WhatsAppSendStatus = 'sent' | 'failed' | 'unconfirmed' | 'disconnected';
+
+export interface WhatsAppSendResult {
+  success: boolean;
+  status: WhatsAppSendStatus;
+  method: 'backend';
+  messageId?: string;
+  error?: string;
+}
+
+async function safeWhatsAppFetch(
+  url: string,
+  options: RequestInit,
+  timeoutMs = 18000
+): Promise<{ ok: boolean; status: number; data?: any; timedOut?: boolean }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timer);
+    const data = await res.json().catch(() => null);
+    return { ok: res.ok, status: res.status, data };
+  } catch (err: any) {
+    clearTimeout(timer);
+    const isTimeout =
+      err?.name === 'AbortError' ||
+      String(err).includes('abort') ||
+      String(err).includes('timeout');
+    return { ok: false, status: isTimeout ? 408 : 0, timedOut: isTimeout };
+  }
+}
+
+function interpretSendResponse(fetchResult: {
+  ok: boolean;
+  status: number;
+  data?: any;
+  timedOut?: boolean;
+}): WhatsAppSendResult {
+  if (fetchResult.timedOut) {
+    return {
+      success: false,
+      status: 'unconfirmed',
+      method: 'backend',
+      error: 'WhatsApp has not confirmed delivery. Check the message status before retrying.',
+    };
+  }
+
+  const { ok, status, data } = fetchResult;
+
+  // 1. Explicit disconnected detection
+  if (
+    status === 503 ||
+    data?.status === 'disconnected' ||
+    data?.whatsappConnected === false
+  ) {
+    return {
+      success: false,
+      status: 'disconnected',
+      method: 'backend',
+      error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
+    };
+  }
+
+  // 2. Successful send: Only when backend confirms WhatsApp accepted message
+  if (ok && data?.success && (data?.status === 'sent' || data?.messageId)) {
+    return {
+      success: true,
+      status: 'sent',
+      method: 'backend',
+      messageId: data.messageId,
+    };
+  }
+
+  // 3. Ambiguous / unconfirmed outcome (e.g. unknown status or queued)
+  if (data?.status === 'unconfirmed' || data?.status === 'unknown') {
+    return {
+      success: false,
+      status: 'unconfirmed',
+      method: 'backend',
+      error:
+        data?.error ||
+        'WhatsApp has not confirmed delivery. Check the message status before retrying.',
+    };
+  }
+
+  // 4. Definite failure
+  return {
+    success: false,
+    status: 'failed',
+    method: 'backend',
+    error: data?.error || 'Your WhatsApp message could not be sent. Please try again.',
+  };
+}
+
 export async function sendWhatsAppBillViaBackend(
   record: JobRecord,
   options?: { sendPdf?: boolean }
-): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+): Promise<WhatsAppSendResult> {
   const backendUrl = getWhatsAppBackendUrl();
   try {
-    console.log(`[WHATSAPP HEALTH] GET ${backendUrl}/api/whatsapp/status`);
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
-    
     if (statusRes && statusRes.ok) {
       const statusData = await statusRes.json();
       if (!statusData.connected) {
         return {
           success: false,
+          status: 'disconnected',
           method: 'backend',
-          error: 'WhatsApp is not connected. Scan QR code in WhatsApp Settings to link your phone.',
+          error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
         };
       }
+    }
 
-      const fullTextMessage = formatWhatsAppBillText(record);
-      const idempotencyKey = record.id ? `bill_${record.id}_${Date.now()}` : undefined;
-      const shouldSendPdf = options?.sendPdf !== undefined ? options.sendPdf : getSendPdfWithMessage();
+    const fullTextMessage = formatWhatsAppBillText(record);
+    const idempotencyKey = record.id ? `bill_${record.id}_${Date.now()}` : undefined;
+    const shouldSendPdf = options?.sendPdf !== undefined ? options.sendPdf : getSendPdfWithMessage();
 
-      if (shouldSendPdf) {
-        // Toggle ON: Send customized WhatsApp bill message and existing invoice PDF
-        const pdfCaptionMessage = formatWhatsAppPdfCaption(record);
-        
-        // Try sending PDF invoice document with clean short caption
-        const pdfSendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice-pdf`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            job: record,
-            phoneNumber: record.phoneNumber,
-            textMessage: pdfCaptionMessage,
-            idempotencyKey,
-          }),
-        });
+    if (shouldSendPdf) {
+      const pdfCaptionMessage = formatWhatsAppPdfCaption(record);
+      const pdfSendRes = await safeWhatsAppFetch(`${backendUrl}/api/whatsapp/send-invoice-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job: record,
+          phoneNumber: record.phoneNumber,
+          textMessage: pdfCaptionMessage,
+          idempotencyKey,
+        }),
+      });
 
-        if (pdfSendRes.ok) {
-          const pdfData = await pdfSendRes.json();
-          if (pdfData.success) {
-            return { success: true, method: 'backend' };
-          }
-        }
-
-        // If sendPdf was explicitly requested (e.g. from vehicle three-dot menu), do not fall back to text-only send
-        if (options?.sendPdf === true) {
-          return { success: false, method: 'backend', error: 'Failed to send PDF invoice via WhatsApp' };
-        }
-
-        // Fallback to text message send if PDF endpoint encountered issue
-        const sendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            phoneNumber: record.phoneNumber,
-            message: fullTextMessage,
-            idempotencyKey,
-          }),
-        });
-
-        if (sendRes.ok) {
-          const sendData = await sendRes.json();
-          if (sendData.success) {
-            return { success: true, method: 'backend' };
-          }
-        }
-      } else {
-        // Toggle OFF: Send only the customized WhatsApp bill message (no PDF)
-        const sendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            phoneNumber: record.phoneNumber,
-            message: fullTextMessage,
-            idempotencyKey,
-          }),
-        });
-
-        if (sendRes.ok) {
-          const sendData = await sendRes.json();
-          if (sendData.success) {
-            return { success: true, method: 'backend' };
-          }
-        }
+      const interpretedPdf = interpretSendResponse(pdfSendRes);
+      if (interpretedPdf.success) {
+        return interpretedPdf;
       }
+
+      // If sendPdf was explicitly requested (e.g. from vehicle three-dot menu), do not fall back to text-only send
+      if (options?.sendPdf === true) {
+        return interpretedPdf;
+      }
+
+      // If disconnected or unconfirmed, return immediately without duplicate attempt
+      if (interpretedPdf.status === 'disconnected' || interpretedPdf.status === 'unconfirmed') {
+        return interpretedPdf;
+      }
+
+      // Fallback to text message send if PDF endpoint encountered issue
+      const textSendRes = await safeWhatsAppFetch(`${backendUrl}/api/whatsapp/send-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: record.phoneNumber,
+          message: fullTextMessage,
+          idempotencyKey,
+        }),
+      });
+      return interpretSendResponse(textSendRes);
+    } else {
+      const textSendRes = await safeWhatsAppFetch(`${backendUrl}/api/whatsapp/send-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: record.phoneNumber,
+          message: fullTextMessage,
+          idempotencyKey,
+        }),
+      });
+      return interpretSendResponse(textSendRes);
     }
   } catch (err: any) {
-    console.error('WhatsApp backend send failed:', err);
-    return { success: false, method: 'backend', error: err?.message || 'WhatsApp server error' };
+    return {
+      success: false,
+      status: 'failed',
+      method: 'backend',
+      error: 'Your WhatsApp message could not be sent. Please try again.',
+    };
   }
-
-  return { success: false, method: 'backend', error: 'WhatsApp server is offline or unreachable' };
 }
 
 /**
@@ -226,47 +308,48 @@ export async function sendWhatsAppBillViaBackend(
  */
 export async function sendWhatsAppInvoicePdfViaBackend(
   record: JobRecord
-): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+): Promise<WhatsAppSendResult> {
   return sendWhatsAppBillViaBackend(record, { sendPdf: true });
 }
 
-export async function sendWhatsAppMessageViaBackend(phoneNumber: string, message: string, idempotencyKey?: string): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+export async function sendWhatsAppMessageViaBackend(
+  phoneNumber: string,
+  message: string,
+  idempotencyKey?: string
+): Promise<WhatsAppSendResult> {
   const backendUrl = getWhatsAppBackendUrl();
   try {
-    console.log(`[WHATSAPP HEALTH] GET ${backendUrl}/api/whatsapp/status`);
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
     if (statusRes && statusRes.ok) {
       const statusData = await statusRes.json();
       if (!statusData.connected) {
         return {
           success: false,
+          status: 'disconnected',
           method: 'backend',
-          error: 'WhatsApp is not connected. Scan QR code in WhatsApp Settings to link your phone.',
+          error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
         };
       }
-
-      const sendRes = await fetch(`${backendUrl}/api/whatsapp/send-invoice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phoneNumber,
-          message,
-          idempotencyKey,
-        }),
-      });
-      if (sendRes.ok) {
-        const sendData = await sendRes.json();
-        if (sendData.success) {
-          return { success: true, method: 'backend' };
-        }
-      }
     }
-  } catch (err: any) {
-    console.error('WhatsApp backend send failed:', err);
-    return { success: false, method: 'backend', error: err?.message || 'WhatsApp server error' };
-  }
 
-  return { success: false, method: 'backend', error: 'WhatsApp server is offline or unreachable' };
+    const sendRes = await safeWhatsAppFetch(`${backendUrl}/api/whatsapp/send-invoice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phoneNumber,
+        message,
+        idempotencyKey,
+      }),
+    });
+    return interpretSendResponse(sendRes);
+  } catch (err: any) {
+    return {
+      success: false,
+      status: 'failed',
+      method: 'backend',
+      error: 'Your WhatsApp message could not be sent. Please try again.',
+    };
+  }
 }
 
 export function formatVehicleReadyMessage(
@@ -296,66 +379,65 @@ export function formatVehicleReadyMessage(
   });
 }
 
-export async function sendVehicleReadyWhatsAppViaBackend(record: JobRecord): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+export async function sendVehicleReadyWhatsAppViaBackend(
+  record: JobRecord
+): Promise<WhatsAppSendResult> {
   const backendUrl = getWhatsAppBackendUrl();
   try {
-    console.log(`[WHATSAPP HEALTH] GET ${backendUrl}/api/whatsapp/status`);
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
     if (statusRes && statusRes.ok) {
       const statusData = await statusRes.json();
       if (!statusData.connected) {
         return {
           success: false,
+          status: 'disconnected',
           method: 'backend',
-          error: 'WhatsApp is not connected. Scan QR code in WhatsApp Settings to link your phone.',
+          error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
         };
       }
-
-      // Calculate final invoice amount
-      const priceNum = parsePriceNumber(record.price);
-      const discountNum = record.discount ? parsePriceNumber(record.discount) : 0;
-      const finalAmount = Math.max(0, priceNum - discountNum);
-      const billNo = record.billNo || generateBillNo(record.id, record.createdAt);
-
-      const upiId = getUpiEnabled() ? getStoredUpiId() : '';
-      const msg = formatVehicleReadyMessage(
-        record.customerName,
-        record.vehicleName,
-        record.vehicleNumber,
-        finalAmount,
-        record.services || record.service,
-        billNo,
-        new Date()
-      );
-
-      const idempotencyKey = record.id ? `ready_${record.id}_${Date.now()}` : undefined;
-
-      // Call dedicated Vehicle Ready endpoint with UPI QR image generation
-      const sendRes = await fetch(`${backendUrl}/api/whatsapp/send-vehicle-ready-qr`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job: record,
-          phoneNumber: record.phoneNumber,
-          upiId: upiId,
-          textMessage: msg,
-          idempotencyKey,
-        }),
-      });
-
-      if (sendRes.ok) {
-        const sendData = await sendRes.json();
-        if (sendData.success) {
-          return { success: true, method: 'backend' };
-        }
-      }
     }
-  } catch (err: any) {
-    console.error('Vehicle ready send failed:', err);
-    return { success: false, method: 'backend', error: err?.message || 'WhatsApp server error' };
-  }
 
-  return { success: false, method: 'backend', error: 'WhatsApp server is offline or unreachable' };
+    // Calculate final invoice amount
+    const priceNum = parsePriceNumber(record.price);
+    const discountNum = record.discount ? parsePriceNumber(record.discount) : 0;
+    const finalAmount = Math.max(0, priceNum - discountNum);
+    const billNo = record.billNo || generateBillNo(record.id, record.createdAt);
+
+    const upiId = getUpiEnabled() ? getStoredUpiId() : '';
+    const msg = formatVehicleReadyMessage(
+      record.customerName,
+      record.vehicleName,
+      record.vehicleNumber,
+      finalAmount,
+      record.services || record.service,
+      billNo,
+      new Date()
+    );
+
+    const idempotencyKey = record.id ? `ready_${record.id}_${Date.now()}` : undefined;
+
+    // Call dedicated Vehicle Ready endpoint with UPI QR image generation
+    const sendRes = await safeWhatsAppFetch(`${backendUrl}/api/whatsapp/send-vehicle-ready-qr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        job: record,
+        phoneNumber: record.phoneNumber,
+        upiId: upiId,
+        textMessage: msg,
+        idempotencyKey,
+      }),
+    });
+
+    return interpretSendResponse(sendRes);
+  } catch (err: any) {
+    return {
+      success: false,
+      status: 'failed',
+      method: 'backend',
+      error: 'Your WhatsApp message could not be sent. Please try again.',
+    };
+  }
 }
 
 export function formatVehicleReceivedMessage(
@@ -385,7 +467,9 @@ export function formatVehicleReceivedMessage(
   });
 }
 
-export async function sendVehicleReceivedWhatsAppViaBackend(record: JobRecord): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+export async function sendVehicleReceivedWhatsAppViaBackend(
+  record: JobRecord
+): Promise<WhatsAppSendResult> {
   const priceNum = parsePriceNumber(record.price);
   const discountNum = record.discount ? parsePriceNumber(record.discount) : 0;
   const finalAmount = Math.max(0, priceNum - discountNum);
@@ -443,7 +527,7 @@ export async function sendPromotionalWhatsAppViaBackend(
   message: string,
   job?: JobRecord,
   idempotencyKey?: string
-): Promise<{ success: boolean; method: 'backend'; error?: string }> {
+): Promise<WhatsAppSendResult> {
   const backendUrl = getWhatsAppBackendUrl();
   try {
     const statusRes = await fetch(`${backendUrl}/api/whatsapp/status`).catch(() => null);
@@ -452,40 +536,34 @@ export async function sendPromotionalWhatsAppViaBackend(
       if (!statusData.connected) {
         return {
           success: false,
+          status: 'disconnected',
           method: 'backend',
-          error: 'WhatsApp is not connected. Scan QR code in WhatsApp Settings to link your phone.',
+          error: 'Your message was not sent because WhatsApp is disconnected. Reconnect and try again.',
         };
       }
-
-      // Try dedicated promotional endpoint first
-      const promoRes = await fetch(`${backendUrl}/api/whatsapp/send-promotional`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phoneNumber,
-          message,
-          customerName: job?.customerName,
-          vehicleNumber: job?.vehicleNumber,
-          jobId: job?.id,
-          idempotencyKey,
-        }),
-      }).catch(() => null);
-
-      if (promoRes && promoRes.ok) {
-        const promoData = await promoRes.json();
-        if (promoData.success) {
-          return { success: true, method: 'backend' };
-        }
-      }
-
-      // Fallback to standard backend message endpoint
-      return sendWhatsAppMessageViaBackend(phoneNumber, message, idempotencyKey);
     }
-  } catch (err: any) {
-    console.error('Promotional WhatsApp backend send failed:', err);
-    return { success: false, method: 'backend', error: err?.message || 'WhatsApp server error' };
-  }
 
-  return { success: false, method: 'backend', error: 'WhatsApp server is offline or unreachable' };
+    const promoRes = await safeWhatsAppFetch(`${backendUrl}/api/whatsapp/send-promotional`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phoneNumber,
+        message,
+        customerName: job?.customerName,
+        vehicleNumber: job?.vehicleNumber,
+        jobId: job?.id,
+        idempotencyKey,
+      }),
+    });
+
+    return interpretSendResponse(promoRes);
+  } catch (err: any) {
+    return {
+      success: false,
+      status: 'failed',
+      method: 'backend',
+      error: 'Your WhatsApp message could not be sent. Please try again.',
+    };
+  }
 }
 

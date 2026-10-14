@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, RefreshCw, LogOut, Send, Smartphone, AlertCircle, X, Server, Globe } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { getWhatsAppBackendUrl } from '../config/apiConfig';
+import { sendWhatsAppMessageViaBackend } from '../utils/invoiceUtils';
+import { useNotifications } from './NotificationSystem';
 
 interface WhatsAppSettingsModalProps {
   isOpen: boolean;
@@ -21,6 +23,7 @@ const formatDisplayPhone = (rawNumber?: string | null) => {
 };
 
 export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ isOpen, onClose }) => {
+  const { notifyWhatsAppState } = useNotifications();
   const [status, setStatus] = useState<'connecting' | 'qr_ready' | 'connected' | 'logged_out' | 'reconnecting' | 'error'>('connecting');
   const [connectedUser, setConnectedUser] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -269,33 +272,38 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({ is
     e.preventDefault();
     if (!testPhone || !testMessage) return;
 
+    const notifId = notifyWhatsAppState('sending');
     setSendingTest(true);
     setTestFeedback(null);
 
     try {
-      const res = await fetch(`${activeBackendUrl}/api/whatsapp/send-invoice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phoneNumber: testPhone,
-          message: testMessage,
-        }),
-      });
+      const res = await sendWhatsAppMessageViaBackend(testPhone, testMessage);
+      notifyWhatsAppState(res.status, notifId, res.error ? { description: res.error } : undefined);
 
-      const data = await res.json();
-      if (data.success) {
+      if (res.status === 'sent') {
         setTestFeedback({
           type: 'success',
-          message: `Test message delivered successfully to +91 ${testPhone.replace(/\D/g, '')}!`,
+          message: `WhatsApp accepted the test message for sending to +91 ${testPhone.replace(/\D/g, '')}!`,
         });
         setTestPhone('');
+      } else if (res.status === 'disconnected') {
+        setTestFeedback({
+          type: 'error',
+          message: 'WhatsApp is disconnected. Please scan the QR code to reconnect and try again.',
+        });
+      } else if (res.status === 'unconfirmed') {
+        setTestFeedback({
+          type: 'error',
+          message: 'WhatsApp has not confirmed delivery. Check the message status before retrying.',
+        });
       } else {
         setTestFeedback({
           type: 'error',
-          message: data.error || 'Failed to deliver message via WhatsApp backend.',
+          message: res.error || 'Your WhatsApp message could not be sent. Please try again.',
         });
       }
     } catch (err: any) {
+      notifyWhatsAppState('failed', notifId, { description: err.message });
       setTestFeedback({
         type: 'error',
         message: err.message || 'WhatsApp Server is unreachable.',

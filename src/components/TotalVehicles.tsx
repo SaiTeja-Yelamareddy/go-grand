@@ -39,7 +39,7 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
   onInstallApp,
 }) => {
   const navigate = useNavigate();
-  const { notify, dismiss } = useNotifications();
+  const { notify, notifyWhatsAppState } = useNotifications();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [allRecords, setAllRecords] = useState<JobRecord[]>([]);
@@ -494,14 +494,12 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
                                 <button
                                   onClick={async () => {
                                     setActiveMenuId(null);
-                                    const loadingId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
-                                    const res = await sendWhatsAppInvoicePdfViaBackend(item);
-                                    dismiss(loadingId);
-                                    if (res.success) {
-                                      notify({ type: 'success', title: 'Bill Sent', message: 'Invoice has been sent via WhatsApp.' });
-                                    } else {
-                                      notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
-                                      
+                                    const notifId = notifyWhatsAppState('sending');
+                                    try {
+                                      const res = await sendWhatsAppInvoicePdfViaBackend(item);
+                                      notifyWhatsAppState(res.status, notifId);
+                                    } catch {
+                                      notifyWhatsAppState('failed', notifId);
                                     }
                                   }}
                                   className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-[#25D366] hover:bg-green-50 dark:hover:bg-green-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"
@@ -522,15 +520,15 @@ export const TotalVehicles: React.FC<TotalVehiclesProps> = ({
                                 <button
                                   onClick={async () => {
                                     setActiveMenuId(null);
-                                    const loadingId = notify({ type: 'loading', title: 'Connecting to server...', message: 'Waking up the server, please wait (up to 2 mins)...', duration: 0 });
-                                    if (!getUpiEnabled()) { notify({ type: 'info', title: 'UPI Disabled', message: 'UPI payments are currently disabled.' }); }
+                                    if (!getUpiEnabled()) {
+                                      notify({ type: 'info', title: 'UPI Disabled', message: 'UPI payments are currently disabled.' });
+                                    }
+                                    const notifId = notifyWhatsAppState('sending');
+                                    try {
                                       const res = await sendVehicleReadyWhatsAppViaBackend(item);
-                                    dismiss(loadingId);
-                                    if (res.success) {
-                                      notify({ type: 'success', title: 'Vehicle Ready', message: 'Customer has been notified successfully.' });
-                                    } else {
-                                      notify({ type: 'error', title: 'Vehicle Ready Notification Failed', message: 'The vehicle status was updated, but the notification could not be sent.' });
-                                      
+                                      notifyWhatsAppState(res.status, notifId);
+                                    } catch {
+                                      notifyWhatsAppState('failed', notifId);
                                     }
                                   }}
                                   className="w-full h-8 px-2.5 rounded-lg text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 flex items-center justify-start tracking-wider uppercase transition-colors cursor-pointer whitespace-nowrap"

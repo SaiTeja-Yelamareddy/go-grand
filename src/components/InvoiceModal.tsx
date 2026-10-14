@@ -13,7 +13,7 @@ interface InvoiceModalProps {
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({ record, onClose }) => {
   const [sendingPdf, setSendingPdf] = React.useState(false);
   const [sentSuccess, setSentSuccess] = React.useState(false);
-  const { notify, dismiss } = useNotifications();
+  const { notifyWhatsAppState } = useNotifications();
 
   const billNo = record.billNo || generateBillNo(record.id, record.createdAt);
   const dateStr = formatNumericDateIST(record.createdAt || new Date());
@@ -41,26 +41,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ record, onClose }) =
   const handleSendWhatsAppPDF = async () => {
     setSendingPdf(true);
     setSentSuccess(false);
-    const notifId = notify({
-      type: 'loading',
-      title: 'Sending...',
-      message: 'Generating and sending PDF invoice via WhatsApp...',
-      duration: 0,
-    });
+    const notifId = notifyWhatsAppState('sending');
     try {
       const res = await sendWhatsAppBillViaBackend(record);
-      dismiss(notifId);
+      notifyWhatsAppState(res.status, notifId);
       if (res && res.success) {
         setSentSuccess(true);
-        notify({ type: 'success', title: 'Sent ✓', message: 'Invoice has been sent via WhatsApp.' });
         setTimeout(() => setSentSuccess(false), 4000);
-      } else {
-        notify({ type: 'error', title: 'Bill Not Sent', message: 'The invoice could not be sent via WhatsApp.' });
       }
-    } catch (err) {
-      console.error(err);
-      dismiss(notifId);
-      notify({ type: 'error', title: 'Error', message: 'Failed to send WhatsApp message.' });
+    } catch {
+      notifyWhatsAppState('failed', notifId);
     } finally {
       setSendingPdf(false);
     }
